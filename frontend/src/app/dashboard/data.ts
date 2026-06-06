@@ -1,0 +1,240 @@
+
+export const mockData = {
+  score: 84,
+  sections: [
+    { name: "Formatting", value: 95 },
+    { name: "Keywords", value: 72 },
+    { name: "Quantification", value: 65 },
+    { name: "Impact", value: 88 },
+    { name: "Readability", value: 91 },
+  ],
+  skillGaps: [
+    {
+      skill: "Kubernetes",
+      missing: true,
+      recommendation: "Critical for modern DevOps workflows",
+    },
+    {
+      skill: "CI/CD Pipelines",
+      missing: true,
+      recommendation:
+        "Essential for automated deployment tracking",
+    },
+    {
+      skill: "React.js",
+      missing: false,
+      recommendation: "Strong presence in your core experience",
+    },
+    {
+      skill: "System Design",
+      missing: false,
+      recommendation: "High proficiency demonstrated",
+    },
+  ],
+  grammarIssues: [
+    {
+      type: "Formatting",
+      text: "Inconsistent date formatting in Experience section.",
+    },
+    {
+      type: "Grammar",
+      text: 'Passive voice detected in "Projects were managed by me".',
+    },
+    {
+      type: "Readability",
+      text: "Paragraph in Education section exceeds 60 words.",
+    },
+  ],
+  strengths: [
+    "Excellent clear section headers that are ATS-scannable.",
+    "Strong use of action verbs (e.g., 'Spearheaded', 'Optimized').",
+    "Clear professional contact information and social profiles.",
+  ],
+  improvements: [
+    "Quantify your impact more often - aim for 'X% improvement' metrics.",
+    "The summary section could be more targeted to the specific role.",
+    "Ensure consistent bullet point usage across all experience items.",
+  ],
+  companyMatches: [
+    {
+      company: "Google",
+      match: 92,
+      reason:
+        "Strong alignment with technical depth and system design experience",
+      location: "Mountain View, CA",
+      jobType: "Full-time",
+      experienceLevel: "Senior",
+      salary: "$180k - $250k",
+      teamSize: "8-12 engineers",
+      requirements: [
+        "5+ years of software engineering experience",
+        "Proficiency in Python, Java, or C++",
+        "Strong system design and architecture skills",
+        "Experience with distributed systems",
+        "BS/MS in Computer Science or related field",
+      ],
+    },
+    {
+      company: "Microsoft",
+      match: 89,
+      reason:
+        "Enterprise software experience matches core requirements",
+      location: "Redmond, WA",
+      jobType: "Full-time",
+      experienceLevel: "Senior",
+      salary: "$170k - $240k",
+      teamSize: "10-15 engineers",
+      requirements: [
+        "7+ years building enterprise software",
+        "Strong C# or .NET experience",
+        "Azure cloud platform knowledge",
+        "Experience with agile methodologies",
+        "Leadership and mentoring capabilities",
+      ],
+    },
+    {
+      company: "Amazon",
+      match: 87,
+      reason:
+        "Scale and optimization focus aligns with leadership principles",
+      location: "Seattle, WA",
+      jobType: "Full-time",
+      experienceLevel: "Senior",
+      salary: "$175k - $245k",
+      teamSize: "6-10 engineers",
+      requirements: [
+        "Experience building scalable systems",
+        "Strong Java or Python background",
+        "AWS services proficiency",
+        "Data structures and algorithms expertise",
+        "Customer-obsessed mindset",
+      ],
+    },
+    {
+      company: "Meta",
+      match: 85,
+      reason:
+        "Social platform experience and React expertise highly valued",
+      location: "Menlo Park, CA",
+      jobType: "Full-time",
+      experienceLevel: "Mid-Senior",
+      salary: "$165k - $235k",
+      teamSize: "8-14 engineers",
+      requirements: [
+        "React and frontend development expertise",
+        "Experience with large-scale web applications",
+        "Mobile development (iOS/Android) a plus",
+        "Strong collaboration skills",
+        "Passion for building user experiences",
+      ],
+    },
+    {
+      company: "Apple",
+      match: 82,
+      reason:
+        "User-centric design philosophy and quality focus match culture",
+      location: "Cupertino, CA",
+      jobType: "Full-time",
+      experienceLevel: "Senior",
+      salary: "$170k - $240k",
+      teamSize: "5-8 engineers",
+      requirements: [
+        "Swift or Objective-C proficiency",
+        "iOS/macOS development experience",
+        "Attention to detail and design quality",
+        "Performance optimization skills",
+        "Collaborative cross-functional experience",
+      ],
+    },
+    {
+      company: "Netflix",
+      match: 78,
+      reason:
+        "Streaming infrastructure experience relevant to core business",
+      location: "Los Gatos, CA",
+      jobType: "Full-time",
+      experienceLevel: "Senior",
+      salary: "$180k - $260k",
+      teamSize: "4-7 engineers",
+      requirements: [
+        "Video streaming or media experience",
+        "Microservices architecture knowledge",
+        "AWS cloud infrastructure expertise",
+        "Strong debugging and problem-solving",
+        "Self-driven and independent",
+      ],
+    },
+    {
+      company: "Salesforce",
+      match: 76,
+      reason:
+        "Cloud platform experience aligns with product offerings",
+      location: "San Francisco, CA",
+      jobType: "Full-time",
+      experienceLevel: "Mid-Senior",
+      salary: "$160k - $220k",
+      teamSize: "8-12 engineers",
+      requirements: [
+        "SaaS platform development experience",
+        "Java or Apex programming skills",
+        "Database and SQL proficiency",
+        "RESTful API design experience",
+        "Customer success orientation",
+      ],
+    },
+    {
+      company: "Adobe",
+      match: 74,
+      reason:
+        "Creative tools background complements technical skills",
+      location: "San Jose, CA",
+      jobType: "Full-time",
+      experienceLevel: "Mid-Senior",
+      salary: "$155k - $215k",
+      teamSize: "6-10 engineers",
+      requirements: [
+        "C++ or JavaScript expertise",
+        "Graphics or creative software experience",
+        "Cross-platform development skills",
+        "UX/UI collaboration experience",
+        "Innovation and creativity mindset",
+      ],
+    },
+    {
+      company: "Uber",
+      match: 71,
+      reason:
+        "Real-time systems experience valuable for platform development",
+      location: "San Francisco, CA",
+      jobType: "Full-time",
+      experienceLevel: "Mid-Level",
+      salary: "$150k - $210k",
+      teamSize: "7-11 engineers",
+      requirements: [
+        "Real-time system development",
+        "Go, Java, or Python proficiency",
+        "Distributed systems knowledge",
+        "Mobile API development",
+        "Fast-paced environment adaptability",
+      ],
+    },
+    {
+      company: "Airbnb",
+      match: 68,
+      reason:
+        "Community platform experience and frontend skills relevant",
+      location: "San Francisco, CA",
+      jobType: "Full-time",
+      experienceLevel: "Mid-Level",
+      salary: "$145k - $200k",
+      teamSize: "6-9 engineers",
+      requirements: [
+        "React or Rails development experience",
+        "Community platform knowledge",
+        "Full-stack development skills",
+        "A/B testing and experimentation",
+        "Collaborative team player",
+      ],
+    },
+  ],
+};
