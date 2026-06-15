@@ -34,13 +34,16 @@ interface CompanyMatchCarouselProps {
 export default function CompanyMatchCarousel({
   companies,
 }: CompanyMatchCarouselProps) {
+  // Filter state for location, job type, and experience level
   const [locationFilter, setLocationFilter] = useState('All');
   const [jobTypeFilter, setJobTypeFilter] = useState('All');
   const [experienceLevelFilter, setExperienceLevelFilter] =
     useState('All');
 
+  // Index of the company currently shown in the carousel
   const [currentIndex, setCurrentIndex] = useState(0);
 
+  // Apply all active filters to the company list
   const filteredCompanies = useMemo(() => {
     return companies.filter((company) => {
       if (
@@ -72,6 +75,7 @@ export default function CompanyMatchCarousel({
     experienceLevelFilter,
   ]);
 
+  // The company currently displayed, clamped to valid range
   const activeCompany =
     filteredCompanies.length > 0
       ? filteredCompanies[
@@ -82,6 +86,7 @@ export default function CompanyMatchCarousel({
         ]
       : null;
 
+  // Advance to the next company, wrapping around to the start
   const nextCompany = () => {
     setCurrentIndex((prev) =>
       prev === filteredCompanies.length - 1
@@ -90,6 +95,7 @@ export default function CompanyMatchCarousel({
     );
   };
 
+  // Go to the previous company, wrapping around to the end
   const previousCompany = () => {
     setCurrentIndex((prev) =>
       prev === 0
@@ -117,7 +123,7 @@ export default function CompanyMatchCarousel({
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filter controls for location, job type, and experience */}
       <div className="flex flex-wrap gap-3 mb-6 pb-6 border-b border-gray-100">
         <div className="flex-1 min-w-50">
           <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
@@ -177,7 +183,7 @@ export default function CompanyMatchCarousel({
         </div>
       </div>
 
-      {/* Empty State */}
+      {/* Show empty state if no companies match the filters */}
       {filteredCompanies.length === 0 || !activeCompany ? (
         <div className="py-12 text-center">
           <p className="text-gray-400 text-sm">
@@ -186,7 +192,7 @@ export default function CompanyMatchCarousel({
         </div>
       ) : (
         <>
-          {/* Navigation */}
+          {/* Carousel navigation controls */}
           <div className="flex items-center justify-between mb-8">
             <button
               onClick={previousCompany}
@@ -210,7 +216,7 @@ export default function CompanyMatchCarousel({
             </button>
           </div>
 
-          {/* Company Card */}
+          {/* Card showing details for the active company */}
           <motion.div
             key={activeCompany.company}
             initial={{ opacity: 0, x: 40 }}
@@ -218,7 +224,7 @@ export default function CompanyMatchCarousel({
             transition={{ duration: 0.3 }}
             className="bg-linear-to-br from-indigo-50 to-white rounded-2xl p-6 border border-indigo-100"
           >
-            {/* Header */}
+            {/* Company name, match reason, and match score */}
             <div className="flex items-start justify-between mb-4">
               <div>
                 <h3 className="text-2xl font-extrabold text-gray-900 mb-1">
@@ -241,7 +247,7 @@ export default function CompanyMatchCarousel({
               </div>
             </div>
 
-            {/* Match Bar */}
+            {/* Visual bar representing the match percentage */}
             <div className="mb-6">
               <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
                 <motion.div
@@ -255,7 +261,7 @@ export default function CompanyMatchCarousel({
               </div>
             </div>
 
-            {/* Details */}
+            {/* Job details: location, type, experience, salary, team size */}
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div className="flex items-center gap-2 text-sm">
                 <MapPin className="w-4 h-4 text-indigo-600" />
@@ -283,7 +289,7 @@ export default function CompanyMatchCarousel({
               </div>
             </div>
 
-            {/* Requirements */}
+            {/* List of job requirements for this company */}
             <div>
               <h4 className="text-xs font-black text-gray-500 uppercase mb-3">
                 Job Requirements
@@ -311,6 +317,7 @@ export default function CompanyMatchCarousel({
         </>
       )}
 
+      {/* Summary count of filtered vs total companies */}
       <div className="mt-4 text-center text-xs text-gray-400">
         Showing {filteredCompanies.length} of {companies.length}{' '}
         companies

@@ -2,6 +2,7 @@
 
 import { CheckCircle } from "lucide-react";
 
+// Row of feature highlights with checkmark icons
 export default function Checks() {
     return (
         <div className="flex items-center justify-center gap-8 text-gray-400">

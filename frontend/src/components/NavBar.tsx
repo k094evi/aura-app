@@ -6,12 +6,16 @@ import { Brain, User, Settings, LogOut, ChevronDown, FileBarChart, CreditCard } 
 import  Link  from 'next/link';
 
 
+// Top navigation bar - shows user menu when authenticated, sign in/up links otherwise
 export const Navbar = ({ isAuthenticated = false, onLogout }: { isAuthenticated?: boolean, onLogout?: () => void }) => {
+  // Controls visibility of the user dropdown menu
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  // Ref used to detect clicks outside the dropdown
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [userName, setUserName] = useState('John Doe');
   const [userEmail, setUserEmail] = useState('john.doe@email.com');
+  // Generate initials from the user's name (e.g. "John Doe" -> "JD")
   const initials = userName
     .split(' ')
     .map(n => n[0])
@@ -19,6 +23,7 @@ export const Navbar = ({ isAuthenticated = false, onLogout }: { isAuthenticated?
     .toUpperCase()
     .slice(0, 2);
 
+  // Close the dropdown when clicking outside of it
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -33,6 +38,7 @@ export const Navbar = ({ isAuthenticated = false, onLogout }: { isAuthenticated?
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+        {/* Logo / brand link */}
         <Link href="/" className="flex items-center gap-2">
           <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center">
             <Brain className="text-white w-6 h-6" />
@@ -41,11 +47,13 @@ export const Navbar = ({ isAuthenticated = false, onLogout }: { isAuthenticated?
         </Link>
 
         {isAuthenticated ? (
+          // Authenticated state: show user avatar with dropdown menu
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors"
             >
+              {/* Avatar showing user initials */}
               <div className="w-8 h-8 bg-linear-to-br from-indigo-500 to-violet-600 rounded-full flex items-center justify-center">
                 <span className="text-white text-sm font-bold">{initials}</span>
               </div>
@@ -53,6 +61,7 @@ export const Navbar = ({ isAuthenticated = false, onLogout }: { isAuthenticated?
               <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
 
+            {/* Animated dropdown menu with user info and account actions */}
             <AnimatePresence>
               {isDropdownOpen && (
                 <motion.div
@@ -62,11 +71,13 @@ export const Navbar = ({ isAuthenticated = false, onLogout }: { isAuthenticated?
                   transition={{ duration: 0.2 }}
                   className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden"
                 >
+                  {/* User info header */}
                   <div className="p-3 border-b border-gray-100 bg-gray-50">
                     <p className="text-sm font-bold text-gray-900">{userName}</p>
                     <p className="text-xs text-gray-500">{userEmail}</p>
                   </div>
 
+                  {/* Account-related menu actions */}
                   <div className="py-2">
                     <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors flex items-center gap-3">
                       <User className="w-4 h-4" />
@@ -86,6 +97,7 @@ export const Navbar = ({ isAuthenticated = false, onLogout }: { isAuthenticated?
                     </button>
                   </div>
 
+                  {/* Logout action */}
                   <div className="border-t border-gray-100 py-2">
                     <button
                       onClick={() => {
@@ -103,8 +115,9 @@ export const Navbar = ({ isAuthenticated = false, onLogout }: { isAuthenticated?
             </AnimatePresence>
           </div>
         ) : (
+          // Unauthenticated state: show Sign In / Get Started links
           <div className="flex items-center gap-4">
-            <Link href="/login" className="text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">Sign In</Link>
+            <Link href="/signin" className="text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">Sign In</Link>
             <Link href="/signup" className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100">
               Get Started
             </Link>

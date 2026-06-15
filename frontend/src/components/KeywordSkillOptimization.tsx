@@ -1,5 +1,6 @@
 'use client';
 
+// Represents a single skill, whether it's missing from the resume, and a recommendation
 type SkillGap = {
   skill: string;
   missing: boolean;
@@ -10,6 +11,7 @@ type KeywordSkillOptimizationProps = {
   skillGaps: SkillGap[];
 };
 
+// Card displaying a grid of skills, flagging which are missing vs. present
 export default function KeywordSkillOptimization({ skillGaps }: KeywordSkillOptimizationProps) {
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
@@ -27,7 +29,7 @@ export default function KeywordSkillOptimization({ skillGaps }: KeywordSkillOpti
         </div>
       </div>
 
-      {/* Skills grid */}
+      {/* Skills grid - each item shows skill name, status badge, and recommendation */}
       <div className="grid grid-cols-2 gap-3">
         {skillGaps.map((item) => (
           <div
@@ -40,6 +42,7 @@ export default function KeywordSkillOptimization({ skillGaps }: KeywordSkillOpti
           >
             <div className="flex items-center justify-between">
               <span className="font-bold text-gray-900">{item.skill}</span>
+              {/* Badge indicates whether the skill is missing (optional) or present (required) */}
               {item.missing ? (
                 <span className="text-xs font-bold px-2 py-0.5 rounded bg-orange-100 text-orange-500 tracking-wide">
                   OPTIONAL
