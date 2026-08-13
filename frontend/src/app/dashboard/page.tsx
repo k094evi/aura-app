@@ -1,12 +1,10 @@
-'use client';
-
-import DashboardHeader from '@/components/DashboardHeader';
-import CompanyMatchCarousel from '@/components/CompanyMatchCarousel';
-import AssessmentSidebar from '@/components/AssessmentSidebar';
-import KeywordSkillOptimization from '@/components/KeywordSkillOptimization';
-import FormattingReadability from '@/components/FormattingReadability';
-import KeyStrengths from '@/components/KeyStrengths';
-import SmartSuggestions from '@/components/SmartSuggestions';
+import DashboardHeader from '@/features/dashboard/components/DashboardHeader';
+import CompanyMatchCarousel from '@/features/dashboard/components/CompanyMatchCarousel';
+import AssessmentSidebar from '@/features/dashboard/components/AssessmentSidebar';
+import KeywordSkillOptimization from '@/features/dashboard/components/KeywordSkillOptimization';
+import FormattingReadability from '@/features/dashboard/components/FormattingReadability';
+import KeyStrengths from '@/features/dashboard/components/KeyStrengths';
+import SmartSuggestions from '@/features/dashboard/components/SmartSuggestions';
 import { mockData } from './data';
 
 export default function DashboardPage() {

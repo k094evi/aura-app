@@ -1,5 +1,3 @@
-'use client';
-
 // Represents a single skill, whether it's missing from the resume, and a recommendation
 type SkillGap = {
   skill: string;

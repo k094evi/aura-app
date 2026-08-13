@@ -1,5 +1,3 @@
-'use client';
-
 // Represents a single grammar/style issue with its category and description
 type GrammarIssue = {
   type: string;

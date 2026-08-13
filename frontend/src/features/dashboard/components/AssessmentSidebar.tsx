@@ -44,7 +44,7 @@ function ScoreChart({
   ];
 
   return (
-    <div className="relative w-full aspect-square mx-auto max-w-[180px]">
+    <div className="relative w-full aspect-square mx-auto max-w-45">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie

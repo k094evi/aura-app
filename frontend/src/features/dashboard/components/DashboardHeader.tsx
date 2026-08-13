@@ -1,5 +1,3 @@
-'use client';
-
 import Link from 'next/link';
 import { ArrowLeft, Download, Share2 } from 'lucide-react';
 

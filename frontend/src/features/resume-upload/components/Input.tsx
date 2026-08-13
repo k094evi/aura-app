@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from "react";
-import  CompanySelector  from "@/components/CompanySelector";
+import  CompanySelector  from "@/features/resume-upload/components/CompanySelector";
 import { FileText } from "lucide-react";
 import Link from 'next/link';
 

@@ -1,13 +1,67 @@
 'use client';
 
 import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useRouter } from 'next/navigation';
+import { signupSchema, type SignupFormData } from '@/schemas/auth';
+import { createClient } from '@/lib/supabase/client'
 import { Eye, EyeOff, Mail, Lock, CheckCircle2, Brain } from 'lucide-react';
 import Link from 'next/link';
 
 export default function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [confirmationSent, setConfirmationSent] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const router = useRouter();
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<SignupFormData>({
+    resolver: zodResolver(signupSchema),
+  });
+
+  const onSubmit = async (data: SignupFormData) => {
+    setAuthError(null);
+
+    const supabase = createClient();
+
+    const { data: authData, error } = await supabase.auth.signUp({
+      email: data.email,
+      password: data.password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`, // Redirect after email confirmation
+      }
+    });
+
+    if (error) {
+      setAuthError(error.message);
+      return;
+    }
+
+    if (authData.session) {
+      // Confirmation is off — Supabase already logged them in
+      router.push('/dashboard');
+      router.refresh();
+    } else {
+      // Confirmation is required
+      setConfirmationSent(true);
+    }
+  };
+
+  const handleOAuthLogin = async (provider: 'google' | 'github') => {
+    const supabase = createClient();
+    await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+  }
+
 
   return (
     <div className="bg-gray-50 flex flex-col items-center justify-center px-4 py-10">
@@ -20,7 +74,7 @@ export default function SignUpPage() {
       </Link>
 
       {/* Main signup card */}
-      <div className="bg-white rounded-2xl shadow-lg w-full max-w-[470px] px-10 py-10">
+      <div className="bg-white rounded-2xl shadow-lg w-full max-w-117.5 px-10 py-10">
         {/* Heading */}
         <div className="text-center mb-8">
           <h1 className="text-[1.75rem] font-bold text-gray-900 mb-2 tracking-tight">
@@ -32,22 +86,45 @@ export default function SignUpPage() {
         </div>
 
         {/* Signup form */}
-        <div className="space-y-5">
+        {confirmationSent ? (
+        <div className="text-center space-y-4">
+          <h2 className="text-xl font-bold text-gray-900">
+            Check your email
+          </h2>
+
+          <p className="text-sm text-gray-500 leading-relaxed">
+            We sent you a confirmation link. Please check your email
+            and confirm your account before signing in.
+          </p>
+
+          <Link
+            href="/signin"
+            className="inline-block text-sm font-semibold text-indigo-600 hover:underline"
+          >
+            Back to sign in
+          </Link>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
           {/* Email input */}
           <div>
             <label className="block text-xs font-semibold text-gray-700 uppercase tracking-widest mb-2">
               Email Address
             </label>
             <div className="flex items-center gap-3 border border-gray-200 rounded-xl px-4 py-3 bg-gray-50 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/10 transition">
-              <Mail size={18} className="text-gray-400 flex-shrink-0" />
+              <Mail size={18} className="text-gray-400 shrink-0" />
               <input
                 type="email"
                 placeholder="name@company.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                {...register('email')}
                 className="flex-1 bg-transparent text-gray-900 placeholder:text-gray-400 text-sm outline-none"
               />
             </div>
+
+            {errors.email && (
+              <p className="text-xs text-red-600 mt-1">
+                {errors.email.message}</p>
+            )}
           </div>
 
           {/* Password input with show/hide toggle */}
@@ -56,45 +133,96 @@ export default function SignUpPage() {
               Password
             </label>
             <div className="flex items-center gap-3 border border-gray-200 rounded-xl px-4 py-3 bg-gray-50 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/10 transition">
-              <Lock size={18} className="text-gray-400 flex-shrink-0" />
+              <Lock size={18} className="text-gray-400 shrink-0" />
               <input
                 type={showPassword ? 'text' : 'password'}
                 placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                {...register('password')}
                 className="flex-1 bg-transparent text-gray-900 placeholder:text-gray-400 text-sm outline-none"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="text-gray-400 hover:text-gray-600 transition flex-shrink-0"
+                className="text-gray-400 hover:text-gray-600 transition shrink-0"
                 aria-label="Toggle password visibility"
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
+
+            {errors.password && (
+              <p className="text-sm text-red-600 mt-1">
+                {errors.password.message}
+              </p>
+            )}
+          </div>
+
+          {/* Confirm password input */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-widest mb-2">
+              Confirm Password
+            </label>
+
+            <div className="flex items-center gap-3 border border-gray-200 rounded-xl px-4 py-3 bg-gray-50 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/10 transition">
+              <Lock size={18} className="text-gray-400 shrink-0" />
+
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                placeholder="••••••••"
+                {...register('confirmPassword')}
+                className="flex-1 bg-transparent text-gray-900 placeholder:text-gray-400 text-sm outline-none"
+              />
+
+              <button
+                type="button"
+                onClick={() =>
+                  setShowConfirmPassword(!showConfirmPassword)
+                }
+                className="text-gray-400 hover:text-gray-600 transition shrink-0"
+                aria-label="Toggle confirm password visibility"
+              >
+                {showConfirmPassword ? (
+                  <EyeOff size={18} />
+                ) : (
+                  <Eye size={18} />
+                )}
+              </button>
+            </div>
+
+            {errors.confirmPassword && (
+              <p className="text-sm text-red-600 mt-1">
+                {errors.confirmPassword.message}
+              </p>
+            )}
           </div>
 
           {/* List of value-proposition bullets shown to new users */}
           <div className="space-y-2 pt-1">
             {['Free resume analysis', 'ATS compatibility report'].map((item) => (
               <div key={item} className="flex items-center gap-2">
-                <CheckCircle2 size={18} className="text-green-500 flex-shrink-0" />
+                <CheckCircle2 size={18} className="text-green-500 shrink-0" />
                 <span className="text-sm text-gray-600">{item}</span>
               </div>
             ))}
           </div>
 
+          {/* Authentication error */}
+          {authError && (
+            <p className="text-sm text-red-600 mt-1 text-center" role="alert">
+              {authError}
+            </p>
+          )}
+
           {/* Submit button */}
           <button
-            type="button"
+            type="submit"
             className="w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-base rounded-xl py-4 flex items-center justify-center gap-2 transition-colors duration-150 mt-2 shadow-sm shadow-indigo-100"
           >
             Get Started
             <span className="text-lg leading-none">→</span>
           </button>
-        </div>
-
+        </form>
+      )}
         {/* Divider between form and social signup options */}
         <div className="flex items-center gap-4 my-6">
           <div className="flex-1 h-px bg-gray-200" />
@@ -109,6 +237,7 @@ export default function SignUpPage() {
           {/* Google sign-up */}
           <button
             type="button"
+            onClick={() => handleOAuthLogin('google')}
             className="flex items-center justify-center gap-2 border border-gray-200 rounded-xl py-3 text-sm font-semibold text-gray-800 hover:bg-gray-50 transition"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -123,6 +252,7 @@ export default function SignUpPage() {
           {/* GitHub sign-up */}
           <button
             type="button"
+            onClick={() => handleOAuthLogin('github')}
             className="flex items-center justify-center gap-2 border border-gray-200 rounded-xl py-3 text-sm font-semibold text-gray-800 hover:bg-gray-50 transition"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">

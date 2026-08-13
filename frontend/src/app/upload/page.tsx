@@ -1,9 +1,9 @@
 'use client';
 
 import { motion } from "motion/react";
-import  Introduction  from "@/components/Introduction";
-import  Checks  from "@/components/Checks";
-import  Input  from "@/components/Input";
+import  Introduction  from "@/features/resume-upload/components/Introduction";
+import  Checks  from "@/features/resume-upload/components/Checks";
+import  Input  from "@/features/resume-upload/components/Input";
 
 export default function UploadPage() {
   

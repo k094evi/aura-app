@@ -1,5 +1,3 @@
-'use client';
-
 type SmartSuggestionsProps = {
   improvements: string[];
 };
