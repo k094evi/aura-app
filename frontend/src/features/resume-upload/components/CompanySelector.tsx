@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Search, X, Building2, ChevronDown } from 'lucide-react';
 
+// List of companies available for selection
 const COMPANIES = [
   'Google', 'Microsoft', 'Apple', 'Amazon', 'Meta',
   'Netflix', 'Tesla', 'Nvidia', 'Adobe', 'Salesforce',
@@ -30,10 +31,12 @@ export default function CompanySelector({
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Companies matching the current search query
   const filteredCompanies = COMPANIES.filter((company) =>
     company.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Add or remove a company from the selection
   const toggleCompany = (company: string) => {
     if (selectedCompanies.includes(company)) {
       onSelectionChange(
@@ -44,6 +47,7 @@ export default function CompanySelector({
     }
   };
 
+  // Close the dropdown when clicking outside of it
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -74,6 +78,7 @@ export default function CompanySelector({
       </label>
 
       <div className="relative">
+        {/* Selector field showing selected companies as removable chips */}
         <div
           onClick={() => setIsOpen(!isOpen)}
           className="min-h-14 w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl cursor-pointer flex items-center gap-2 flex-wrap"
@@ -92,6 +97,7 @@ export default function CompanySelector({
                 >
                   {company}
 
+                  {/* Remove this company from the selection */}
                   <button
                     type="button"
                     onClick={(e) => {
@@ -117,6 +123,7 @@ export default function CompanySelector({
           />
         </div>
 
+        {/* Dropdown with search input and company list */}
         <AnimatePresence>
           {isOpen && (
             <motion.div
@@ -141,6 +148,7 @@ export default function CompanySelector({
                 </div>
               </div>
 
+              {/* Scrollable list of filtered company options */}
               <div className="max-h-64 overflow-y-auto">
                 {filteredCompanies.map((company) => (
                   <button

@@ -1,17 +1,23 @@
 'use client';
 
 import { useState, useRef } from "react";
-import  CompanySelector  from "@/components/CompanySelector";
+import  CompanySelector  from "@/features/resume-upload/components/CompanySelector";
 import { FileText } from "lucide-react";
 import Link from 'next/link';
 
+// Form for entering target job, selecting companies, and uploading a resume
 export default function Input() {
+    // List of companies selected by the user
     const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
 
+    // Target job title entered by the user
     const [targetJob, setTargetJob] = useState('');
+    // Ref to the hidden file input, used to trigger it programmatically
     const fileInputRef = useRef<HTMLInputElement>(null);
+    // The resume file selected by the user
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
+    // Handles file selection and stores the chosen file
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
         setSelectedFile(e.target.files[0]);
@@ -34,6 +40,7 @@ export default function Input() {
                 />
             </div>
 
+            {/* Company selection component */}
             <CompanySelector
                 selectedCompanies={selectedCompanies}
                 onSelectionChange={setSelectedCompanies}
@@ -41,6 +48,7 @@ export default function Input() {
 
             {/* File Upload */}
             <div className="w-full max-w-2xl mx-auto mb-8">
+                {/* Hidden native file input, triggered via the button below */}
                 <input
                 ref={fileInputRef}
                 type="file"
@@ -48,6 +56,7 @@ export default function Input() {
                 onChange={handleFileSelect}
                 className="hidden"
                 />
+                {/* Custom styled button that opens the file picker */}
                 <button
                 onClick={() => fileInputRef.current?.click()}
                 className="w-full px-6 py-4 bg-white border-2 border-dashed border-gray-300 rounded-xl hover:border-indigo-400 hover:bg-indigo-50/30 transition-all flex items-center justify-center gap-3 group"
@@ -59,6 +68,7 @@ export default function Input() {
                 </button>
             </div>
 
+          {/* Submit button - navigates to loading/analysis page */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
             <Link
               href="/loading"

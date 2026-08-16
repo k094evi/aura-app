@@ -24,6 +24,7 @@ interface AssessmentSidebarProps {
   sections: SectionData[];
 }
 
+// Circular donut chart showing the overall score percentage
 function ScoreChart({
   score,
   label = 'ATS Score',
@@ -43,7 +44,7 @@ function ScoreChart({
   ];
 
   return (
-    <div className="relative w-full aspect-square mx-auto max-w-[180px]">
+    <div className="relative w-full aspect-square mx-auto max-w-45">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
@@ -55,6 +56,7 @@ function ScoreChart({
             startAngle={90}
             endAngle={-270}
           >
+            {/* Filled portion color depends on score range */}
             <Cell
               fill={
                 score > 80
@@ -65,11 +67,13 @@ function ScoreChart({
               }
             />
 
+            {/* Remaining/background portion */}
             <Cell fill="#f3f4f6" />
           </Pie>
         </PieChart>
       </ResponsiveContainer>
 
+      {/* Score percentage and label centered inside the donut */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-3xl font-extrabold text-gray-900">
           {score}%
@@ -89,7 +93,7 @@ export default function AssessmentSidebar({
 }: AssessmentSidebarProps) {
   return (
     <div className="lg:col-span-1 space-y-6">
-      {/* Overall Assessment */}
+      {/* Overall Assessment card with score chart */}
       <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
         <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-6">
           Overall Assessment
@@ -99,6 +103,7 @@ export default function AssessmentSidebar({
           <ScoreChart score={score} />
         </div>
 
+        {/* Summary note about resume complexity */}
         <div className="mt-8 space-y-4">
           <div className="p-4 bg-indigo-50 rounded-2xl">
             <p className="text-xs text-indigo-700 leading-relaxed font-semibold text-center">
@@ -112,7 +117,7 @@ export default function AssessmentSidebar({
         </div>
       </div>
 
-      {/* Dimension Analysis */}
+      {/* Dimension Analysis card with horizontal bar chart */}
       <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
         <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-6 flex items-center gap-2">
           <Scan className="w-4 h-4 text-indigo-600" />
@@ -125,11 +130,13 @@ export default function AssessmentSidebar({
               data={sections}
               layout="vertical"
             >
+              {/* Hidden numeric axis (used for bar scaling only) */}
               <XAxis
                 type="number"
                 hide
               />
 
+              {/* Category axis showing section names */}
               <YAxis
                 dataKey="name"
                 type="category"
@@ -150,6 +157,7 @@ export default function AssessmentSidebar({
                 }}
               />
 
+              {/* Horizontal bars representing each section's score */}
               <Bar
                 dataKey="value"
                 fill="#6366f1"
