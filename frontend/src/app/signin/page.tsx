@@ -10,10 +10,15 @@ import { Eye, EyeOff, Mail, Lock, Brain } from 'lucide-react';
 import Link from 'next/link';
 
 export default function LoginPage() {
+
+  // Controls whether the password is visible
   const [showPassword, setShowPassword] = useState(false);
+
+  // Stores authentication errors returned by Supabase
   const [authError, setAuthError] = useState<string | null>(null);
   const router = useRouter();
 
+  // loginSchema validaiton before onSubmit receives the data
   const {
     register,
     handleSubmit,
@@ -22,6 +27,7 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   });
 
+  // Called after the form successfully passes Zod validation
   const onSubmit = async (data: LoginFormData) => {
     setAuthError(null); // Reset any previous error messages
     const supabase = createClient();
@@ -38,6 +44,7 @@ export default function LoginPage() {
     }
   };
 
+  // Handles OAuth authentication using Google or GitHub.
   const handleOAuthLogin = async (provider: 'google' | 'github') => {
   const supabase = createClient();
   await supabase.auth.signInWithOAuth({

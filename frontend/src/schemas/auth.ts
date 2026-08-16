@@ -1,6 +1,9 @@
 // schemas/auth.ts
+
+// We use it to validate form input before sending it to Supabase.
 import { z } from 'zod'
 
+{/* Login Validation */}
 export const loginSchema = z.object({
   email: z.string().email('Enter a valid email address'),
   password: z.string().min(1, 'Password is required'),
@@ -8,7 +11,7 @@ export const loginSchema = z.object({
 
 export type LoginFormData = z.infer<typeof loginSchema>
 
-// schemas/auth.ts — add alongside loginSchema
+{/* Signup Validation */}
 export const signupSchema = z
   .object({
     email: z.string().email('Enter a valid email address'),

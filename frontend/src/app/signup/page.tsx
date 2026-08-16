@@ -10,12 +10,23 @@ import { Eye, EyeOff, Mail, Lock, CheckCircle2, Brain } from 'lucide-react';
 import Link from 'next/link';
 
 export default function SignUpPage() {
+
+  // Controls whether the password field displays its contents
   const [showPassword, setShowPassword] = useState(false);
+
+  // Same purpose as showPassword, but for confirmPassword
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Tracks whether the signup request succeeded and a confirmation email was sent
   const [confirmationSent, setConfirmationSent] = useState(false);
+
+  // Stores an authentication error returned by Supabase
+  // Example: "User already registered" or "Invalid email or password"
   const [authError, setAuthError] = useState<string | null>(null);
   const router = useRouter();
 
+  // zodResolver connects the form to signupSchema, meaning
+  // Zod automatically validates the submitted values.
   const {
     register,
     handleSubmit,
@@ -24,11 +35,13 @@ export default function SignUpPage() {
     resolver: zodResolver(signupSchema),
   });
 
+  // Runs when the signup form passes Zod validation
   const onSubmit = async (data: SignupFormData) => {
     setAuthError(null);
 
     const supabase = createClient();
 
+    // Send the user's email and password to Supabase Auth
     const { data: authData, error } = await supabase.auth.signUp({
       email: data.email,
       password: data.password,
@@ -52,6 +65,7 @@ export default function SignUpPage() {
     }
   };
 
+  // Handles Google and GitHub OAuth signup/login
   const handleOAuthLogin = async (provider: 'google' | 'github') => {
     const supabase = createClient();
     await supabase.auth.signInWithOAuth({
