@@ -1,25 +1,22 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { Navbar } from "@/components/NavBar";
-import { Footer } from "@/components/Footer";
+import { Navbar } from '@/components/NavBar';
+import { Footer } from '@/components/Footer';
 
-// Layout wrapper that conditionally shows/hides the Navbar and Footer
-// based on the current route
 export function ConditionalLayout({ children }: { children: React.ReactNode }) {
-  // Get the current route path
   const pathname = usePathname();
-  // Hide Navbar and Footer on signup and signin pages
   const hideNavFooter = ['/signup', '/signin'].includes(pathname);
+  const hideNavOnly = ['/privacy'].includes(pathname);
+  const authenticatedRoutes = ['/dashboard', '/profile', '/analysis-history', '/settings'];
+  const isAuthenticated = authenticatedRoutes.some(route => pathname.startsWith(route));
 
   return (
     <>
-      {/* Show Navbar unless on a hidden route */}
-      {!hideNavFooter && <Navbar />}
-      <main className="min-h-screen">
-        {children}
-      </main>
-      {/* Show Footer unless on a hidden route */}
+      {!hideNavFooter && !hideNavOnly && (
+        <Navbar isAuthenticated={isAuthenticated} />
+      )}
+      <main className="min-h-screen">{children}</main>
       {!hideNavFooter && <Footer />}
     </>
   );

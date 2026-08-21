@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 // Site-wide footer with copyright notice and legal/contact links
 export const Footer = () => {
   return (
@@ -11,9 +13,15 @@ export const Footer = () => {
 
         {/* Legal and contact links */}
         <div className="flex gap-8">
-          <a href="#">Privacy Policy</a>
-          <a href="#">Terms of Service</a>
-          <a href="#">Contact Us</a>
+          <Link href="/privacy" className="hover:text-gray-600 transition-colors">
+            Privacy Policy
+          </Link>
+          <Link href="/terms" className="hover:text-gray-600 transition-colors">
+            Terms of Service
+          </Link>
+          <Link href="/contact" className="hover:text-gray-600 transition-colors">
+            Contact Us
+          </Link>
         </div>
 
       </div>
