@@ -145,7 +145,7 @@ export default function LoginPage() {
           Terms of Service
         </Link>{' '}
         and{' '}
-        <Link href="/privacy" className="underline hover:text-gray-600">
+        <Link href="/privacy?from=signin" className="underline hover:text-gray-600">
           Privacy Policy
         </Link>
         .
