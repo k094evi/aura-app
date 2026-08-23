@@ -141,7 +141,7 @@ export default function LoginPage() {
       {/* Footer with legal links */}
       <p className="text-xs text-gray-400 mt-8 text-center max-w-sm leading-relaxed">
         By continuing, you agree to our{' '}
-        <Link href="/terms" className="underline hover:text-gray-600">
+        <Link href="/terms-of-service?from=signin" className="underline hover:text-gray-600">
           Terms of Service
         </Link>{' '}
         and{' '}

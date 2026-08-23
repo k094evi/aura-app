@@ -6,8 +6,11 @@ import { Footer } from '@/components/Footer';
 
 // Routes that use the authenticated (logged-in) Navbar.
 const AUTHENTICATED_ROUTES = ['/dashboard', '/profile', '/analysis-history', '/settings'];
-// "from" values on /privacy that mean the user arrived from an authenticated route.
+// "from" values on legal pages that mean the user arrived from an authenticated route.
 const AUTHENTICATED_FROM_VALUES = ['dashboard', 'profile', 'analysis-history', 'settings'];
+// Legal pages that have no fixed auth state of their own and instead
+// borrow it from the "from" query param.
+const LEGAL_ROUTES = ['/privacy', '/terms-of-service'];
 
 export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -16,15 +19,14 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
 
   const hideNavFooter = ['/signup', '/signin'].includes(pathname);
 
-  // /privacy has no fixed auth state of its own, so it borrows it from
-  // wherever the user came from via the "from" query param.
-  const isPrivacyFromAuth = pathname === '/privacy' && !!from && AUTHENTICATED_FROM_VALUES.includes(from);
-  const hideNavOnly = pathname === '/privacy' && !isPrivacyFromAuth;
+  const isLegalRoute = LEGAL_ROUTES.includes(pathname);
+  const isLegalFromAuth = isLegalRoute && !!from && AUTHENTICATED_FROM_VALUES.includes(from);
+  const hideNavOnly = isLegalRoute && !isLegalFromAuth;
 
-  // Authenticated if the route itself is authenticated, or if it's /privacy
-  // reached from an authenticated route.
+  // Authenticated if the route itself is authenticated, or if it's a legal
+  // page reached from an authenticated route.
   const isAuthenticated =
-    AUTHENTICATED_ROUTES.some((route) => pathname.startsWith(route)) || isPrivacyFromAuth;
+    AUTHENTICATED_ROUTES.some((route) => pathname.startsWith(route)) || isLegalFromAuth;
 
   return (
     <>

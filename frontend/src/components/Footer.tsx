@@ -7,8 +7,9 @@ import { usePathname } from 'next/navigation';
 export const Footer = () => {
   const pathname = usePathname();
 
-  // Maps the current route to the "from" value /privacy expects, so its
-  // back link points to wherever the user came from.
+  // Maps the current route to the "from" value /privacy and
+  // /terms-of-service expect, so their back links point to wherever the
+  // user came from.
   const fromMap: Record<string, string> = {
     '/dashboard': 'dashboard',
     '/signin': 'signin',
@@ -18,6 +19,7 @@ export const Footer = () => {
 
   const from = fromMap[pathname];
   const privacyHref = from ? `/privacy?from=${from}` : '/privacy';
+  const termsHref = from ? `/terms-of-service?from=${from}` : '/terms-of-service';
 
   return (
     <footer className="mt-20 py-10 border-t border-gray-100 bg-gray-50/50">
@@ -30,7 +32,7 @@ export const Footer = () => {
           <Link href={privacyHref} className="hover:text-gray-600 transition-colors">
             Privacy Policy
           </Link>
-          <Link href="/terms" className="hover:text-gray-600 transition-colors">
+          <Link href={termsHref} className="hover:text-gray-600 transition-colors">
             Terms of Service
           </Link>
           <Link href="/contact" className="hover:text-gray-600 transition-colors">

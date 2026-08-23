@@ -177,7 +177,7 @@ const SECTIONS: Section[] = [
     content: [
       {
         subtitle: '',
-        text: 'If you have any questions or concerns about this Privacy Policy or how we handle your data, please contact us at: privacy@aura.app',
+        text: 'If you have any questions or concerns about this Privacy Policy or how we handle your data, please contact us at: email',
       },
     ],
   },
