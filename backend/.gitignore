@@ -32,3 +32,14 @@ desktop.ini
 *.njsproj
 *.sln
 *.swp
+
+# --- Python Files ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
