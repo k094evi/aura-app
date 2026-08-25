@@ -1,45 +1,6 @@
-# --- Environment Variables (Crucial for Secrets) ---
 .env
-.env.local
-.env.*.local
-*.env
-
-# --- Node / Package Managers ---
-node_modules/
-.npm
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
-
-# --- Build Outputs and Cache ---
-dist/
-build/
-.next/
-.nuxt/
-out/
-.cache/
-
-# --- Operating System Files ---
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# --- IDEs and Text Editors ---
-.vscode/
-.idea/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.swp
-
-# --- Python Files ---
+.venv/
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.venv/
-
+.pytest_cache/
+node_modules/

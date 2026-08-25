@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* Remove the turbopack config from here entirely */
+  /* config options here */
+  reactCompiler: true,
 };
 
 export default nextConfig;

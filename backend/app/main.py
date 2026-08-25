@@ -1,0 +1,141 @@
+# FILE LOCATION: app/main.py
+"""
+PURPOSE
+-------
+This is the FastAPI application entry point for the "Aura" resume
+analyzer backend. It's the file that gets started up to run the whole
+API server — it wires together configuration, CORS, routers, and the
+top-level endpoints.
+
+Run with:
+    python -m uvicorn app.main:app --reload --port 8000
+
+HOW IT FITS INTO THE PROGRAM
+-----------------------------
+This file is the hub that connects everything else together:
+  - `app/config.py`                        → app-wide settings (CORS
+                                              origins, upload limits,
+                                              Supabase/JWT/Adzuna keys).
+  - `app/api/v1/endpoints/auth.py`         → auth-related routes
+                                              (signup/login/etc.),
+                                              mounted under `/api`.
+  - `app/routes/parsing.py`                → resume-parsing routes,
+                                              also mounted under `/api`.
+  - `app/controllers/analyze_controller.py`→ the actual logic behind
+                                              `POST /api/analyze`
+                                              (this file just wires the
+                                              HTTP layer to it).
+  - `app/dependencies/auth.py`             → `get_current_user`, a
+                                              FastAPI dependency that
+                                              authenticates the request
+                                              before `analyze_resume`
+                                              runs.
+  - `app/models/auth_schemas.py`           → the `AuthUser` type
+                                              returned by that
+                                              dependency.
+
+REQUEST FLOW FOR /api/analyze
+-------------------------------
+1. Client sends a multipart POST with a resume `file`, optional
+   `target_job` text, and optional `target_companies` (JSON string).
+2. `get_current_user` dependency runs first — this validates the
+   caller is authenticated before any resume processing happens.
+3. `handle_analyze(...)` in `analyze_controller.py` does the real
+   work (this is presumably where file_handler.py's `validate_file`,
+   the resume parser, text_cleaner.py, and job_scorer.py all get used
+   together).
+
+NOTES / THINGS WORTH DOUBLE-CHECKING
+--------------------------------------
+- `load_dotenv()` runs before the `app.config` import, which is
+  correct — env vars need to be loaded into the process before
+  `Settings()` (in config.py) reads them at import time.
+- CORS is intentionally scoped down to only "GET"/"POST" and the two
+  headers this API actually needs, rather than wildcarding methods
+  and headers — see the inline note above the middleware for the
+  reasoning.
+- `logging.basicConfig(...)` here sets up a *second*, separate logging
+  configuration from the shared `logger` object in
+  `app/utils/logger.py`. This module's `logger = logging.getLogger(__name__)`
+  is NOT the same "aura" logger used elsewhere in the codebase — worth
+  being aware of if you're trying to control log format/level in one
+  place, since right now there are two independent logging setups.
+"""
+
+import logging
+from fastapi import FastAPI, UploadFile, File, Form, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+# Load .env into the process environment BEFORE anything below (like
+# app.config.settings) tries to read environment variables.
+load_dotenv()
+
+from app.config import settings
+from app.api.v1.endpoints import auth as auth_router
+from app.routes.parsing import router as parsing_router
+from app.controllers.analyze_controller import handle_analyze
+from app.dependencies.auth import get_current_user
+from app.models.auth_schemas import AuthUser
+
+# NOTE: this configures Python's root/module logger, separate from the
+# shared "aura" logger defined in app/utils/logger.py. See NOTES above.
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# The FastAPI app instance — this is what uvicorn actually runs
+# (referenced as "app.main:app" in the run command above).
+app = FastAPI(title="Aura Resume Analyzer", version="1.0.0")
+
+# Reads from settings.ALLOWED_ORIGINS (app/config.py) instead of a
+# hardcoded list, so prod/dev can differ via .env without touching code.
+# Methods/headers are scoped to what this API actually uses — "*" here
+# means any site with the right Origin can send any method with any
+# headers, which is more permissive than a resume-analysis API needs.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
+)
+
+# Mount the auth routes (login/signup/etc.) and resume-parsing routes,
+# both under the shared "/api" prefix.
+app.include_router(auth_router.router, prefix="/api")
+app.include_router(parsing_router, prefix="/api")
+
+
+@app.post("/api/analyze")
+async def analyze_resume(
+    file: UploadFile = File(...),
+    target_job: str = Form(default=""),
+    target_companies: str = Form(default="[]"),
+    user: AuthUser = Depends(get_current_user),
+):
+    """
+    Main entry point for the resume-analysis feature.
+
+    - `file`: the uploaded resume (PDF/DOCX — validated later by
+      file_handler.validate_file inside the controller/parsing flow).
+    - `target_job`: optional free-text job title/description the user
+      is targeting, used to focus the analysis.
+    - `target_companies`: optional JSON-encoded list of company names
+      the user is interested in (comes in as a raw string since this
+      is a multipart form field, not JSON body — gets parsed inside
+      handle_analyze).
+    - `user`: injected by the `get_current_user` dependency, which
+      runs BEFORE this function body — so unauthenticated requests
+      never reach handle_analyze at all.
+
+    All actual logic is delegated to `handle_analyze` in
+    analyze_controller.py; this function is just the HTTP-layer glue.
+    """
+    return await handle_analyze(file, target_job, target_companies)
+
+
+@app.get("/health")
+def health():
+    """Simple liveness/readiness check — used by uptime monitors, load
+    balancers, or Docker/orchestration health checks to confirm the
+    server process is up and responding."""
+    return {"status": "ok"}

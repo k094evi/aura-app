@@ -1,60 +1,49 @@
+// src/app/signin/page.tsx
+
 'use client';
 
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
-import { loginSchema, type LoginFormData } from '@/schemas/auth';
-import { createClient } from '@/lib/supabase/client'
-import { Eye, EyeOff, Mail, Lock, Brain } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, Brain, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function LoginPage() {
-
-  // Controls whether the password is visible
   const [showPassword, setShowPassword] = useState(false);
-
-  // Stores authentication errors returned by Supabase
-  const [authError, setAuthError] = useState<string | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  // loginSchema validaiton before onSubmit receives the data
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<LoginFormData>({
-    resolver: zodResolver(loginSchema),
-  });
+  const handleSubmit = async () => {
+    if (!email || !password) {
+      setError('Please enter your email and password.');
+      return;
+    }
 
-  // Called after the form successfully passes Zod validation
-  const onSubmit = async (data: LoginFormData) => {
-    setAuthError(null); // Reset any previous error messages
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({
-      email: data.email,
-      password: data.password,
-    });
+    setIsSubmitting(true);
+    setError(null);
 
-    if (error) {
-      setAuthError(error.message);
-    } else {
+    try {
+      const res = await fetch('/api/auth/signin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.detail || 'Sign in failed. Please try again.');
+      }
+
       router.push('/dashboard');
-      router.refresh();
+    } catch (err: any) {
+      setError(err.message || 'Something went wrong. Please try again.');
+      setIsSubmitting(false);
     }
   };
 
-  // Handles OAuth authentication using Google or GitHub.
-  const handleOAuthLogin = async (provider: 'google' | 'github') => {
-  const supabase = createClient();
-  await supabase.auth.signInWithOAuth({
-    provider,
-    options: {
-      redirectTo: `${window.location.origin}/auth/callback`,
-    },
-  });
-};
-  
   return (
     <div className="bg-gray-50 flex flex-col items-center justify-center px-4 py-10">
       {/* Logo / brand link back to home */}
@@ -66,7 +55,7 @@ export default function LoginPage() {
       </Link>
 
       {/* Main login card */}
-      <div className="bg-white rounded-2xl shadow-lg w-full max-w-117.5 px-10 py-10">
+      <div className="bg-white rounded-2xl shadow-lg w-full max-w-[470px] px-10 py-10">
         {/* Heading */}
         <div className="text-center mb-8">
           <h1 className="text-[1.75rem] font-bold text-gray-900 mb-2 tracking-tight">
@@ -78,26 +67,22 @@ export default function LoginPage() {
         </div>
 
         {/* Login form */}
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+        <div className="space-y-5">
           {/* Email input */}
           <div>
             <label className="block text-xs font-semibold text-gray-700 uppercase tracking-widest mb-2">
               Email Address
             </label>
             <div className="flex items-center gap-3 border border-gray-200 rounded-xl px-4 py-3 bg-gray-50 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/10 transition">
-              <Mail size={18} className="text-gray-400 shrink-0" />
+              <Mail size={18} className="text-gray-400 flex-shrink-0" />
               <input
                 type="email"
                 placeholder="name@company.com"
-                {...register('email')}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="flex-1 bg-transparent text-gray-900 placeholder:text-gray-400 text-sm outline-none"
               />
             </div>
-
-            {errors.email && (
-              <p className="text-sm text-red-600 mt-1">
-                {errors.email.message}</p>
-            )}
           </div>
 
           {/* Password input with show/hide toggle */}
@@ -106,28 +91,28 @@ export default function LoginPage() {
               Password
             </label>
             <div className="flex items-center gap-3 border border-gray-200 rounded-xl px-4 py-3 bg-gray-50 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/10 transition">
-              <Lock size={18} className="text-gray-400 shrink-0" />
+              <Lock size={18} className="text-gray-400 flex-shrink-0" />
               <input
                 type={showPassword ? 'text' : 'password'}
                 placeholder="••••••••"
-                {...register('password')}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
                 className="flex-1 bg-transparent text-gray-900 placeholder:text-gray-400 text-sm outline-none"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="text-gray-400 hover:text-gray-600 transition shrink-0"
+                className="text-gray-400 hover:text-gray-600 transition flex-shrink-0"
                 aria-label="Toggle password visibility"
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
-
-            {errors.password && (
-              <p className="text-sm text-red-600 mt-1">
-                {errors.password.message}</p>
-            )}
           </div>
+
+          {/* Error message */}
+          {error && <p className="text-red-500 text-sm text-center font-medium">{error}</p>}
 
           {/* Forgot password link */}
           <div className="flex justify-end">
@@ -136,23 +121,26 @@ export default function LoginPage() {
             </Link>
           </div>
 
-          {/* Authentication error */}
-          {authError && (
-            <p className="text-sm text-red-600 mt-1 text-center" role="alert">
-              {authError}
-            </p>
-          )}
-
           {/* Submit button */}
           <button
-            type="submit"
+            type="button"
+            onClick={handleSubmit}
             disabled={isSubmitting}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-base rounded-xl py-4 flex items-center justify-center gap-2 transition-colors duration-150 mt-2 shadow-sm shadow-indigo-100"
+            className="w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-base rounded-xl py-4 flex items-center justify-center gap-2 transition-colors duration-150 mt-2 shadow-sm shadow-indigo-100 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Sign In
-            <span className="text-lg leading-none">→</span>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Signing in...
+              </>
+            ) : (
+              <>
+                Sign In
+                <span className="text-lg leading-none">→</span>
+              </>
+            )}
           </button>
-        </form>
+        </div>
 
         {/* Divider between form and social login options */}
         <div className="flex items-center gap-4 my-6">
@@ -168,7 +156,6 @@ export default function LoginPage() {
           {/* Google sign-in */}
           <button
             type="button"
-            onClick={() => handleOAuthLogin('google')}
             className="flex items-center justify-center gap-2 border border-gray-200 rounded-xl py-3 text-sm font-semibold text-gray-800 hover:bg-gray-50 transition"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -183,7 +170,6 @@ export default function LoginPage() {
           {/* GitHub sign-in */}
           <button
             type="button"
-            onClick={() => handleOAuthLogin('github')}
             className="flex items-center justify-center gap-2 border border-gray-200 rounded-xl py-3 text-sm font-semibold text-gray-800 hover:bg-gray-50 transition"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
