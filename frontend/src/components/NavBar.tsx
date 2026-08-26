@@ -61,7 +61,7 @@ export const Navbar = ({ isAuthenticated = false, onLogout }: { isAuthenticated?
                   transition={{ duration: 0.2 }}
                   className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden"
                 >
-                  {/* User info header */}
+                  {/* User info header  */}
                   <div className="p-3 border-b border-gray-100 bg-gray-50">
                     <p className="text-sm font-bold text-gray-900">{userName}</p>
                     <p className="text-xs text-gray-500">{userEmail}</p>

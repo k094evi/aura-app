@@ -19,7 +19,7 @@ export const metadata = {
 };
 
 // Prevents this route from being statically cached, since the back link
-// depends on the "from" query param and must be evaluated per request.
+// depends on the "from" query param and must be evaluated per request
 export const dynamic = 'force-dynamic';
 
 type Section = {

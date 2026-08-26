@@ -4,13 +4,13 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 
-import AnalysisRecordCard, { type AnalysisRecord } from '@/components/AnalysisRecordCard';
+import AnalysisRecordCard, { type AnalysisRecord } from '@/features/analysis-history/components/AnalysisRecordCard';
 import {
   AnalysisSummaryStats,
   AnalysisScoreTrendChart,
   AnalysisHistoryEmptyState,
   DeleteAnalysisModal,
-} from '@/components/AnalysisHistoryParts';
+} from '@/features/analysis-history/components/AnalysisHistoryParts';
 
 // Placeholder data until this is wired up to a real API. Swap this for a
 // fetch (e.g. GET /api/analysis-history) and drive `records` from server

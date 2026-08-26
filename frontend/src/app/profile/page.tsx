@@ -50,7 +50,7 @@ export default function MyProfilePage() {
         {/* Avatar + quick stats */}
         <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 mb-6">
           <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
-            {/* Positioning, sizing, and spacing here are all forced via inline
+            {/* Positioning, sizing and spacing here are all forced via inline
                 style rather than Tailwind utilities (flex/gap/relative/absolute
                 were only partially applying on this page, causing the badge
                 to overlap the text column) */}

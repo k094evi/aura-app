@@ -14,7 +14,7 @@ import {
   X,
   Check,
 } from 'lucide-react';
-import { Modal, ActionRow, ToggleRow, SectionCard, FOCUS_RING } from '@/components/SettingsUI';
+import { Modal, ActionRow, ToggleRow, SectionCard, FOCUS_RING } from '@/features/settings/components/SettingsUI';
 
 type NotificationSettings = {
   analysisComplete: boolean;

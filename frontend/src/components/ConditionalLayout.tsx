@@ -4,7 +4,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { Navbar } from '@/components/NavBar';
 import { Footer } from '@/components/Footer';
 
-// Routes that use the authenticated (logged-in) Navbar.
+// Routes that use the authenticated (logged-in) Navbar
 const AUTHENTICATED_ROUTES = ['/dashboard', '/profile', '/analysis-history', '/settings'];
 // "from" values on legal pages that mean the user arrived from an authenticated route.
 const AUTHENTICATED_FROM_VALUES = ['dashboard', 'profile', 'analysis-history', 'settings'];

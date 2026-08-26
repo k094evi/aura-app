@@ -221,7 +221,7 @@ export default async function TermsOfServicePage({
   const params = await searchParams;
   const from = params?.from;
 
-  // Where the back link points, based on which page the user came from.
+  // Where the back link points, based on which page the user came from
   const backHref =
     from === 'signin' ? '/signin'
     : from === 'signup' ? '/signup'

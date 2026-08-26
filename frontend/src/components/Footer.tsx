@@ -20,6 +20,7 @@ export const Footer = () => {
   const from = fromMap[pathname];
   const privacyHref = from ? `/privacy?from=${from}` : '/privacy';
   const termsHref = from ? `/terms-of-service?from=${from}` : '/terms-of-service';
+  const contactHref = from ? `/contact-us?from=${from}` : '/contact-us';
 
   return (
     <footer className="mt-20 py-10 border-t border-gray-100 bg-gray-50/50">
@@ -35,7 +36,7 @@ export const Footer = () => {
           <Link href={termsHref} className="hover:text-gray-600 transition-colors">
             Terms of Service
           </Link>
-          <Link href="/contact" className="hover:text-gray-600 transition-colors">
+          <Link href={contactHref} className="hover:text-gray-600 transition-colors">
             Contact Us
           </Link>
         </div>

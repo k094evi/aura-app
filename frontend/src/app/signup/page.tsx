@@ -11,7 +11,7 @@ export default function SignUpPage() {
 
   return (
     <div className="bg-gray-50 flex flex-col items-center justify-center px-4 py-10">
-      {/* Logo / brand link back to home */}
+      {/* Logo  brand link back to home */}
       <Link href="/" className="flex items-center gap-2 mb-8">
         <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center">
           <Brain className="text-white w-7 h-7" />
