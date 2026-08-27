@@ -3,6 +3,7 @@
 # after that Python version comes out — pip then tries to build from
 # source and fails, or fails to resolve at all. Rather than chasing
 # version pins, use Python 3.11 or 3.12 for this project's venv:
+
 #   py -3.12 -m venv .venv
 fastapi==0.111.0
 uvicorn[standard]==0.29.0

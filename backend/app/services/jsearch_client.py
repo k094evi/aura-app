@@ -1,41 +1,3 @@
-# ==============================================================================
-# FILE: app/services/jsearch_client.py
-# ==============================================================================
-# PURPOSE OF THIS FILE (GUIDE):
-#   This is the HTTP client that talks to the external JSearch API (a job
-#   listings search API accessed through RapidAPI) and turns its raw JSON
-#   response into clean, typed `JobListing` objects the rest of the app can
-#   use without worrying about the API's response quirks.
-#
-#   It sits in the pipeline like this:
-#       resume_parser.py  -->  keyword_extractor.py  -->  jsearch_client.py
-#       (extract resume     (turn resume into a list    (use those keywords
-#        text)                of search keywords)         to fetch real job
-#                                                           listings)
-#
-#   Later, resume_enricher.py uses those job listings (as `top_jobs`) to
-#   score how well the resume's language matches what real job postings
-#   are asking for.
-#
-# WHAT LIVES HERE:
-#   - `JobListing`   : a dataclass describing one normalized job result.
-#   - `JSearchClient`: the class that actually performs the API calls.
-#       - `fetch_jobs(keywords)` is the main entry point other files call.
-#       - `_get(query)` performs one raw HTTP GET against JSearch.
-#       - `_extract_job_list(...)` defensively unwraps JSearch's response,
-#         since the same endpoint has been observed returning the job list
-#         in different shapes depending on the query/plan (see its
-#         docstring below for the specific bug this guards against).
-#       - `_parse_job(...)` converts one raw JSearch job dict into a
-#         `JobListing`.
-#
-# CONFIGURATION:
-#   - Requires the `JSEARCH_API_KEY` environment variable (RapidAPI key).
-#     The client raises `ValueError` at construction time if it's missing.
-#   - Results are biased toward Philippines/Manila/Remote-Philippines via
-#     `LOCATION_TERMS`, since that's this app's target market.
-# ==============================================================================
-
 # app/services/jsearch_client.py
 """
 JSearch API client (via RapidAPI) for fetching job listings.
@@ -47,6 +9,7 @@ import logging
 import urllib.request
 import urllib.parse
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -190,50 +153,59 @@ class JSearchClient:
         max_keywords:        int = MAX_KEYWORDS,
     ) -> List[JobListing]:
         """
-        Main entry point for this file — this is the method other modules
-        (e.g. the enrichment pipeline) actually call.
-
         Queries JSearch for each keyword paired with a location term.
         Rotates through LOCATION_TERMS so we get Philippines, Manila,
         and Remote results across queries.
         """
-        # `seen` de-duplicates jobs by job_id across multiple keyword
-        # queries. If the same job shows up for two different keywords,
-        # we don't want it twice in the results — instead we just record
-        # that it matched both keywords (see keywords_matched below).
         seen: dict[str, JobListing] = {}
         top_kw = keywords[:max_keywords]
 
-        for i, kw in enumerate(top_kw):
-            # Rotate location term per keyword
-            location = LOCATION_TERMS[i % len(LOCATION_TERMS)]
-            query = f"{kw} {location}"
-            logger.info("Querying JSearch: '%s'", query)
-            try:
-                results = self._get(query)
-            except Exception as exc:
-                logger.warning("JSearch query failed for '%s': %s", kw, exc)
-                continue
+        # Each keyword hits JSearch as a separate blocking HTTP call (up to
+        # 30s each per the timeout in _get()). Running these one-after-
+        # another in a for-loop meant /api/analyze could take 5x a single
+        # call's latency (we saw 18-28s end-to-end in practice) — the
+        # frontend's "rendering" step wasn't slow, it was just still
+        # waiting on this loop to finish. Firing all requests at once via
+        # a thread pool collapses that to roughly the slowest single call.
+        queries = [
+            (kw, f"{kw} {LOCATION_TERMS[i % len(LOCATION_TERMS)]}")
+            for i, kw in enumerate(top_kw)
+        ]
 
-            if not isinstance(results, list):
-                # Belt-and-suspenders: _get should already guarantee a list,
-                # but never let a bad shape crash the whole request.
-                logger.warning(
-                    "Unexpected results type for '%s': %s — skipping.",
-                    kw, type(results).__name__,
-                )
-                continue
+        with ThreadPoolExecutor(max_workers=max(1, len(queries))) as pool:
+            future_to_kw = {
+                pool.submit(self._get, query): kw
+                for kw, query in queries
+            }
 
-            for raw in results[:results_per_keyword]:
-                if not isinstance(raw, dict):
-                    logger.warning("Skipping non-dict job entry for '%s': %r", kw, raw)
+            for future in as_completed(future_to_kw):
+                kw = future_to_kw[future]
+                logger.info("Querying JSearch: '%s'", kw)
+                try:
+                    results = future.result()
+                except Exception as exc:
+                    logger.warning("JSearch query failed for '%s': %s", kw, exc)
                     continue
-                jid = raw.get("job_id", "")
-                if jid in seen:
-                    if kw not in seen[jid].keywords_matched:
-                        seen[jid].keywords_matched.append(kw)
-                else:
-                    seen[jid] = self._parse_job(raw, kw)
+
+                if not isinstance(results, list):
+                    # Belt-and-suspenders: _get should already guarantee a list,
+                    # but never let a bad shape crash the whole request.
+                    logger.warning(
+                        "Unexpected results type for '%s': %s — skipping.",
+                        kw, type(results).__name__,
+                    )
+                    continue
+
+                for raw in results[:results_per_keyword]:
+                    if not isinstance(raw, dict):
+                        logger.warning("Skipping non-dict job entry for '%s': %r", kw, raw)
+                        continue
+                    jid = raw.get("job_id", "")
+                    if jid in seen:
+                        if kw not in seen[jid].keywords_matched:
+                            seen[jid].keywords_matched.append(kw)
+                    else:
+                        seen[jid] = self._parse_job(raw, kw)
 
         jobs = list(seen.values())
         logger.info("Fetched %d unique jobs from JSearch", len(jobs))
