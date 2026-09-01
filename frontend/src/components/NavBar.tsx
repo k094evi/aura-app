@@ -2,9 +2,9 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Brain, User, Settings, LogOut, ChevronDown, FileBarChart, CreditCard } from 'lucide-react';
-import  Link  from 'next/link';
-
+import { Brain, User, Settings, LogOut, ChevronDown, FileBarChart } from 'lucide-react';
+import Link from 'next/link';
+import { getStoredUser } from '@/lib/auth';
 
 // Top navigation bar - shows user menu when authenticated, sign in/up links otherwise
 export const Navbar = ({ isAuthenticated = false, onLogout }: { isAuthenticated?: boolean, onLogout?: () => void }) => {
@@ -13,8 +13,19 @@ export const Navbar = ({ isAuthenticated = false, onLogout }: { isAuthenticated?
   // Ref used to detect clicks outside the dropdown
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const [userName, setUserName] = useState('John Doe');
-  const [userEmail, setUserEmail] = useState('john.doe@email.com');
+  const [userName, setUserName] = useState('Your Account');
+  const [userEmail, setUserEmail] = useState('');
+
+  // Pull the signed-in user's name/email from the stored session once we're
+  // on the client (avoids a server/client render mismatch on hydration).
+  useEffect(() => {
+    const stored = getStoredUser();
+    if (stored) {
+      setUserName(stored.full_name || stored.email || 'Your Account');
+      setUserEmail(stored.email || '');
+    }
+  }, [isAuthenticated]);
+
   // Generate initials from the user's name (e.g. "John Doe" -> "JD")
   const initials = userName
     .split(' ')
@@ -79,22 +90,30 @@ export const Navbar = ({ isAuthenticated = false, onLogout }: { isAuthenticated?
 
                   {/* Account-related menu actions */}
                   <div className="py-2">
-                    <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors flex items-center gap-3">
+                    <Link
+                      href="/profile"
+                      onClick={() => setIsDropdownOpen(false)}
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors flex items-center gap-3"
+                    >
                       <User className="w-4 h-4" />
                       My Profile
-                    </button>
-                    <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors flex items-center gap-3">
+                    </Link>
+                    <Link
+                      href="/analysis-history"
+                      onClick={() => setIsDropdownOpen(false)}
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors flex items-center gap-3"
+                    >
                       <FileBarChart className="w-4 h-4" />
                       My Analysis History
-                    </button>
-                    <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors flex items-center gap-3">
+                    </Link>
+                    <Link
+                      href="/settings"
+                      onClick={() => setIsDropdownOpen(false)}
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors flex items-center gap-3"
+                    >
                       <Settings className="w-4 h-4" />
                       Settings
-                    </button>
-                    <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors flex items-center gap-3">
-                      <CreditCard className="w-4 h-4" />
-                      Billing
-                    </button>
+                    </Link>
                   </div>
 
                   {/* Logout action */}
