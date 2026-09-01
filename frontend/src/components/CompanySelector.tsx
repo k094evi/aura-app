@@ -69,11 +69,8 @@ export default function CompanySelector({
   }, []);
 
   return (
-    <div
-      ref={dropdownRef}
-      className="w-full max-w-2xl mx-auto mb-8"
-    >
-      <label className="block text-sm font-semibold text-gray-700 mb-2 text-left">
+    <div ref={dropdownRef} className="w-full">
+      <label className="block text-sm font-semibold text-white/70 mb-2 text-left">
         Target Companies (Optional)
       </label>
 
@@ -81,10 +78,10 @@ export default function CompanySelector({
         {/* Selector field showing selected companies as removable chips */}
         <div
           onClick={() => setIsOpen(!isOpen)}
-          className="min-h-14 w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl cursor-pointer flex items-center gap-2 flex-wrap"
+          className="min-h-14 w-full px-4 py-3 bg-white/[0.03] border-2 border-white/[0.07] rounded-xl cursor-pointer flex items-center gap-2 flex-wrap transition-colors hover:border-white/[0.12]"
         >
           {selectedCompanies.length === 0 ? (
-            <div className="flex items-center gap-2 text-gray-400 flex-1">
+            <div className="flex items-center gap-2 text-white/30 flex-1">
               <Building2 className="w-5 h-5" />
               <span>Select companies you're targeting...</span>
             </div>
@@ -93,7 +90,7 @@ export default function CompanySelector({
               {selectedCompanies.map((company) => (
                 <span
                   key={company}
-                  className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-50 text-indigo-700 rounded-lg"
+                  className="inline-flex items-center gap-1 px-3 py-1 bg-fuchsia-500/10 text-fuchsia-300 border border-fuchsia-500/20 rounded-lg"
                 >
                   {company}
 
@@ -108,6 +105,7 @@ export default function CompanySelector({
                         )
                       );
                     }}
+                    className="text-fuchsia-300/70 hover:text-fuchsia-200"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -117,7 +115,7 @@ export default function CompanySelector({
           )}
 
           <ChevronDown
-            className={`w-5 h-5 transition-transform ${
+            className={`w-5 h-5 text-white/30 transition-transform ${
               isOpen ? 'rotate-180' : ''
             }`}
           />
@@ -130,11 +128,11 @@ export default function CompanySelector({
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="absolute z-50 w-full mt-2 bg-white border rounded-xl shadow-xl"
+              className="absolute z-50 w-full mt-2 bg-[#1a1726] border border-white/[0.08] rounded-xl shadow-[0px_16px_32px_0px_rgba(0,0,0,0.35)]"
             >
               <div className="p-3">
                 <div className="relative">
-                  <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                  <Search className="absolute left-3 top-3 w-4 h-4 text-white/30" />
 
                   <input
                     type="text"
@@ -143,19 +141,23 @@ export default function CompanySelector({
                     onChange={(e) =>
                       setSearchQuery(e.target.value)
                     }
-                    className="w-full pl-10 pr-4 py-2 border rounded-lg"
+                    className="w-full pl-10 pr-4 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-sm text-white placeholder:text-white/30 outline-none focus:border-fuchsia-500/50 focus:ring-2 focus:ring-fuchsia-500/20"
                   />
                 </div>
               </div>
 
               {/* Scrollable list of filtered company options */}
-              <div className="max-h-64 overflow-y-auto">
+              <div className="max-h-64 overflow-y-auto pb-2">
                 {filteredCompanies.map((company) => (
                   <button
                     key={company}
                     type="button"
                     onClick={() => toggleCompany(company)}
-                    className="w-full px-4 py-2 text-left hover:bg-gray-50"
+                    className={`w-full px-4 py-2 text-left text-sm transition-colors hover:bg-white/[0.05] ${
+                      selectedCompanies.includes(company)
+                        ? 'text-fuchsia-300'
+                        : 'text-white/70'
+                    }`}
                   >
                     {company}
                   </button>

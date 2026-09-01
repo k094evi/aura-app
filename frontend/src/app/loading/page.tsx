@@ -37,13 +37,20 @@ export default function LoadingPage() {
 
   return (
     // Fullscreen overlay shown while the analysis is "loading"
-    <div className="fixed inset-0 z-100 bg-white flex flex-col items-center justify-center p-4">
-      {/* Animated scanner graphic */}
-      <DocumentScanner />
-      {/* Progress bar reflecting current percentage */}
-      <AnalysisProgressBar progress={progress} />
-      {/* List of analysis steps, highlighted based on progress */}
-      <AnalysisSteps progress={progress} />
+    <div className="fixed inset-0 z-100 flex flex-col items-center justify-center overflow-hidden bg-[#0c0a14] p-4">
+      {/* Ambient background orbs, matching the rest of the app */}
+      <div className="pointer-events-none absolute -left-[150px] top-[100px] size-[550px] rounded-full bg-fuchsia-600/30 blur-[120px]" />
+      <div className="pointer-events-none absolute -right-[180px] top-[150px] size-[600px] rounded-full bg-violet-600/25 blur-[125px]" />
+      <div className="pointer-events-none absolute bottom-[80px] left-[40%] size-[500px] rounded-full bg-cyan-500/20 blur-[120px]" />
+
+      <div className="relative z-10 flex flex-col items-center">
+        {/* Animated scanner graphic */}
+        <DocumentScanner />
+        {/* Progress bar reflecting current percentage */}
+        <AnalysisProgressBar progress={progress} />
+        {/* List of analysis steps, highlighted based on progress */}
+        <AnalysisSteps progress={progress} />
+      </div>
     </div>
   );
 }

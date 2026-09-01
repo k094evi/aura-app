@@ -127,10 +127,14 @@ export default function AnalysisHistoryPage() {
 
   return (
     <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#0c0a14] pt-20">
-      {/* Ambient background orbs */}
+      {/* Ambient background orbs, spaced down the full page so a long
+          list of analysis records doesn't run out into a flat,
+          orb-less section near the bottom. */}
       <div className="pointer-events-none absolute -left-[150px] top-[120px] size-[600px] rounded-full bg-fuchsia-600/30 blur-[120px]" />
       <div className="pointer-events-none absolute -right-[200px] top-[80px] size-[650px] rounded-full bg-violet-600/25 blur-[130px]" />
       <div className="pointer-events-none absolute left-[35%] top-[850px] size-[550px] rounded-full bg-cyan-500/20 blur-[120px]" />
+      <div className="pointer-events-none absolute -right-[150px] top-[1500px] size-[550px] rounded-full bg-fuchsia-600/20 blur-[125px]" />
+      <div className="pointer-events-none absolute -left-[150px] top-[2150px] size-[520px] rounded-full bg-violet-600/20 blur-[120px]" />
 
       {/* Sub-header: back link + export/share actions */}
       <div className="relative z-10 flex w-full shrink-0 flex-col gap-4 px-8 pb-8 pt-5 sm:flex-row sm:items-center sm:justify-between md:px-16">
