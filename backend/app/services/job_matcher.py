@@ -61,7 +61,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from app.models.schemas import ParsedResume
-from app.services.keyword_extractor import extract_keywords
+from app.services.keyword_extractor import extract_keywords, extract_keywords_from_text
 from app.services.jsearch_client import JSearchClient, JobListing
 from app.services.job_scorer import JobScorer, ScoredJob, CompanyMatch
 
@@ -95,25 +95,73 @@ class JobMatcher:
         self._top_jobs            = top_jobs
         self._top_companies       = top_companies
 
-    def match(self, resume: ParsedResume) -> MatchResult:
+    def match(
+        self,
+        resume: ParsedResume,
+        target_job_description: str = "",
+        target_companies: Optional[List[str]] = None,
+    ) -> MatchResult:
         """
         PUBLIC ENTRY POINT — runs the full extract-keywords -> fetch-jobs ->
         score-jobs -> rank-companies pipeline for one resume and returns
         the combined result.
+
+        target_job_description: optional free-text JD the user pasted in
+            on the upload form. When present, its keywords are merged
+            ahead of the resume's own keywords (it's a more precise
+            statement of what the user wants than anything we can infer
+            from their resume alone), and JobScorer blends overlap
+            against it into each job's keyword score.
+        target_companies: optional list of company names the user is
+            specifically interested in. Used to (a) add a few
+            company-steered search queries so their listings have a
+            chance to surface, and (b) pin/flag those companies in the
+            ranked company list.
         """
+        target_companies = target_companies or []
+
         logger.info("Extracting keywords from resume...")
-        keywords = extract_keywords(resume, top_n=self.top_keywords)
+        resume_keywords = extract_keywords(resume, top_n=self.top_keywords)
+
+        jd_keywords: List[str] = []
+        if target_job_description:
+            logger.info("Extracting keywords from target job description...")
+            jd_keywords = extract_keywords_from_text(target_job_description, top_n=10)
+
+        # Merge: JD keywords first (they're the user's explicit statement
+        # of the role they want), then resume keywords, deduplicated.
+        keywords: List[str] = []
+        seen: set[str] = set()
+        for kw in jd_keywords + resume_keywords:
+            key = kw.lower()
+            if key not in seen:
+                seen.add(key)
+                keywords.append(kw)
+
         logger.info("Keywords: %s", keywords)
 
         if not keywords:
             logger.warning("No keywords extracted — returning empty result.")
             return MatchResult(keywords=[], total_jobs=0, top_jobs=[], top_companies=[])
 
+        # Base search terms: the merged, ranked keyword list.
+        search_terms = list(keywords[:self.max_keywords_queried])
+
+        # Add a few company-steered queries so listings from the user's
+        # named target companies have a real chance of showing up, even
+        # if "software engineer" alone wouldn't have surfaced them.
+        top_term = jd_keywords[0] if jd_keywords else (resume_keywords[0] if resume_keywords else None)
+        if top_term:
+            for company in target_companies[:3]:
+                company = company.strip()
+                if company:
+                    search_terms.append(f"{top_term} {company}")
+
         logger.info("Fetching jobs from JSearch...")
         jobs = self.client.fetch_jobs(
-            keywords=keywords,
+            keywords=search_terms,
             results_per_keyword=self.results_per_keyword,
-            max_keywords=self.max_keywords_queried,
+            max_keywords=len(search_terms),
         )
 
         if not jobs:
@@ -121,9 +169,13 @@ class JobMatcher:
             return MatchResult(keywords=keywords, total_jobs=0, top_jobs=[], top_companies=[], raw_jobs=[])
 
         logger.info("Scoring %d jobs against resume...", len(jobs))
-        scorer      = JobScorer(resume=resume, keywords=keywords)
+        scorer      = JobScorer(resume=resume, keywords=keywords, target_description=target_job_description)
         scored_jobs = scorer.score_all(jobs)
-        companies   = scorer.rank_companies(scored_jobs, top_n=self._top_companies)
+        companies   = scorer.rank_companies(
+            scored_jobs,
+            top_n=self._top_companies,
+            target_companies=target_companies,
+        )
 
         return MatchResult(
             keywords      = keywords,

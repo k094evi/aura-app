@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import CompanySelector from "@/components/CompanySelector";
 import { FileText, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { authHeaders } from "@/lib/auth";
 
 export default function Input() {
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
@@ -39,6 +40,7 @@ export default function Input() {
 
       const res = await fetch("/api/analyze", {
         method: "POST",
+        headers: authHeaders(),
         body: form,
       });
 

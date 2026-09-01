@@ -5,9 +5,12 @@ Endpoint: /search-v2
 """
 
 import os
+import time
+import threading
 import logging
 import urllib.request
 import urllib.parse
+import urllib.error
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -46,10 +49,36 @@ class JobListing:
 
 class JSearchClient:
 
+    # ── Rate limiting ─────────────────────────────────────────────
+    # fetch_jobs() fires up to `max_keywords` queries concurrently via a
+    # thread pool, which used to mean every /api/analyze call sent a
+    # burst of simultaneous requests to RapidAPI — reliably tripping its
+    # per-second rate limit and coming back as HTTP 429 for every query,
+    # every time. These are class-level (shared across threads/instances
+    # within a process) so the burst gets spaced out instead of firing
+    # all at once, and a 429 gets retried with backoff instead of just
+    # being dropped.
+    _rate_lock = threading.Lock()
+    _last_request_time = 0.0
+    _MIN_REQUEST_INTERVAL = 0.5  # seconds between outgoing requests
+    _MAX_RETRIES = 2
+    _BASE_BACKOFF = 1.5  # seconds, doubled per retry attempt
+
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("JSEARCH_API_KEY", "")
         if not self.api_key:
             raise ValueError("JSEARCH_API_KEY is not set.")
+
+    @classmethod
+    def _throttle(cls):
+        """Block just long enough to keep requests spaced out, even
+        when called concurrently from multiple threads."""
+        with cls._rate_lock:
+            now = time.monotonic()
+            wait = cls._last_request_time + cls._MIN_REQUEST_INTERVAL - now
+            if wait > 0:
+                time.sleep(wait)
+            cls._last_request_time = time.monotonic()
 
     def _get(self, query: str) -> list:
         params = urllib.parse.urlencode({
@@ -65,10 +94,27 @@ class JSearchClient:
             "x-rapidapi-key":  self.api_key,
             "x-rapidapi-host": "jsearch.p.rapidapi.com",
         })
-        # 30s timeout — JSearch can be slow from Southeast Asia
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            payload = json.loads(resp.read().decode())
-            return self._extract_job_list(payload, query)
+
+        for attempt in range(self._MAX_RETRIES + 1):
+            self._throttle()
+            try:
+                # 30s timeout — JSearch can be slow from Southeast Asia
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    payload = json.loads(resp.read().decode())
+                    return self._extract_job_list(payload, query)
+            except urllib.error.HTTPError as e:
+                if e.code == 429 and attempt < self._MAX_RETRIES:
+                    retry_after = e.headers.get("Retry-After") if e.headers else None
+                    delay = float(retry_after) if retry_after else self._BASE_BACKOFF * (2 ** attempt)
+                    logger.warning(
+                        "JSearch rate-limited for '%s' — retrying in %.1fs (attempt %d/%d)",
+                        query, delay, attempt + 1, self._MAX_RETRIES,
+                    )
+                    time.sleep(delay)
+                    continue
+                raise
+
+        return []
 
     @staticmethod
     def _extract_job_list(payload: dict, query: str) -> list:

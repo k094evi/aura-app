@@ -68,7 +68,7 @@ SECTION_HEADERS: list[Tuple[str, list[str]]] = [
     ("education", ["education", "academic background", "qualifications",
                    "educational background", "academic history"]),
     ("skills",   ["skills", "technical skills", "core competencies",
-                  "additional information", "key skills", "competencies",
+                  "key skills", "competencies",
                   "languages", "tools", "technologies", "areas of expertise"]),
     ("projects", ["projects", "portfolio", "personal projects", "key projects"]),
     ("certifications", ["certifications", "certificates", "training",

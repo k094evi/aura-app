@@ -9,7 +9,7 @@ postings into a ranked list of "how well does this job fit this
 resume?" results.
 
 NOTE ON NAMING: the module docstring below (original, unmodified)
-refers to "Adzuna job listing", but the actual import is
+refers to "jsearch job listing", but the actual import is
 `JobListing` from `app.services.jsearch_client` — so at the time this
 was written the job data source may have been swapped from Adzuna to
 JSearch without the docstring being updated. Worth double-checking
@@ -91,6 +91,11 @@ class CompanyMatch:
     job_count:        int
     top_job:          ScoredJob
     all_jobs:         List[ScoredJob] = field(default_factory=list)
+    # True if this company's name matched one of the user's requested
+    # target companies. Doesn't affect the underlying score — used only
+    # to pin/flag the company so target-company picks aren't buried
+    # under higher-scoring companies the user never asked about.
+    targeted:         bool = False
 
 
 # ─────────────────────────────────────────────
@@ -126,7 +131,12 @@ def _skill_tokens(skills_block: str) -> List[str]:
 class JobScorer:
     """Scores and ranks job listings against a single parsed resume."""
 
-    def __init__(self, resume: ParsedResume, keywords: List[str]):
+    def __init__(
+        self,
+        resume: ParsedResume,
+        keywords: List[str],
+        target_description: Optional[str] = None,
+    ):
         self.resume   = resume
         self.keywords = [kw.lower() for kw in keywords]
 
@@ -137,25 +147,49 @@ class JobScorer:
         self.skills_tokens  = _normalize(resume.skills_block or "")
         self.summary_tokens = _normalize(resume.summary_block or "")
 
+        # Optional user-pasted target job description. When present, the
+        # keyword component below blends resume-overlap with overlap
+        # against this specific JD, so a job listing that actually
+        # matches what the user says they're targeting outscores one
+        # that only happens to echo their resume's own wording.
+        self.target_description = target_description or ""
+        self.target_tokens = _normalize(self.target_description)
+
     # ── Component scores ─────────────────────
 
     def _keyword_score(self, job: JobListing) -> tuple[float, List[str]]:
         """
-        40 pts — how many resume tokens appear in the job description.
-        Jaccard-style: intersection / min(resume, job_desc) capped at 40.
+        40 pts — how many resume (and, if given, target-JD) tokens appear
+        in the job description.
+
+        Without a target job description: 100% of this component (40 pts)
+        comes from resume-vs-job overlap, same as before.
+
+        With a target job description: split 25 pts resume-overlap /
+        15 pts target-JD-overlap, so a listing that matches the role the
+        user is actually going after outweighs one that only echoes
+        their resume's general vocabulary.
         """
         job_tokens = _normalize(job.description + " " + job.title)
-        matched = self.resume_tokens & job_tokens
         if not job_tokens:
             return 0.0, []
-        # Ratio is intersection size relative to the resume's own token
-        # count (not the job's), then scaled up x200 so that roughly a
-        # 20% overlap already reaches the 40-point cap.
-        ratio = len(matched) / max(len(self.resume_tokens), 1)
-        score = min(ratio * 200, 40.0)   # scale so ~20% overlap = full marks
-        # Only the first 10 matched tokens (alphabetically) are returned,
-        # just to keep the "matched keywords" list from getting huge.
-        return round(score, 2), sorted(matched)[:10]
+
+        resume_matched = self.resume_tokens & job_tokens
+        resume_ratio = len(resume_matched) / max(len(self.resume_tokens), 1)
+
+        if not self.target_tokens:
+            score = min(resume_ratio * 200, 40.0)
+            return round(score, 2), sorted(resume_matched)[:10]
+
+        target_matched = self.target_tokens & job_tokens
+        target_ratio = len(target_matched) / max(len(self.target_tokens), 1)
+
+        resume_score = min(resume_ratio * 125, 25.0)   # ~20% overlap = full 25
+        target_score = min(target_ratio * 100, 15.0)   # ~15% overlap = full 15
+        score = round(resume_score + target_score, 2)
+
+        matched = sorted(resume_matched | target_matched)[:10]
+        return score, matched
 
     def _skills_score(self, job: JobListing) -> tuple[float, List[str]]:
         """
@@ -175,8 +209,8 @@ class JobScorer:
 
     def _api_match_score(self, job: JobListing) -> float:
         """
-        15 pts — how many of the queried keywords matched this job via Adzuna.
-        (keywords_matched is populated by the AdzunaClient during dedup.)
+        15 pts — how many of the queried keywords matched this job via jsearch.
+        (keywords_matched is populated by the jsearch during dedup.)
         """
         if not self.keywords:
             return 0.0
@@ -229,11 +263,28 @@ class JobScorer:
     # ── Aggregate to company ranking ─────────
 
     @staticmethod
-    def rank_companies(scored_jobs: List[ScoredJob], top_n: int = 10) -> List[CompanyMatch]:
+    def rank_companies(
+        scored_jobs: List[ScoredJob],
+        top_n: int = 10,
+        target_companies: Optional[List[str]] = None,
+    ) -> List[CompanyMatch]:
         """
         Groups scored jobs by company.
         Company score = weighted average: 60% top_score + 40% avg_score
+
+        If target_companies is given (the companies the user explicitly
+        said they're interested in), those companies are:
+          - flagged via CompanyMatch.targeted, and
+          - guaranteed a slot in the returned top_n list, sorted ahead of
+            non-targeted companies regardless of score — the user asked
+            about them by name, so they shouldn't get crowded out by an
+            unrelated company that merely scored a few points higher.
+        Companies the user targeted but for which no jobs were found at
+        all simply won't appear here (there's nothing to show); that's
+        expected since this only aggregates from scored_jobs.
         """
+        target_set = {c.strip().lower() for c in (target_companies or []) if c.strip()}
+
         # Group all scored jobs under their company name. Jobs with a
         # blank/missing company name are bucketed under "Unknown".
         by_company: Dict[str, List[ScoredJob]] = {}
@@ -248,11 +299,6 @@ class JobScorer:
             top      = max(scores)
             best_job = max(jobs, key=lambda j: j.total_score)
 
-            # Weighted company score: favors a company's single best
-            # listing (60%) while still factoring in overall consistency
-            # across all of its listings (40% average).
-            company_score = round(0.6 * top + 0.4 * avg, 2)
-
             companies.append(CompanyMatch(
                 company   = company,
                 avg_score = round(avg, 2),
@@ -260,9 +306,13 @@ class JobScorer:
                 job_count = len(jobs),
                 top_job   = best_job,
                 all_jobs  = sorted(jobs, key=lambda j: j.total_score, reverse=True),
+                targeted  = company.strip().lower() in target_set,
             ))
 
-        # Sort companies by that same weighted formula, descending, and
-        # return only the top_n companies.
-        companies.sort(key=lambda c: 0.6 * c.top_score + 0.4 * c.avg_score, reverse=True)
+        # Sort by: targeted companies first, then the existing weighted
+        # score formula (60% top_score + 40% avg_score) descending.
+        companies.sort(
+            key=lambda c: (c.targeted, 0.6 * c.top_score + 0.4 * c.avg_score),
+            reverse=True,
+        )
         return companies[:top_n]

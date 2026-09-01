@@ -22,9 +22,11 @@
 # ============================================================================
 
 import os
+import urllib.parse
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from app.config import settings
 from app.models.auth_schemas import (
     SignUpRequest,
     SignInRequest,
@@ -33,6 +35,7 @@ from app.models.auth_schemas import (
     AuthResponse,
     AuthUser,
     MessageResponse,
+    OAuthUrlResponse,
 )
 from app.services import auth_service
 from app.dependencies.auth import get_current_user
@@ -46,6 +49,13 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 # Authentication > URL Configuration > Redirect URLs in your Supabase
 # project settings, or Supabase will reject the redirect.
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+# Providers enabled for the "continue with ___" buttons. Each of these
+# must also be individually enabled (with its own OAuth app client
+# id/secret) under Authentication > Providers in the Supabase dashboard —
+# this backend only builds the redirect URL, it doesn't configure the
+# provider itself.
+SUPPORTED_OAUTH_PROVIDERS = {"google", "github"}
 
 
 # ----------------------------------------------------------------------------
@@ -123,6 +133,49 @@ def reset_password(payload: ResetPasswordRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return MessageResponse(message="Your password has been updated. You can now sign in.")
+
+
+# ----------------------------------------------------------------------------
+# GET /auth/oauth/{provider}/url
+# Returns the Supabase "authorize" URL the frontend should redirect the
+# full browser window to (NOT an XHR/fetch target — Supabase's response
+# here is the provider's own login page, so this has to be a real
+# navigation, same as clicking a normal link).
+#
+# Flow:
+#   1. Frontend calls this endpoint to get `url`.
+#   2. Frontend does `window.location.href = url`.
+#   3. Browser goes to Supabase -> provider's consent screen -> back to
+#      Supabase -> Supabase appends a session (access_token/refresh_token)
+#      to the URL fragment and redirects to `redirect_to` below.
+#   4. Frontend's /oauth-callback page (mirrors the existing
+#      /reset-password page's hash-parsing logic) reads those tokens out
+#      of the fragment and finishes signing the user in.
+#
+# No request body/params needed beyond the provider name in the path —
+# this endpoint doesn't touch any user data, it just builds a URL.
+# ----------------------------------------------------------------------------
+@router.get("/oauth/{provider}/url", response_model=OAuthUrlResponse)
+def get_oauth_url(provider: str):
+    provider = provider.lower()
+    if provider not in SUPPORTED_OAUTH_PROVIDERS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported provider '{provider}'. Supported: {', '.join(sorted(SUPPORTED_OAUTH_PROVIDERS))}.",
+        )
+
+    redirect_to = f"{FRONTEND_URL}/oauth-callback"
+    query = urllib.parse.urlencode({
+        "provider": provider,
+        "redirect_to": redirect_to,
+    })
+    # This is Supabase GoTrue's own OAuth kickoff endpoint — hitting it
+    # (via a real browser redirect) is what actually starts the provider's
+    # login flow. We build it directly rather than going through the
+    # supabase-py SDK because this needs zero server-side state; it's a
+    # pure URL construction from public config.
+    url = f"{settings.SUPABASE_URL}/auth/v1/authorize?{query}"
+    return OAuthUrlResponse(url=url)
 
 
 # ----------------------------------------------------------------------------

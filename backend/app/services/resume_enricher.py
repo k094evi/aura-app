@@ -651,11 +651,16 @@ def _generate_improvements(
 def _detect_skill_gaps(
     resume: ParsedResume,
     top_jobs: list[dict],
+    target_job_gap: Optional[dict] = None,
 ) -> list[dict]:
     """
     Cross-references the resume's skills_block against:
-      1. The SKILL_TAXONOMY to identify category-level gaps
-      2. The matched_skills from top jobs to surface role-specific gaps
+      0. The user's target_job checklist (target_job_matcher), if their
+         target job title matched a known supported role — highest
+         priority, since it's an explicit, curated requirement list for
+         the exact role they said they want.
+      1. The matched_skills from top jobs to surface role-specific gaps
+      2. The SKILL_TAXONOMY to identify category-level gaps
 
     Returns a list of dicts matching the frontend SkillGap shape:
       { skill, missing (bool), recommendation }
@@ -669,7 +674,31 @@ def _detect_skill_gaps(
     results: list[dict] = []
     seen: set[str] = set()
 
-    # ── Step 1: top job matched_skills (highest priority — role-specific) ──
+    # ── Step 0: target-job checklist (highest priority — explicit, role-specific) ──
+    if target_job_gap:
+        role = target_job_gap.get("target_job", "your target role")
+        for skill in target_job_gap.get("matched_skills", []):
+            key = skill.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            results.append({
+                "skill": skill.title(),
+                "missing": False,
+                "recommendation": f"Required for {role} — already detected in your resume.",
+            })
+        for skill in target_job_gap.get("missing_required_skills", []):
+            key = skill.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            results.append({
+                "skill": skill.title(),
+                "missing": True,
+                "recommendation": f"Required for {role} — not detected in your resume yet.",
+            })
+
+    # ── Step 1: top job matched_skills (role-specific, from real listings) ──
     job_skill_counts: dict[str, int] = {}
     for job in top_jobs[:10]:
         for skill in job.get("matched_skills", []):
@@ -773,6 +802,7 @@ def enrich_resume_local(
     resume: ParsedResume,
     keywords: list[str],
     top_jobs: list[dict],
+    target_job_gap: Optional[dict] = None,
 ) -> dict:
     """
     PUBLIC ENTRY POINT for this file — this is the only function other
@@ -787,6 +817,11 @@ def enrich_resume_local(
         resume:    ParsedResume object from resume_parser.parse_resume()
         keywords:  list of extracted keyword strings from keyword_extractor
         top_jobs:  list of shaped job dicts (already scored by job_scorer)
+        target_job_gap: optional dict from
+            target_job_matcher.calculate_target_job_gap(target_job, resume)
+            — None if the user left target_job blank or it didn't match a
+            supported role. When present, its skills are surfaced first
+            in skill_gaps below.
 
     Returns:
         {
@@ -832,6 +867,6 @@ def enrich_resume_local(
         "improvements":   _generate_improvements(
             resume, kw_score, skills_score, impact_score, format_score, length_score, top_jobs
         ),
-        "skill_gaps":     _detect_skill_gaps(resume, top_jobs),
+        "skill_gaps":     _detect_skill_gaps(resume, top_jobs, target_job_gap=target_job_gap),
         "grammar_issues": _check_grammar(resume),
     }

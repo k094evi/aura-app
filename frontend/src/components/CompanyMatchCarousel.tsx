@@ -25,6 +25,7 @@ export interface CompanyMatch {
   salary: string;
   teamSize: string;
   requirements: string[];
+  top_job_url?: string;
 }
 
 interface CompanyMatchCarouselProps {
@@ -310,9 +311,24 @@ export default function CompanyMatchCarousel({
               </div>
             </div>
 
-            <button className="w-full mt-6 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors">
-              View Full Job Posting
-            </button>
+            {activeCompany.top_job_url ? (
+              <a
+                href={activeCompany.top_job_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full mt-6 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors flex items-center justify-center"
+              >
+                View Full Job Posting
+              </a>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="w-full mt-6 px-6 py-3 bg-gray-200 text-gray-400 rounded-xl font-bold cursor-not-allowed"
+              >
+                No Job Posting Available
+              </button>
+            )}
           </motion.div>
         </>
       )}

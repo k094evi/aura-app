@@ -81,14 +81,6 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 60 * 24   # 24 hours
 
-    # ── Adzuna ────────────────────────────────────────────────────────────
-    # Credentials/config for the Adzuna job-search API (used to fetch job
-    # listings that job_scorer.py later scores against the resume).
-    ADZUNA_APP_ID: str = ""
-    ADZUNA_API_KEY: str = ""
-    ADZUNA_COUNTRY: str = "phsd"
-    ADZUNA_BASE_URL: str = "https://api.adzuna.com/v1/api"
-
     # ── File upload ───────────────────────────────────────────────────────
     # Consumed directly by app/utils/file_handler.py's validate_file()
     # to reject oversized or disallowed file types before parsing.

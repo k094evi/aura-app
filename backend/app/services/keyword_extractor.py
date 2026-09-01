@@ -161,7 +161,7 @@ def extract_keywords(resume: ParsedResume, top_n: int = 15) -> List[str]:
     controller that orchestrates the parse -> keywords -> jobs -> enrich
     flow) actually call.
 
-    Returns a ranked list of keywords to use as Adzuna search terms.
+    Returns a ranked list of keywords to use as Jsearch search terms.
 
     Priority order:
       1. Skills block terms (explicit, high signal)
@@ -199,5 +199,43 @@ def extract_keywords(resume: ParsedResume, top_n: int = 15) -> List[str]:
             if term not in seen:
                 seen.add(term)
                 keywords.append(term)
+
+    return keywords[:top_n]
+
+
+def extract_keywords_from_text(text: str, top_n: int = 20) -> List[str]:
+    """
+    Same TF-IDF approximation as extract_keywords(), but for arbitrary
+    free text rather than a ParsedResume — used to pull search-friendly
+    keywords out of a user-pasted target job description so job matching
+    can be steered toward the role they're actually applying for, not
+    just what their resume happens to contain.
+
+    Also runs the skills-block-style splitter over the text first (a
+    pasted JD's "Requirements"/"Qualifications" bullet lines behave a lot
+    like a skills block — comma/bullet separated short phrases), so
+    explicit tool/skill names in the JD are prioritized the same way
+    they are for resumes.
+    """
+    if not text:
+        return []
+
+    seen: set[str] = set()
+    keywords: List[str] = []
+
+    # Bullet/comma-separated lines often contain the highest-signal terms
+    # in a JD (e.g. "Requirements: Python, SQL, AWS, 5+ years...").
+    for item in _parse_skills_block(text):
+        # Skip long sentence-like lines — those get picked up by TF-IDF below.
+        if 1 < len(item) <= 40:
+            key = item.lower()
+            if key not in seen:
+                seen.add(key)
+                keywords.append(item)
+
+    for term in _tfidf_keywords(text, top_n=top_n):
+        if term not in seen:
+            seen.add(term)
+            keywords.append(term)
 
     return keywords[:top_n]

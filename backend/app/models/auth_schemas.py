@@ -97,3 +97,6 @@ class AuthResponse(BaseModel):
 # don't need to return structured data (forgot-password, reset-password).
 class MessageResponse(BaseModel):
     message: str
+    
+class OAuthUrlResponse(BaseModel):
+    url: str

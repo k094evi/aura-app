@@ -21,6 +21,14 @@ This file is the hub that connects everything else together:
                                               mounted under `/api`.
   - `app/routes/parsing.py`                → resume-parsing routes,
                                               also mounted under `/api`.
+  - `app/api/routes/jobs.py`               → GET /api/jobs/supported —
+                                              lists the target-job roles
+                                              with a skill checklist.
+                                              Migrated from backend_2.
+  - `app/api/routes/resumes.py`            → GET /api/resumes/{id}/analyze
+                                              — re-fetches a stored
+                                              resume's target-job gap.
+                                              Migrated from backend_2.
   - `app/controllers/analyze_controller.py`→ the actual logic behind
                                               `POST /api/analyze`
                                               (this file just wires the
@@ -41,9 +49,9 @@ REQUEST FLOW FOR /api/analyze
 2. `get_current_user` dependency runs first — this validates the
    caller is authenticated before any resume processing happens.
 3. `handle_analyze(...)` in `analyze_controller.py` does the real
-   work (this is presumably where file_handler.py's `validate_file`,
-   the resume parser, text_cleaner.py, and job_scorer.py all get used
-   together).
+   work, now also receiving `user.id` so the persisted resume row
+   (see analyze_controller._persist_parsed_resume) is correctly
+   attributed to the requesting user.
 
 NOTES / THINGS WORTH DOUBLE-CHECKING
 --------------------------------------
@@ -74,6 +82,8 @@ load_dotenv()
 from app.config import settings
 from app.api.v1.endpoints import auth as auth_router
 from app.routes.parsing import router as parsing_router
+from app.api.routes.jobs import router as jobs_router
+from app.api.routes.resumes import router as resumes_router
 from app.controllers.analyze_controller import handle_analyze
 from app.dependencies.auth import get_current_user
 from app.models.auth_schemas import AuthUser
@@ -99,10 +109,13 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
-# Mount the auth routes (login/signup/etc.) and resume-parsing routes,
-# both under the shared "/api" prefix.
+# Mount the auth routes (login/signup/etc.), resume-parsing routes,
+# and the two migrated-from-backend_2 routers (jobs, resumes) — all
+# under the shared "/api" prefix.
 app.include_router(auth_router.router, prefix="/api")
 app.include_router(parsing_router, prefix="/api")
+app.include_router(jobs_router, prefix="/api")
+app.include_router(resumes_router, prefix="/api")
 
 
 @app.post("/api/analyze")
@@ -118,19 +131,22 @@ async def analyze_resume(
     - `file`: the uploaded resume (PDF/DOCX — validated later by
       file_handler.validate_file inside the controller/parsing flow).
     - `target_job`: optional free-text job title/description the user
-      is targeting, used to focus the analysis.
+      is targeting, used to focus the analysis. Also now used to look
+      up a role-specific skill checklist — see
+      app/services/target_job_matcher.py.
     - `target_companies`: optional JSON-encoded list of company names
       the user is interested in (comes in as a raw string since this
       is a multipart form field, not JSON body — gets parsed inside
       handle_analyze).
     - `user`: injected by the `get_current_user` dependency, which
       runs BEFORE this function body — so unauthenticated requests
-      never reach handle_analyze at all.
+      never reach handle_analyze at all. `user.id` is now passed
+      through so the persisted resume row is attributed to them.
 
     All actual logic is delegated to `handle_analyze` in
     analyze_controller.py; this function is just the HTTP-layer glue.
     """
-    return await handle_analyze(file, target_job, target_companies)
+    return await handle_analyze(file, target_job, target_companies, user_id=user.id)
 
 
 @app.get("/health")
