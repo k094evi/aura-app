@@ -39,6 +39,11 @@ const INITIAL_SESSIONS: Session[] = [
   { id: 'session-2', label: 'iPhone · Manila, PH', isCurrent: false },
 ];
 
+// Shared dark input style for the change-password form, matching the
+// input-select fields used on the profile page.
+const DARK_INPUT_CLASSES =
+  'w-full rounded-[10px] border border-white/[0.07] bg-white/[0.03] px-4 py-2.5 text-sm font-medium text-white outline-none transition-colors focus:border-fuchsia-500/50 focus:ring-2 focus:ring-fuchsia-500/20';
+
 export default function SettingsPage() {
   // Draft settings the user is currently editing, vs. the last-saved values.
   // Comparing the two gives us a real dirty flag instead of always flashing
@@ -179,38 +184,38 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 pb-20 px-4">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+    <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#0c0a14] pt-20">
+      {/* Ambient background orbs */}
+      <div className="pointer-events-none absolute -left-[100px] top-[150px] size-[500px] rounded-full bg-fuchsia-600/30 blur-[110px]" />
+      <div className="pointer-events-none absolute -right-[150px] top-[100px] size-[550px] rounded-full bg-violet-600/25 blur-[120px]" />
+      <div className="pointer-events-none absolute left-[35%] top-[550px] size-[450px] rounded-full bg-cyan-500/20 blur-[110px]" />
+
+      {/* Sub-header / back link */}
+      <div className="relative z-10 flex w-full shrink-0 items-center justify-between px-8 pb-8 pt-5 md:px-16">
         <Link
           href="/dashboard"
-          className={`flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-indigo-600 py-2.5 rounded-lg transition-colors ${FOCUS_RING}`}
+          className="flex items-center gap-2 text-sm font-semibold text-fuchsia-500 transition-colors hover:text-fuchsia-400"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="size-4" />
           Back to Dashboard
         </Link>
       </div>
 
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Settings</h1>
-          <p className="text-sm text-gray-400 mt-1">Manage your account, notifications, and data.</p>
+      <div className="relative z-10 flex w-full flex-col gap-8 px-8 pb-16 md:px-16">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-[32px] font-extrabold leading-normal text-white">Settings</h1>
+          <p className="text-base font-normal text-white/50">Manage your account, notifications, and data.</p>
         </div>
 
         {/* Account & Security */}
-        <SectionCard
-          icon={ShieldCheck}
-          iconBg="bg-indigo-50"
-          iconColor="text-indigo-500"
-          title="Account & Security"
-          description="Keep your account protected"
-        >
+        <SectionCard icon={ShieldCheck} title="Account & Security" description="Keep your account protected">
           <ActionRow
             icon={KeyRound}
             title="Change password"
             description={`Last changed ${passwordLastChanged}`}
             onClick={() => setPasswordModalOpen(true)}
             trailing={
-              <span className="text-xs font-bold text-indigo-600 shrink-0 group-hover:text-indigo-700">
+              <span className="shrink-0 text-sm font-semibold text-fuchsia-500 transition-colors group-hover:text-fuchsia-400">
                 Update
               </span>
             }
@@ -220,7 +225,11 @@ export default function SettingsPage() {
             icon={ShieldCheck}
             title="Two-factor sign-in"
             description="We already send a one-time code to your email whenever you sign in"
-            trailing={<span className="text-xs font-bold text-green-600 shrink-0">Active</span>}
+            trailing={
+              <span className="shrink-0 rounded-md bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-500">
+                ACTIVE
+              </span>
+            }
           />
 
           <ActionRow
@@ -231,10 +240,8 @@ export default function SettingsPage() {
             disabled={otherSessionCount === 0}
             trailing={
               <span
-                className={`text-xs font-bold shrink-0 ${
-                  otherSessionCount === 0
-                    ? 'text-gray-300'
-                    : 'text-indigo-600 group-hover:text-indigo-700'
+                className={`shrink-0 text-sm font-semibold ${
+                  otherSessionCount === 0 ? 'text-white/20' : 'text-fuchsia-500 group-hover:text-fuchsia-400'
                 }`}
               >
                 Sign out others
@@ -244,13 +251,7 @@ export default function SettingsPage() {
         </SectionCard>
 
         {/* Notifications */}
-        <SectionCard
-          icon={Bell}
-          iconBg="bg-amber-50"
-          iconColor="text-amber-500"
-          title="Notifications"
-          description="Choose what we email you about"
-        >
+        <SectionCard icon={Bell} title="Notifications" description="Choose what we email you about">
           <ToggleRow
             icon={Mail}
             title="Analysis complete"
@@ -272,20 +273,20 @@ export default function SettingsPage() {
             checked={settings.productUpdates}
             onChange={(next) => updateSetting('productUpdates', next)}
           />
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
+          <div className="mt-2 flex items-center justify-end gap-3 pt-4">
             {saveError && (
-              <p role="alert" className="text-xs font-semibold text-red-600">
+              <p role="alert" className="text-xs font-semibold text-red-400">
                 {saveError}
               </p>
             )}
             <button
               onClick={handleSave}
               disabled={!isDirty || saveState === 'saving'}
-              className={`inline-flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-indigo-600 ${FOCUS_RING}`}
+              className={`inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#8b5cf6] to-[#d946ef] px-6 py-3 text-sm font-bold text-white shadow-[0px_4px_6px_0px_rgba(139,92,246,0.25)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 ${FOCUS_RING}`}
             >
               {saveState === 'saved' ? (
                 <>
-                  <Check className="w-4 h-4" />
+                  <Check className="size-4" />
                   Saved
                 </>
               ) : (
@@ -296,14 +297,14 @@ export default function SettingsPage() {
         </SectionCard>
 
         {/* Danger Zone */}
-        <div className="bg-red-50/50 rounded-3xl border border-red-100 p-6">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center">
-              <AlertTriangle className="w-5 h-5 text-red-500" />
+        <div className="w-full rounded-3xl border border-red-500/20 bg-red-500/[0.06] p-7">
+          <div className="mb-1 flex items-center gap-3.5">
+            <div className="flex shrink-0 items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10 p-2.5">
+              <AlertTriangle className="size-5 text-red-500" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-red-600">Danger Zone</h2>
-              <p className="text-sm text-red-400">Actions here can't be undone</p>
+              <h2 className="text-lg font-bold text-red-500">Danger Zone</h2>
+              <p className="text-[13px] text-red-500/80">Actions here can&apos;t be undone</p>
             </div>
           </div>
           <ActionRow
@@ -312,9 +313,9 @@ export default function SettingsPage() {
             trailing={
               <button
                 onClick={() => setDeleteConfirmOpen(true)}
-                className={`shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 bg-white text-red-600 text-sm font-bold hover:bg-red-50 transition-colors ${FOCUS_RING}`}
+                className={`inline-flex shrink-0 items-center gap-2 rounded-[10px] border border-red-500 bg-red-500/10 px-4 py-2.5 text-[13px] font-semibold text-red-500 transition-colors hover:bg-red-500/20 ${FOCUS_RING}`}
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="size-3.5" />
                 Delete account
               </button>
             }
@@ -324,49 +325,34 @@ export default function SettingsPage() {
 
       {/* Delete account confirmation modal */}
       <Modal open={deleteConfirmOpen} onClose={closeDeleteModal} labelledBy="delete-account-title">
-        <div className="flex items-start justify-between mb-4">
-          <h3 id="delete-account-title" className="text-base font-bold text-gray-900">
+        <div className="mb-4 flex items-start justify-between">
+          <h3 id="delete-account-title" className="text-base font-bold text-white">
             Delete your account?
           </h3>
           <button
             onClick={closeDeleteModal}
             aria-label="Close dialog"
-            className={`text-gray-400 hover:text-gray-600 rounded-lg ${FOCUS_RING}`}
+            className={`rounded-lg text-white/40 hover:text-white/70 ${FOCUS_RING}`}
           >
-            <X className="w-4 h-4" />
+            <X className="size-4" />
           </button>
         </div>
-        <p className="text-sm text-gray-500 mb-6">
-          This permanently removes your profile and all analysis history. This can't be undone.
+        <p className="mb-6 text-sm text-white/60">
+          This permanently removes your profile and all analysis history. This can&apos;t be undone.
         </p>
         {deleteError && (
-          <p role="alert" className="text-xs font-semibold text-red-600 mb-4">
+          <p role="alert" className="mb-4 text-xs font-semibold text-red-400">
             {deleteError}
           </p>
         )}
         {/* Only the Delete action remains here (Cancel removed per request),
             right-aligned to match the other modals' button placement. The
-            X icon and Escape still back out without deleting. Inline
-            style on the button rather than a Tailwind bg-red-* class,
-            since dynamically-referenced red utility classes weren't
-            reliably making it into the generated CSS elsewhere in this
-            app. */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            X icon and Escape still back out without deleting. */}
+        <div className="flex justify-end">
           <button
             onClick={handleDeleteAccount}
             disabled={deleting}
-            style={{
-              backgroundColor: deleting ? '#fca5a5' : '#ef4444',
-              color: '#ffffff',
-              cursor: deleting ? 'not-allowed' : 'pointer',
-            }}
-            className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${FOCUS_RING}`}
-            onMouseEnter={(e) => {
-              if (!deleting) e.currentTarget.style.backgroundColor = '#dc2626';
-            }}
-            onMouseLeave={(e) => {
-              if (!deleting) e.currentTarget.style.backgroundColor = '#ef4444';
-            }}
+            className={`rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-red-800/60 ${FOCUS_RING}`}
           >
             {deleting ? 'Deleting…' : 'Delete account'}
           </button>
@@ -375,28 +361,28 @@ export default function SettingsPage() {
 
       {/* Change password modal */}
       <Modal open={passwordModalOpen} onClose={closePasswordModal} labelledBy="change-password-title">
-        <div className="flex items-start justify-between mb-4">
-          <h3 id="change-password-title" className="text-base font-bold text-gray-900">
+        <div className="mb-4 flex items-start justify-between">
+          <h3 id="change-password-title" className="text-base font-bold text-white">
             Change password
           </h3>
           <button
             onClick={closePasswordModal}
             aria-label="Close dialog"
-            className={`text-gray-400 hover:text-gray-600 rounded-lg ${FOCUS_RING}`}
+            className={`rounded-lg text-white/40 hover:text-white/70 ${FOCUS_RING}`}
           >
-            <X className="w-4 h-4" />
+            <X className="size-4" />
           </button>
         </div>
 
         {passwordSuccess ? (
-          <div className="text-center py-4">
-            <div className="w-10 h-10 mx-auto rounded-full bg-green-50 flex items-center justify-center mb-3">
-              <Check className="w-5 h-5 text-green-600" />
+          <div className="py-4 text-center">
+            <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-emerald-500/10">
+              <Check className="size-5 text-emerald-500" />
             </div>
-            <p className="text-sm font-semibold text-gray-900 mb-4">Password updated.</p>
+            <p className="mb-4 text-sm font-semibold text-white">Password updated.</p>
             <button
               onClick={closePasswordModal}
-              className={`w-full px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-colors ${FOCUS_RING}`}
+              className={`w-full rounded-xl bg-gradient-to-r from-[#8b5cf6] to-[#d946ef] px-4 py-2.5 text-sm font-bold text-white transition-opacity hover:opacity-90 ${FOCUS_RING}`}
             >
               Done
             </button>
@@ -404,7 +390,10 @@ export default function SettingsPage() {
         ) : (
           <form onSubmit={handleChangePassword} className="space-y-4">
             <div>
-              <label htmlFor="current-password" className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">
+              <label
+                htmlFor="current-password"
+                className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-white/40"
+              >
                 Current password
               </label>
               <input
@@ -412,11 +401,14 @@ export default function SettingsPage() {
                 type="password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-colors"
+                className={DARK_INPUT_CLASSES}
               />
             </div>
             <div>
-              <label htmlFor="new-password" className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">
+              <label
+                htmlFor="new-password"
+                className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-white/40"
+              >
                 New password
               </label>
               <input
@@ -424,11 +416,14 @@ export default function SettingsPage() {
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-colors"
+                className={DARK_INPUT_CLASSES}
               />
             </div>
             <div>
-              <label htmlFor="confirm-password" className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">
+              <label
+                htmlFor="confirm-password"
+                className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-white/40"
+              >
                 Confirm new password
               </label>
               <input
@@ -436,19 +431,19 @@ export default function SettingsPage() {
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-colors"
+                className={DARK_INPUT_CLASSES}
               />
             </div>
             {passwordError && (
-              <p role="alert" className="text-xs font-semibold text-red-600">
+              <p role="alert" className="text-xs font-semibold text-red-400">
                 {passwordError}
               </p>
             )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+            <div className="mt-2 flex justify-end">
               <button
                 type="submit"
                 disabled={passwordSaving}
-                className={`px-6 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${FOCUS_RING}`}
+                className={`rounded-xl bg-gradient-to-r from-[#8b5cf6] to-[#d946ef] px-6 py-2.5 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 ${FOCUS_RING}`}
               >
                 {passwordSaving ? 'Updating…' : 'Update password'}
               </button>
@@ -459,27 +454,27 @@ export default function SettingsPage() {
 
       {/* Sign out other sessions confirmation */}
       <Modal open={signOutModalOpen} onClose={closeSignOutModal} labelledBy="sign-out-others-title">
-        <div className="flex items-start justify-between mb-4">
-          <h3 id="sign-out-others-title" className="text-base font-bold text-gray-900">
+        <div className="mb-4 flex items-start justify-between">
+          <h3 id="sign-out-others-title" className="text-base font-bold text-white">
             Sign out other sessions?
           </h3>
           <button
             onClick={closeSignOutModal}
             aria-label="Close dialog"
-            className={`text-gray-400 hover:text-gray-600 rounded-lg ${FOCUS_RING}`}
+            className={`rounded-lg text-white/40 hover:text-white/70 ${FOCUS_RING}`}
           >
-            <X className="w-4 h-4" />
+            <X className="size-4" />
           </button>
         </div>
-        <p className="text-sm text-gray-500 mb-6">
+        <p className="mb-6 text-sm text-white/60">
           This signs you out on every device except this one
           {otherSessionCount > 0 ? ` (${otherSessionCount} other session${otherSessionCount === 1 ? '' : 's'})` : ''}.
         </p>
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <div className="flex justify-end">
           <button
             onClick={handleSignOutOthers}
             disabled={signingOut}
-            className={`px-6 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${FOCUS_RING}`}
+            className={`rounded-xl bg-gradient-to-r from-[#8b5cf6] to-[#d946ef] px-6 py-2.5 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 ${FOCUS_RING}`}
           >
             {signingOut ? 'Signing out…' : 'Sign out others'}
           </button>

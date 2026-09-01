@@ -1,3 +1,5 @@
+'use client';
+
 // List of analysis stages shown to the user during loading
 const STEPS = [
   "Parsing Resume",
@@ -16,8 +18,8 @@ export default function AnalysisSteps({ progress }: { progress: number }) {
           // Highlight step once progress passes its threshold, otherwise show as inactive
           className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
             progress > (i + 1) * 18
-              ? "bg-indigo-50 text-indigo-600 border border-indigo-100 shadow-sm"
-              : "bg-gray-50 text-gray-300 border border-transparent"
+              ? "bg-fuchsia-500/10 text-fuchsia-300 border border-fuchsia-500/20 shadow-[0px_8px_20px_0px_rgba(0,0,0,0.2)]"
+              : "bg-white/[0.03] text-white/20 border border-transparent"
           }`}
         >
           {step}

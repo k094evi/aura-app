@@ -59,10 +59,10 @@ export default function Input() {
   };
 
   return (
-    <div>
+    <div className="w-full max-w-2xl mx-auto mb-8 rounded-3xl border border-white/[0.07] bg-[#151221]/70 p-7 text-left shadow-[0px_16px_32px_0px_rgba(0,0,0,0.25)] backdrop-blur-[20px]">
       {/* Target Job Input */}
-      <div className="w-full max-w-2xl mx-auto mb-6">
-        <label className="block text-sm font-semibold text-gray-700 mb-2 text-left">
+      <div className="mb-5">
+        <label className="block text-sm font-semibold text-white/70 mb-2 text-left">
           Target Job Title
         </label>
         <input
@@ -70,18 +70,20 @@ export default function Input() {
           value={targetJob}
           onChange={(e) => setTargetJob(e.target.value)}
           placeholder="e.g., Senior Software Engineer, Product Manager, Data Scientist"
-          className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+          className="w-full px-4 py-3 bg-white/[0.03] border-2 border-white/[0.07] rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-fuchsia-500/40 focus:border-transparent transition-all"
         />
       </div>
 
       {/* Company selector */}
-      <CompanySelector
-        selectedCompanies={selectedCompanies}
-        onSelectionChange={setSelectedCompanies}
-      />
+      <div className="mb-6">
+        <CompanySelector
+          selectedCompanies={selectedCompanies}
+          onSelectionChange={setSelectedCompanies}
+        />
+      </div>
 
       {/* File Upload */}
-      <div className="w-full max-w-2xl mx-auto mb-4">
+      <div className="mb-6">
         <input
           ref={fileInputRef}
           type="file"
@@ -91,21 +93,21 @@ export default function Input() {
         />
         <button
           onClick={() => fileInputRef.current?.click()}
-          className={`w-full px-6 py-4 bg-white border-2 border-dashed rounded-xl transition-all flex items-center justify-center gap-3 group ${
+          className={`w-full px-6 py-4 bg-white/[0.03] border-2 border-dashed rounded-xl transition-all flex items-center justify-center gap-3 group ${
             error && !selectedFile
-              ? "border-red-400 bg-red-50/30"
-              : "border-gray-300 hover:border-indigo-400 hover:bg-indigo-50/30"
+              ? "border-red-400/60 bg-red-500/[0.06]"
+              : "border-violet-500/40 hover:border-fuchsia-500/50 hover:bg-fuchsia-500/[0.06]"
           }`}
         >
           <FileText className={`w-5 h-5 transition-colors ${
             error && !selectedFile
               ? "text-red-400"
-              : "text-gray-400 group-hover:text-indigo-600"
+              : "text-white/40 group-hover:text-fuchsia-300"
           }`} />
           <span className={`font-medium transition-colors ${
             error && !selectedFile
-              ? "text-red-500"
-              : "text-gray-600 group-hover:text-indigo-600"
+              ? "text-red-400"
+              : "text-white/50 group-hover:text-fuchsia-200"
           }`}>
             {selectedFile ? selectedFile.name : "Click to upload resume (PDF, DOC, DOCX)"}
           </span>
@@ -114,31 +116,29 @@ export default function Input() {
 
       {/* Error message */}
       {error && (
-        <div className="w-full max-w-2xl mx-auto mb-4">
-          <p className="text-red-500 text-sm text-center font-medium">{error}</p>
+        <div className="mb-4">
+          <p className="text-red-400 text-sm text-center font-medium">{error}</p>
         </div>
       )}
 
       {/* Submit */}
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12 mt-4">
-        <button
-          onClick={handleSubmit}
-          disabled={isUploading}
-          className="w-full sm:w-auto px-10 py-5 bg-gray-900 text-white rounded-2xl font-bold text-lg hover:bg-gray-800 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3 group shadow-xl shadow-gray-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
-        >
-          {isUploading ? (
-            <>
-              <Loader2 className="w-6 h-6 animate-spin" />
-              Analyzing...
-            </>
-          ) : (
-            <>
-              <FileText className="w-6 h-6 group-hover:scale-110 transition-transform" />
-              Upload & Analyze Resume
-            </>
-          )}
-        </button>
-      </div>
+      <button
+        onClick={handleSubmit}
+        disabled={isUploading}
+        className="w-full px-6 py-3 bg-gradient-to-r from-[#8b5cf6] to-[#d946ef] text-white rounded-xl font-bold text-sm shadow-[0px_4px_6px_0px_rgba(139,92,246,0.25)] hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center gap-2 group disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
+      >
+        {isUploading ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Analyzing...
+          </>
+        ) : (
+          <>
+            <FileText className="w-4 h-4 group-hover:scale-110 transition-transform" />
+            Upload &amp; Analyze Resume
+          </>
+        )}
+      </button>
     </div>
   );
 }

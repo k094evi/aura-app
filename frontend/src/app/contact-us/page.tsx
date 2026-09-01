@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Mail, MessageSquare, Clock, Send, Check } from 'lucide-react';
+import { ArrowLeft, Mail, MessageSquare, Clock, Send, Check, Sparkles } from 'lucide-react';
 
 export default function ContactPage() {
   const searchParams = useSearchParams();
@@ -38,8 +38,6 @@ export default function ContactPage() {
     setSending(true);
     setError(null);
     try {
-      // Wire this up to a real endpoint, e.g.:
-      // await fetch('/api/contact', { method: 'POST', body: JSON.stringify({ name, email, subject, message }) });
       await new Promise((resolve) => setTimeout(resolve, 500));
       setSent(true);
       setName('');
@@ -54,158 +52,109 @@ export default function ContactPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 pb-20 px-4">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <Link
-          href={backHref}
-          className="flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-indigo-600 py-2.5 transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          {backLabel}
-        </Link>
+    <main className="relative min-h-screen overflow-hidden bg-[#0c0a14] px-4 pb-20 pt-24 text-white">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-purple-600/20 blur-3xl" />
+        <div className="absolute right-[-10rem] top-24 h-[32rem] w-[32rem] rounded-full bg-fuchsia-500/10 blur-3xl" />
+        <div className="absolute bottom-[-12rem] left-1/3 h-96 w-96 rounded-full bg-cyan-500/10 blur-3xl" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(139,92,246,0.08),transparent_42%)]" />
       </div>
 
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Contact Us</h1>
-          <p className="text-sm text-gray-500 mt-3 leading-relaxed max-w-2xl">
-            Have a question, found a bug, or just want to share feedback? Send us a message and
-            we'll get back to you.
+      <div className="relative mx-auto max-w-7xl">
+        <Link
+          href={backHref}
+          className="mb-8 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm font-semibold text-white/60 backdrop-blur-xl transition hover:border-purple-400/30 hover:bg-white/[0.06] hover:text-white"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          {backLabel}
+        </Link>
+
+        <div className="mb-10 max-w-3xl">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-purple-400/20 bg-purple-500/10 px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-purple-300">
+            <Sparkles className="h-3.5 w-3.5" />
+            We're here to help
+          </div>
+          <h1 className="text-4xl font-black tracking-tight md:text-5xl">
+            Let&apos;s <span className="bg-gradient-to-r from-purple-400 via-fuchsia-400 to-cyan-300 bg-clip-text text-transparent">talk.</span>
+          </h1>
+          <p className="mt-4 max-w-2xl text-sm leading-7 text-white/50 md:text-base">
+            Have a question, found a bug, or want to share feedback? Send us a message and we&apos;ll get back to you.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Contact info sidebar */}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           <div className="flex flex-col gap-4">
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6">
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center mb-4">
-                <Mail className="w-5 h-5 text-indigo-500" />
+            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-purple-950/10 backdrop-blur-xl">
+              <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl border border-purple-400/20 bg-purple-500/10">
+                <Mail className="h-5 w-5 text-purple-300" />
               </div>
-              <h2 className="text-sm font-bold text-gray-900 mb-1">Email</h2>
-              <p className="text-sm text-gray-500">email</p>
+              <h2 className="mb-1 text-sm font-bold text-white">Email</h2>
+              <p className="text-sm text-white/45">email</p>
             </div>
 
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6">
-              <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center mb-4">
-                <Clock className="w-5 h-5 text-amber-500" />
+            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-purple-950/10 backdrop-blur-xl">
+              <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl border border-amber-400/20 bg-amber-500/10">
+                <Clock className="h-5 w-5 text-amber-300" />
               </div>
-              <h2 className="text-sm font-bold text-gray-900 mb-1">Response Time</h2>
-              <p className="text-sm text-gray-500">We typically reply within 2–3 business days.</p>
+              <h2 className="mb-1 text-sm font-bold text-white">Response Time</h2>
+              <p className="text-sm leading-6 text-white/45">We typically reply within 2–3 business days.</p>
             </div>
 
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6">
-              <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center mb-4">
-                <MessageSquare className="w-5 h-5 text-green-600" />
+            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-purple-950/10 backdrop-blur-xl">
+              <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-500/10">
+                <MessageSquare className="h-5 w-5 text-cyan-300" />
               </div>
-              <h2 className="text-sm font-bold text-gray-900 mb-1">General Feedback</h2>
-              <p className="text-sm text-gray-500">
-                Bug reports, feature requests, and general feedback are all welcome.
-              </p>
+              <h2 className="mb-1 text-sm font-bold text-white">General Feedback</h2>
+              <p className="text-sm leading-6 text-white/45">Bug reports, feature requests, and general feedback are all welcome.</p>
             </div>
           </div>
 
-          {/* Contact form */}
-          <div className="md:col-span-2 bg-white rounded-3xl border border-gray-100 shadow-sm p-6">
+          <div className="md:col-span-2 rounded-3xl border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-purple-950/10 backdrop-blur-xl md:p-8">
             {sent ? (
-              <div className="text-center py-12">
-                <div className="w-12 h-12 mx-auto rounded-full bg-green-50 flex items-center justify-center mb-4">
-                  <Check className="w-6 h-6 text-green-600" />
+              <div className="flex min-h-[430px] flex-col items-center justify-center text-center">
+                <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full border border-emerald-400/20 bg-emerald-500/10">
+                  <Check className="h-7 w-7 text-emerald-300" />
                 </div>
-                <h2 className="text-lg font-bold text-gray-900 mb-1">Message sent</h2>
-                <p className="text-sm text-gray-500 mb-6">
-                  Thanks for reaching out — we'll get back to you soon.
+                <h2 className="text-xl font-black text-white">Message sent</h2>
+                <p className="mb-7 mt-2 max-w-md text-sm leading-6 text-white/45">
+                  Thanks for reaching out — we&apos;ll get back to you soon.
                 </p>
                 <button
                   onClick={() => setSent(false)}
-                  className="px-6 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-colors"
+                  className="rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-500 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-purple-900/30 transition hover:from-purple-500 hover:to-fuchsia-400"
                 >
                   Send another message
                 </button>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-5">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label
-                      htmlFor="contact-name"
-                      className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block"
-                    >
-                      Name
-                    </label>
-                    <input
-                      id="contact-name"
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Juan Dela Cruz"
-                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-900 placeholder:text-gray-400 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="contact-email"
-                      className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block"
-                    >
-                      Email
-                    </label>
-                    <input
-                      id="contact-email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="name@company.com"
-                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-900 placeholder:text-gray-400 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-colors"
-                    />
-                  </div>
+                <div className="mb-2">
+                  <h2 className="text-xl font-black text-white">Send us a message</h2>
+                  <p className="mt-1 text-sm text-white/40">Tell us how we can help.</p>
                 </div>
 
-                <div>
-                  <label
-                    htmlFor="contact-subject"
-                    className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block"
-                  >
-                    Subject
-                  </label>
-                  <input
-                    id="contact-subject"
-                    type="text"
-                    value={subject}
-                    onChange={(e) => setSubject(e.target.value)}
-                    placeholder="What's this about?"
-                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-900 placeholder:text-gray-400 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-colors"
-                  />
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Field label="Name" htmlFor="contact-name">
+                    <input id="contact-name" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Juan Dela Cruz" className={inputClass} />
+                  </Field>
+                  <Field label="Email" htmlFor="contact-email">
+                    <input id="contact-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" className={inputClass} />
+                  </Field>
                 </div>
 
-                <div>
-                  <label
-                    htmlFor="contact-message"
-                    className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block"
-                  >
-                    Message
-                  </label>
-                  <textarea
-                    id="contact-message"
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    rows={6}
-                    placeholder="Tell us what's going on..."
-                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-900 placeholder:text-gray-400 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-colors resize-none"
-                  />
-                </div>
+                <Field label="Subject" htmlFor="contact-subject">
+                  <input id="contact-subject" type="text" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="What's this about?" className={inputClass} />
+                </Field>
 
-                {error && (
-                  <p role="alert" className="text-xs font-semibold text-red-600">
-                    {error}
-                  </p>
-                )}
+                <Field label="Message" htmlFor="contact-message">
+                  <textarea id="contact-message" value={message} onChange={(e) => setMessage(e.target.value)} rows={6} placeholder="Tell us what's going on..." className={`${inputClass} resize-none`} />
+                </Field>
 
-                <div className="flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={sending}
-                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <Send className="w-4 h-4" />
+                {error && <p role="alert" className="text-xs font-semibold text-red-400">{error}</p>}
+
+                <div className="flex justify-end pt-1">
+                  <button type="submit" disabled={sending} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-500 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-purple-900/30 transition hover:from-purple-500 hover:to-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-40">
+                    <Send className="h-4 w-4" />
                     {sending ? 'Sending…' : 'Send Message'}
                   </button>
                 </div>
@@ -214,6 +163,19 @@ export default function ContactPage() {
           </div>
         </div>
       </div>
+    </main>
+  );
+}
+
+const inputClass = 'w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-medium text-white outline-none placeholder:text-white/25 transition focus:border-purple-400/50 focus:bg-white/[0.05] focus:ring-2 focus:ring-purple-500/10';
+
+function Field({ label, htmlFor, children }: { label: string; htmlFor: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label htmlFor={htmlFor} className="mb-2 block text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">
+        {label}
+      </label>
+      {children}
     </div>
   );
 }

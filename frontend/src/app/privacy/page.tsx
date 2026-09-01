@@ -1,30 +1,35 @@
 import Link from 'next/link';
 import {
   ArrowLeft,
-  FileText,
-  Sparkles,
-  ShieldCheck,
-  Share2,
+  ClipboardCheck,
   UserCheck,
-  Cookie,
-  Baby,
+  KeyRound,
+  ShieldAlert,
+  UploadCloud,
+  Bot,
+  ExternalLink,
+  Copyright,
+  AlertTriangle,
+  UserX,
   RefreshCw,
+  Scale,
   Mail,
   type LucideIcon,
 } from 'lucide-react';
 
 export const metadata = {
-  title: 'Privacy Policy – Aura',
-  description: 'How Aura collects, uses, and protects your personal information.',
+  title: 'Terms of Service – Aura',
+  description: 'The terms that govern your access to and use of Aura.',
 };
 
 // Prevents this route from being statically cached, since the back link
-// depends on the "from" query param and must be evaluated per request
+// depends on the "from" query param and must be evaluated per request.
 export const dynamic = 'force-dynamic';
 
 type Section = {
   icon: LucideIcon;
   iconBg: string;
+  iconBorder: string;
   iconColor: string;
   title: string;
   description: string;
@@ -33,151 +38,188 @@ type Section = {
 
 const SECTIONS: Section[] = [
   {
-    icon: FileText,
-    iconBg: 'bg-indigo-50',
-    iconColor: 'text-indigo-500',
-    title: 'Information We Collect',
-    description: 'What we ask for when you use Aura',
+    icon: ClipboardCheck,
+    iconBg: 'bg-violet-500/10',
+    iconBorder: 'border-violet-500/20',
+    iconColor: 'text-violet-400',
+    title: 'Acceptance of Terms',
+    description: 'What using Aura means you agree to',
     content: [
       {
-        subtitle: 'Account Information',
-        text: 'When you register, we collect your email address and a hashed version of your password. We never store your password in plain text.',
-      },
-      {
-        subtitle: 'Resume Content',
-        text: 'When you upload a resume, we process its contents — including work history, skills, and contact details — solely to provide analysis and feedback within the app.',
-      },
-    ],
-  },
-  {
-    icon: Sparkles,
-    iconBg: 'bg-amber-50',
-    iconColor: 'text-amber-500',
-    title: 'How We Use Your Information',
-    description: 'What your data powers inside the app',
-    content: [
-      {
-        subtitle: 'To Provide the Service',
-        text: 'We use your email to identify your account and send transactional messages (e.g. password resets). We use your resume content to generate ATS scores, skill gap analysis, and improvement suggestions.',
-      },
-      {
-        subtitle: 'To Improve the Service',
-        text: 'We may use anonymized, aggregated data to improve our analysis algorithms. This data cannot be traced back to any individual user.',
-      },
-    ],
-  },
-  {
-    icon: ShieldCheck,
-    iconBg: 'bg-green-50',
-    iconColor: 'text-green-600',
-    title: 'Data Storage and Security',
-    description: 'How and where your data is kept',
-    content: [
-      {
-        subtitle: 'Storage',
-        text: 'Your data is stored on secured servers. We apply industry-standard encryption to data in transit (TLS) and at rest.',
-      },
-      {
-        subtitle: 'Retention',
-        text: 'We retain your account data and resume content for as long as your account is active. You may request deletion of your data at any time.',
-      },
-    ],
-  },
-  {
-    icon: Share2,
-    iconBg: 'bg-indigo-50',
-    iconColor: 'text-indigo-500',
-    title: 'Sharing of Information',
-    description: 'Who we do — and don\u2019t — share data with',
-    content: [
-      {
-        subtitle: 'No Sale of Data',
-        text: 'We do not sell, rent, or trade your personal information to any third party.',
-      },
-      {
-        subtitle: 'Service Providers',
-        text: 'We may share data with trusted third-party service providers (e.g. cloud hosting, authentication) strictly to operate the platform. These providers are bound by confidentiality agreements.',
-      },
-      {
-        subtitle: 'Legal Requirements',
-        text: 'We may disclose your information if required to do so by Philippine law or a valid legal process.',
+        subtitle: '',
+        text: 'By creating an account or using any part of the AURA platform, you confirm that you have read, understood, and agreed to these Terms of Service. If you do not agree, you must not use the platform.',
       },
     ],
   },
   {
     icon: UserCheck,
-    iconBg: 'bg-amber-50',
-    iconColor: 'text-amber-500',
-    title: 'Your Rights',
-    description: 'What you can do with your own data',
-    content: [
-      {
-        subtitle: 'Access and Correction',
-        text: 'You may access and update your account information at any time through your profile settings.',
-      },
-      {
-        subtitle: 'Data Deletion',
-        text: 'You may request the permanent deletion of your account and all associated data by contacting us at the email below. We will process your request within 30 days.',
-      },
-      {
-        subtitle: 'Data Portability',
-        text: 'Upon request, we can provide you with a copy of the personal data we hold about you in a machine-readable format.',
-      },
-    ],
-  },
-  {
-    icon: Cookie,
-    iconBg: 'bg-indigo-50',
-    iconColor: 'text-indigo-500',
-    title: 'Cookies',
-    description: 'How we use cookies on Aura',
-    content: [
-      {
-        subtitle: 'Session Cookies',
-        text: 'We use session cookies to keep you logged in during your visit. These cookies are deleted when you close your browser.',
-      },
-      {
-        subtitle: 'No Tracking Cookies',
-        text: 'We do not use advertising or cross-site tracking cookies.',
-      },
-    ],
-  },
-  {
-    icon: Baby,
-    iconBg: 'bg-green-50',
-    iconColor: 'text-green-600',
-    title: "Children's Privacy",
-    description: 'Our policy on users under 18',
+    iconBg: 'bg-amber-500/10',
+    iconBorder: 'border-amber-500/20',
+    iconColor: 'text-amber-400',
+    title: 'Eligibility',
+    description: 'Who can use Aura',
     content: [
       {
         subtitle: '',
-        text: 'Aura is not intended for users under the age of 18. We do not knowingly collect personal information from minors. If you believe a minor has provided us with their data, please contact us and we will delete it promptly.',
+        text: 'AURA is intended for use by individuals who are at least 18 years of age and are seeking employment opportunities in the Information Technology field. By registering, you confirm that you meet these requirements.',
+      },
+    ],
+  },
+  {
+    icon: KeyRound,
+    iconBg: 'bg-emerald-500/10',
+    iconBorder: 'border-emerald-500/20',
+    iconColor: 'text-emerald-400',
+    title: 'User Accounts',
+    description: 'Your responsibilities as an account holder',
+    content: [
+      {
+        subtitle: '',
+        text: 'You are responsible for maintaining the confidentiality of your account credentials and for all activities that occur under your account. You agree to notify us immediately of any unauthorized access or suspected breach of your account. We are not liable for any loss or damage arising from your failure to protect your login information.',
+      },
+    ],
+  },
+  {
+    icon: ShieldAlert,
+    iconBg: 'bg-violet-500/10',
+    iconBorder: 'border-violet-500/20',
+    iconColor: 'text-violet-400',
+    title: 'Acceptable Use',
+    description: 'What you agree not to do on Aura',
+    content: [
+      {
+        subtitle: '',
+        text: 'You agree to use AURA only for its intended purpose of resume analysis and career preparation. You must not:',
+      },
+      {
+        subtitle: '',
+        text: '• Upload resumes or content that belong to another person without their consent\n• Use the platform for any unlawful, fraudulent, or malicious purpose\n• Attempt to reverse engineer, copy, or replicate any part of the system\n• Interfere with or disrupt the platform\u2019s servers, infrastructure, or other users\n• Upload files containing malware, viruses, or harmful code',
+      },
+    ],
+  },
+  {
+    icon: UploadCloud,
+    iconBg: 'bg-amber-500/10',
+    iconBorder: 'border-amber-500/20',
+    iconColor: 'text-amber-400',
+    title: 'Uploaded Content',
+    description: 'Ownership and handling of your resume data',
+    content: [
+      {
+        subtitle: '',
+        text: 'You retain full ownership of the resume content you upload to AURA. By uploading your resume, you grant AURA a limited, non-exclusive license to process and analyze its contents solely for the purpose of generating your evaluation results. We do not claim ownership of your resume or any personal information it contains. Uploaded resumes and associated analysis results are automatically deleted after 90 days or upon your request, whichever comes first.',
+      },
+    ],
+  },
+  {
+    icon: Bot,
+    iconBg: 'bg-emerald-500/10',
+    iconBorder: 'border-emerald-500/20',
+    iconColor: 'text-emerald-400',
+    title: 'AI-Generated Results Disclaimer',
+    description: 'The limits of what our AI results mean',
+    content: [
+      {
+        subtitle: '',
+        text: 'The analysis results generated by AURA — including ATS Compatibility Scores, Skill Gap Analysis, Job Match Analysis, and Smart Improvement Suggestions — are produced by AI technologies, specifically NLP and BERT-based language models, and are based on textual analysis and predefined evaluation criteria. These results are intended as a supportive tool only and do not constitute professional recruitment advice. They may not fully capture subjective factors such as recruiter preferences, organizational culture, or human judgment. AURA cannot directly validate actual technical proficiency, interpersonal skills, or behavioral traits, as these require human assessment. You are solely responsible for how you use or act upon the results generated by the system.',
+      },
+    ],
+  },
+  {
+    icon: ExternalLink,
+    iconBg: 'bg-violet-500/10',
+    iconBorder: 'border-violet-500/20',
+    iconColor: 'text-violet-400',
+    title: 'Third-Party Services',
+    description: 'How Aura connects to outside platforms',
+    content: [
+      {
+        subtitle: '',
+        text: 'AURA integrates with the Adzuna API to retrieve real-time job listings, company information, and labor market data. When you select a job opportunity and are redirected to an external recruitment portal, you are leaving the AURA platform and entering a third-party website. AURA is not responsible for the content, availability, accuracy, or practices of any third-party platforms. Your interactions with those platforms are governed by their own terms and privacy policies.',
+      },
+    ],
+  },
+  {
+    icon: Copyright,
+    iconBg: 'bg-amber-500/10',
+    iconBorder: 'border-amber-500/20',
+    iconColor: 'text-amber-400',
+    title: 'Intellectual Property',
+    description: 'What belongs to the Aura platform',
+    content: [
+      {
+        subtitle: '',
+        text: 'All content, features, branding, and technology within the AURA platform — including its name, logo, system design, AI models, and source code — are the intellectual property of the AURA development team. You may not reproduce, distribute, or create derivative works from any part of the platform without prior written permission.',
+      },
+    ],
+  },
+  {
+    icon: AlertTriangle,
+    iconBg: 'bg-emerald-500/10',
+    iconBorder: 'border-emerald-500/20',
+    iconColor: 'text-emerald-400',
+    title: 'Limitation of Liability',
+    description: 'What Aura does and doesn\u2019t guarantee',
+    content: [
+      {
+        subtitle: '',
+        text: 'AURA is provided as a capstone research project and career support tool. We do not guarantee any specific employment outcome, job placement, or interview result from the use of the platform. To the fullest extent permitted by Philippine law, AURA and its developers shall not be liable for any direct, indirect, incidental, or consequential damages arising from your use of or reliance on the platform, including its AI-generated results.',
+      },
+    ],
+  },
+  {
+    icon: UserX,
+    iconBg: 'bg-violet-500/10',
+    iconBorder: 'border-violet-500/20',
+    iconColor: 'text-violet-400',
+    title: 'Account Termination',
+    description: 'How and when accounts can be closed',
+    content: [
+      {
+        subtitle: '',
+        text: 'We reserve the right to suspend or terminate your account if you violate these Terms of Service or engage in conduct that is harmful to other users or the platform. You may also delete your account at any time through your account settings or by contacting us at the email below.',
       },
     ],
   },
   {
     icon: RefreshCw,
-    iconBg: 'bg-amber-50',
-    iconColor: 'text-amber-500',
-    title: 'Changes to This Policy',
+    iconBg: 'bg-amber-500/10',
+    iconBorder: 'border-amber-500/20',
+    iconColor: 'text-amber-400',
+    title: 'Changes to These Terms',
     description: 'How we handle updates to this page',
     content: [
       {
         subtitle: '',
-        text: 'We may update this Privacy Policy from time to time. When we do, we will revise the "Last Updated" date at the top of this page and, where appropriate, notify you by email.',
+        text: 'We may update these Terms of Service from time to time. When we do, we will revise the "Last Updated" date at the top of this page and, where appropriate, notify you by email. Continued use of the platform after changes are made constitutes your acceptance of the updated terms.',
+      },
+    ],
+  },
+  {
+    icon: Scale,
+    iconBg: 'bg-emerald-500/10',
+    iconBorder: 'border-emerald-500/20',
+    iconColor: 'text-emerald-400',
+    title: 'Governing Law',
+    description: 'The legal framework behind these terms',
+    content: [
+      {
+        subtitle: '',
+        text: 'These Terms of Service are governed by and construed in accordance with the laws of the Republic of the Philippines, including but not limited to the Data Privacy Act of 2012 (Republic Act No. 10173) and the Electronic Commerce Act of 2000 (Republic Act No. 8792).',
       },
     ],
   },
   {
     icon: Mail,
-    iconBg: 'bg-indigo-50',
-    iconColor: 'text-indigo-500',
+    iconBg: 'bg-violet-500/10',
+    iconBorder: 'border-violet-500/20',
+    iconColor: 'text-violet-400',
     title: 'Contact Us',
     description: 'Reach us with questions or concerns',
     content: [
       {
         subtitle: '',
-        text: 'If you have any questions or concerns about this Privacy Policy or how we handle your data, please contact us at: email',
+        text: 'If you have any questions or concerns about these Terms of Service, please contact us at: email',
       },
     ],
   },
@@ -185,7 +227,7 @@ const SECTIONS: Section[] = [
 
 // searchParams is a Promise in Next.js 15+ Server Components, so this
 // component must be async and await it before reading "from".
-export default async function PrivacyPolicyPage({
+export default async function TermsOfServicePage({
   searchParams,
 }: {
   searchParams?: Promise<{ from?: string }>;
@@ -193,7 +235,7 @@ export default async function PrivacyPolicyPage({
   const params = await searchParams;
   const from = params?.from;
 
-  // Where the back link points, based on which page the user came from.
+  // Where the back link points, based on which page the user came from
   const backHref =
     from === 'signin' ? '/signin'
     : from === 'signup' ? '/signup'
@@ -207,29 +249,34 @@ export default async function PrivacyPolicyPage({
     : 'Back to Upload';
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 pb-20 px-4">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+    <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#0c0a14] pt-20">
+      {/* Ambient background orbs */}
+      <div className="pointer-events-none absolute -left-[100px] top-[150px] size-[500px] rounded-full bg-fuchsia-600/30 blur-[110px]" />
+      <div className="pointer-events-none absolute -right-[150px] top-[100px] size-[550px] rounded-full bg-violet-600/25 blur-[120px]" />
+      <div className="pointer-events-none absolute left-[35%] top-[550px] size-[450px] rounded-full bg-cyan-500/20 blur-[110px]" />
+
+      {/* Sub-header / back link */}
+      <div className="relative z-10 flex w-full shrink-0 items-center justify-between px-8 pb-8 pt-5 md:px-16">
         <Link
           href={backHref}
-          className="flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-indigo-600 py-2.5 transition-colors"
+          className="flex items-center gap-2 text-sm font-semibold text-fuchsia-500 transition-colors hover:text-fuchsia-400"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="size-4" />
           {backLabel}
         </Link>
       </div>
 
-      <div className="max-w-7xl mx-auto">
+      <div className="relative z-10 flex w-full flex-col px-8 pb-16 md:px-16">
         <div className="mb-8">
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Privacy Policy</h1>
-          <p className="text-sm text-gray-400 mt-1">Last Updated: June 17, 2025</p>
-          <p className="text-sm text-gray-500 mt-3 leading-relaxed">
-            This Privacy Policy explains how Aura collects, uses, and
-            protects the personal information of users in the Philippines in accordance
-            with the{' '}
-            <span className="font-semibold text-gray-700">
-              Data Privacy Act of 2012 (Republic Act No. 10173)
+          <h1 className="text-[32px] font-extrabold leading-normal text-white [text-shadow:none]">Terms of Service</h1>
+          <p className="mt-1 text-sm text-white/40">Last Updated: June 17, 2026</p>
+          <p className="mt-3 max-w-4xl text-sm leading-relaxed text-white/60">
+            These Terms of Service govern your access to and use of{' '}
+            <span className="font-semibold text-white/80">
+              AURA (Applicant Understanding &amp; Resume Analytics)
             </span>
-            .
+            , an AI-powered resume analyzer developed for IT job seekers and graduates in the
+            Philippines. By accessing or using AURA, you agree to be bound by these terms.
           </p>
         </div>
 
@@ -238,15 +285,17 @@ export default async function PrivacyPolicyPage({
           return (
             <div
               key={section.title}
-              className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 mb-6"
+              className="mb-6 w-full rounded-3xl border border-white/[0.07] bg-[#151221]/70 p-7 shadow-[0px_16px_32px_0px_rgba(0,0,0,0.25)] backdrop-blur-[20px]"
             >
-              <div className="flex items-center gap-3 mb-4">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${section.iconBg}`}>
-                  <Icon className={`w-5 h-5 ${section.iconColor}`} />
+              <div className="mb-5 flex items-center gap-3.5">
+                <div
+                  className={`flex size-10 shrink-0 items-center justify-center rounded-xl border ${section.iconBg} ${section.iconBorder}`}
+                >
+                  <Icon className={`size-5 ${section.iconColor}`} />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900">{section.title}</h2>
-                  <p className="text-sm text-gray-400">{section.description}</p>
+                  <h2 className="text-lg font-bold text-white">{section.title}</h2>
+                  <p className="text-[13px] text-white/50">{section.description}</p>
                 </div>
               </div>
 
@@ -254,9 +303,11 @@ export default async function PrivacyPolicyPage({
                 {section.content.map((item, i) => (
                   <div key={i}>
                     {item.subtitle && (
-                      <h3 className="text-sm font-bold text-gray-900 mb-1">{item.subtitle}</h3>
+                      <h3 className="mb-1 text-sm font-bold text-white">{item.subtitle}</h3>
                     )}
-                    <p className="text-sm text-gray-500 leading-relaxed">{item.text}</p>
+                    <p className="whitespace-pre-line text-sm leading-relaxed text-white/60">
+                      {item.text}
+                    </p>
                   </div>
                 ))}
               </div>

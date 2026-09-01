@@ -45,26 +45,31 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="bg-gray-50 flex flex-col items-center justify-center px-4 py-10 min-h-screen">
-      <Link href="/" className="flex items-center gap-2 mb-8">
-        <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center">
-          <Brain className="text-white w-7 h-7" />
+    <div className="relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-[#0c0a14] px-4 py-10">
+      {/* Ambient background orbs */}
+      <div className="pointer-events-none absolute -left-[150px] top-[100px] size-[550px] rounded-full bg-fuchsia-600/30 blur-[120px]" />
+      <div className="pointer-events-none absolute -right-[180px] top-[150px] size-[600px] rounded-full bg-violet-600/25 blur-[125px]" />
+      <div className="pointer-events-none absolute bottom-[50px] left-[40%] size-[500px] rounded-full bg-cyan-500/20 blur-[120px]" />
+
+      <Link href="/" className="relative z-10 flex items-center gap-2 mb-8">
+        <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#8b5cf6] to-[#d946ef]">
+          <Brain className="size-6 text-white" />
         </div>
-        <span className="text-2xl font-bold tracking-tight text-gray-900">Aura</span>
+        <span className="text-2xl font-bold tracking-tight text-white">Aura</span>
       </Link>
 
-      <div className="bg-white rounded-2xl shadow-lg w-full max-w-[470px] px-10 py-10">
+      <div className="relative z-10 w-full max-w-[470px] rounded-3xl border border-white/[0.07] bg-[#151221]/70 px-10 py-10 shadow-[0px_16px_32px_0px_rgba(0,0,0,0.25)] backdrop-blur-[20px]">
         {sent ? (
           <div className="text-center">
             <CheckCircle2 className="w-14 h-14 text-green-500 mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Check your email</h1>
-            <p className="text-gray-500 text-[0.95rem] leading-relaxed mb-6">
+            <h1 className="text-2xl font-bold text-white mb-2">Check your email</h1>
+            <p className="text-white/50 text-[0.95rem] leading-relaxed mb-6">
               If an account exists for <span className="font-semibold text-gray-700">{email}</span>,
               we&apos;ve sent a link to reset your password.
             </p>
             <Link
               href="/signin"
-              className="inline-block px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors"
+              className="inline-block px-6 py-3 rounded-xl bg-gradient-to-r from-[#8b5cf6] to-[#d946ef] text-white font-bold hover:opacity-90 transition-opacity"
             >
               Back to Sign In
             </Link>
@@ -72,28 +77,28 @@ export default function ForgotPasswordPage() {
         ) : (
           <>
             <div className="text-center mb-8">
-              <h1 className="text-[1.75rem] font-bold text-gray-900 mb-2 tracking-tight">
+              <h1 className="text-[1.75rem] font-bold text-white mb-2 tracking-tight">
                 Forgot your password?
               </h1>
-              <p className="text-gray-500 text-[0.95rem] leading-relaxed">
+              <p className="text-white/50 text-[0.95rem] leading-relaxed">
                 Enter your email and we&apos;ll send you a link to reset it.
               </p>
             </div>
 
             <div className="space-y-5">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-widest mb-2">
+                <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">
                   Email Address
                 </label>
-                <div className="flex items-center gap-3 border border-gray-200 rounded-xl px-4 py-3 bg-gray-50 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/10 transition">
-                  <Mail size={18} className="text-gray-400 flex-shrink-0" />
+                <div className="flex items-center gap-3 rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 py-3 transition focus-within:border-fuchsia-500/50 focus-within:ring-2 focus-within:ring-fuchsia-500/20">
+                  <Mail size={18} className="text-white/30 flex-shrink-0" />
                   <input
                     type="email"
                     placeholder="name@company.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                    className="flex-1 bg-transparent text-gray-900 placeholder:text-gray-400 text-sm outline-none"
+                    className="flex-1 bg-transparent text-white placeholder:text-white/30 text-sm outline-none"
                   />
                 </div>
               </div>
@@ -104,7 +109,7 @@ export default function ForgotPasswordPage() {
                 type="button"
                 onClick={handleSubmit}
                 disabled={isSubmitting}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-base rounded-xl py-4 flex items-center justify-center gap-2 transition-colors duration-150 mt-2 shadow-sm shadow-indigo-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full rounded-xl bg-gradient-to-r from-[#8b5cf6] to-[#d946ef] py-4 flex items-center justify-center gap-2 text-base font-semibold text-white shadow-[0px_4px_6px_0px_rgba(139,92,246,0.25)] transition-opacity duration-150 mt-2 hover:opacity-90 active:opacity-80 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
                   <>
@@ -117,9 +122,9 @@ export default function ForgotPasswordPage() {
               </button>
             </div>
 
-            <p className="text-center text-sm text-gray-500 mt-6">
+            <p className="text-center text-sm text-white/50 mt-6">
               Remembered it?{' '}
-              <Link href="/signin" className="text-indigo-600 font-bold hover:underline">
+              <Link href="/signin" className="text-fuchsia-400 font-bold hover:text-fuchsia-300 hover:underline">
                 Back to sign in
               </Link>
             </p>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import DocumentScanner from '@/components/DocumentScanner';
 import AnalysisProgressBar from '@/components/AnalysisProgressBar';
@@ -8,50 +8,49 @@ import AnalysisSteps from '@/components/AnalysisSteps';
 
 export default function LoadingPage() {
   const [progress, setProgress] = useState(0);
-  const [ready, setReady] = useState(false);
   const router = useRouter();
-  const routerRef = useRef(router);
-  routerRef.current = router;
 
-  // Mount-only guard — check sessionStorage once, never re-run
+  // Prefetch the dashboard route so navigation after loading is instant
   useEffect(() => {
-    const hasData = !!sessionStorage.getItem('aura_result');
-    if (!hasData) {
-      // No data: user landed here directly — send to upload, not '/'
-      // to avoid the '/' → UploadPage → /loading → '/' loop
-      routerRef.current.replace('/upload');
-      return;
-    }
-    setReady(true);
-    routerRef.current.prefetch('/dashboard');
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    router.prefetch('/dashboard');
+  }, [router]);
 
-  // Only start the progress timer once we've confirmed data exists
+  // Increment progress by 1 every 40ms until it reaches 100
   useEffect(() => {
-    if (!ready) return;
     const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) { clearInterval(interval); return 100; }
-        return prev + 1;
-      });
-    }, 30);
-    return () => clearInterval(interval);
-  }, [ready]);
+      setProgress((prev) => Math.min(prev + 1, 100));
+    }, 40);
 
-  // Navigate to dashboard exactly once when progress completes
+    return () => clearInterval(interval);
+  }, []);
+
+  // Once progress hits 100%, wait briefly then redirect to the dashboard
   useEffect(() => {
-    if (progress < 100) return;
-    const timeout = setTimeout(() => {
-      routerRef.current.push('/dashboard');
-    }, 400);
-    return () => clearTimeout(timeout);
-  }, [progress]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (progress === 100) {
+      const timeout = setTimeout(() => {
+        router.push('/dashboard');
+      }, 400);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [progress, router]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center p-4">
-      <DocumentScanner />
-      <AnalysisProgressBar progress={progress} />
-      <AnalysisSteps progress={progress} />
+    // Fullscreen overlay shown while the analysis is "loading"
+    <div className="fixed inset-0 z-100 flex flex-col items-center justify-center overflow-hidden bg-[#0c0a14] p-4">
+      {/* Ambient background orbs, matching the rest of the app */}
+      <div className="pointer-events-none absolute -left-[150px] top-[100px] size-[550px] rounded-full bg-fuchsia-600/30 blur-[120px]" />
+      <div className="pointer-events-none absolute -right-[180px] top-[150px] size-[600px] rounded-full bg-violet-600/25 blur-[125px]" />
+      <div className="pointer-events-none absolute bottom-[80px] left-[40%] size-[500px] rounded-full bg-cyan-500/20 blur-[120px]" />
+
+      <div className="relative z-10 flex flex-col items-center">
+        {/* Animated scanner graphic */}
+        <DocumentScanner />
+        {/* Progress bar reflecting current percentage */}
+        <AnalysisProgressBar progress={progress} />
+        {/* List of analysis steps, highlighted based on progress */}
+        <AnalysisSteps progress={progress} />
+      </div>
     </div>
   );
 }

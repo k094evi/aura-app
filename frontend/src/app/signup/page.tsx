@@ -88,23 +88,28 @@ export default function SignUpPage() {
   // is created but needs email verification before it can sign in.
   if (confirmationSent) {
     return (
-      <div className="bg-gray-50 flex flex-col items-center justify-center px-4 py-10 min-h-screen">
-        <Link href="/" className="flex items-center gap-2 mb-8">
-          <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center">
-            <Brain className="text-white w-7 h-7" />
+      <div className="relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-[#0c0a14] px-4 py-10">
+        {/* Ambient background orbs, matching the rest of the app */}
+        <div className="pointer-events-none absolute -left-[150px] top-[100px] size-[550px] rounded-full bg-fuchsia-600/30 blur-[120px]" />
+        <div className="pointer-events-none absolute -right-[180px] top-[150px] size-[600px] rounded-full bg-violet-600/25 blur-[125px]" />
+        <div className="pointer-events-none absolute bottom-[50px] left-[40%] size-[500px] rounded-full bg-cyan-500/20 blur-[120px]" />
+
+        <Link href="/" className="relative z-10 flex items-center gap-2 mb-8">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#8b5cf6] to-[#d946ef]">
+            <Brain className="size-6 text-white" />
           </div>
-          <span className="text-2xl font-bold tracking-tight text-gray-900">Aura</span>
+          <span className="text-2xl font-bold tracking-tight text-white">Aura</span>
         </Link>
-        <div className="bg-white rounded-2xl shadow-lg w-full max-w-[470px] px-10 py-10 text-center">
-          <CheckCircle2 className="w-14 h-14 text-green-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Check your email</h1>
-          <p className="text-gray-500 text-[0.95rem] leading-relaxed mb-6">
-            We sent a confirmation link to <span className="font-semibold text-gray-700">{email}</span>.
+        <div className="relative z-10 w-full max-w-[470px] rounded-3xl border border-white/[0.07] bg-[#151221]/70 px-10 py-10 text-center shadow-[0px_16px_32px_0px_rgba(0,0,0,0.25)] backdrop-blur-[20px]">
+          <CheckCircle2 className="w-14 h-14 text-emerald-400 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-white mb-2">Check your email</h1>
+          <p className="text-white/50 text-[0.95rem] leading-relaxed mb-6">
+            We sent a confirmation link to <span className="font-semibold text-white/80">{email}</span>.
             Click it to activate your account, then sign in.
           </p>
           <Link
             href="/signin"
-            className="inline-block px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors"
+            className="inline-block rounded-xl bg-gradient-to-r from-[#8b5cf6] to-[#d946ef] px-6 py-3 font-bold text-white transition-opacity hover:opacity-90"
           >
             Go to Sign In
           </Link>
@@ -114,23 +119,28 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="bg-gray-50 flex flex-col items-center justify-center px-4 py-10">
+    <div className="relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-[#0c0a14] px-4 py-10">
+      {/* Ambient background orbs, matching the rest of the app */}
+      <div className="pointer-events-none absolute -left-[150px] top-[100px] size-[550px] rounded-full bg-fuchsia-600/30 blur-[120px]" />
+      <div className="pointer-events-none absolute -right-[180px] top-[150px] size-[600px] rounded-full bg-violet-600/25 blur-[125px]" />
+      <div className="pointer-events-none absolute bottom-[50px] left-[40%] size-[500px] rounded-full bg-cyan-500/20 blur-[120px]" />
+
       {/* Logo / brand link back to home */}
-      <Link href="/" className="flex items-center gap-2 mb-8">
-        <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center">
-          <Brain className="text-white w-7 h-7" />
+      <Link href="/" className="relative z-10 flex items-center gap-2 mb-8">
+        <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#8b5cf6] to-[#d946ef]">
+          <Brain className="size-6 text-white" />
         </div>
-        <span className="text-2xl font-bold tracking-tight text-gray-900">Aura</span>
+        <span className="text-2xl font-bold tracking-tight text-white">Aura</span>
       </Link>
 
       {/* Main signup card */}
-      <div className="bg-white rounded-2xl shadow-lg w-full max-w-[470px] px-10 py-10">
+      <div className="relative z-10 w-full max-w-[470px] rounded-3xl border border-white/[0.07] bg-[#151221]/70 px-10 py-10 shadow-[0px_16px_32px_0px_rgba(0,0,0,0.25)] backdrop-blur-[20px]">
         {/* Heading */}
         <div className="text-center mb-8">
-          <h1 className="text-[1.75rem] font-bold text-gray-900 mb-2 tracking-tight">
+          <h1 className="text-[1.75rem] font-bold text-white mb-2 tracking-tight">
             Create your account
           </h1>
-          <p className="text-gray-500 text-[0.95rem] leading-relaxed">
+          <p className="text-white/50 text-[0.95rem] leading-relaxed">
             Join thousands of professionals optimizing their careers
           </p>
         </div>
@@ -139,40 +149,40 @@ export default function SignUpPage() {
         <div className="space-y-5">
           {/* Email input */}
           <div>
-            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-widest mb-2">
+            <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">
               Email Address
             </label>
-            <div className="flex items-center gap-3 border border-gray-200 rounded-xl px-4 py-3 bg-gray-50 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/10 transition">
-              <Mail size={18} className="text-gray-400 flex-shrink-0" />
+            <div className="flex items-center gap-3 rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 py-3 transition focus-within:border-fuchsia-500/50 focus-within:ring-2 focus-within:ring-fuchsia-500/20">
+              <Mail size={18} className="text-white/30 flex-shrink-0" />
               <input
                 type="email"
                 placeholder="name@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="flex-1 bg-transparent text-gray-900 placeholder:text-gray-400 text-sm outline-none"
+                className="flex-1 bg-transparent text-white placeholder:text-white/30 text-sm outline-none"
               />
             </div>
           </div>
 
           {/* Password input with show/hide toggle */}
           <div>
-            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-widest mb-2">
+            <label className="block text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">
               Password
             </label>
-            <div className="flex items-center gap-3 border border-gray-200 rounded-xl px-4 py-3 bg-gray-50 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/10 transition">
-              <Lock size={18} className="text-gray-400 flex-shrink-0" />
+            <div className="flex items-center gap-3 rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 py-3 transition focus-within:border-fuchsia-500/50 focus-within:ring-2 focus-within:ring-fuchsia-500/20">
+              <Lock size={18} className="text-white/30 flex-shrink-0" />
               <input
                 type={showPassword ? 'text' : 'password'}
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                className="flex-1 bg-transparent text-gray-900 placeholder:text-gray-400 text-sm outline-none"
+                className="flex-1 bg-transparent text-white placeholder:text-white/30 text-sm outline-none"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="text-gray-400 hover:text-gray-600 transition flex-shrink-0"
+                className="text-white/30 hover:text-white/60 transition flex-shrink-0"
                 aria-label="Toggle password visibility"
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -184,21 +194,21 @@ export default function SignUpPage() {
           <div className="space-y-2 pt-1">
             {['Free resume analysis', 'ATS compatibility report'].map((item) => (
               <div key={item} className="flex items-center gap-2">
-                <CheckCircle2 size={18} className="text-green-500 flex-shrink-0" />
-                <span className="text-sm text-gray-600">{item}</span>
+                <CheckCircle2 size={18} className="text-emerald-400 flex-shrink-0" />
+                <span className="text-sm text-white/60">{item}</span>
               </div>
             ))}
           </div>
 
           {/* Error message */}
-          {error && <p className="text-red-500 text-sm text-center font-medium">{error}</p>}
+          {error && <p className="text-red-400 text-sm text-center font-medium">{error}</p>}
 
           {/* Submit button */}
           <button
             type="button"
             onClick={handleSubmit}
             disabled={isSubmitting || oauthBusy}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold text-base rounded-xl py-4 flex items-center justify-center gap-2 transition-colors duration-150 mt-2 shadow-sm shadow-indigo-100 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full rounded-xl bg-gradient-to-r from-[#8b5cf6] to-[#d946ef] py-4 flex items-center justify-center gap-2 text-base font-semibold text-white shadow-[0px_4px_6px_0px_rgba(139,92,246,0.25)] transition-opacity duration-150 mt-2 hover:opacity-90 active:opacity-80 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {isSubmitting ? (
               <>
@@ -216,11 +226,11 @@ export default function SignUpPage() {
 
         {/* Divider between form and social signup options */}
         <div className="flex items-center gap-4 my-6">
-          <div className="flex-1 h-px bg-gray-200" />
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+          <div className="flex-1 h-px bg-white/[0.08]" />
+          <span className="text-xs font-semibold text-white/30 uppercase tracking-widest">
             Or continue with
           </span>
-          <div className="flex-1 h-px bg-gray-200" />
+          <div className="flex-1 h-px bg-white/[0.08]" />
         </div>
 
         {/* Social signup buttons */}
@@ -230,7 +240,7 @@ export default function SignUpPage() {
             type="button"
             onClick={() => handleOAuth('google')}
             disabled={oauthBusy || isSubmitting}
-            className="flex items-center justify-center gap-2 border border-gray-200 rounded-xl py-3 text-sm font-semibold text-gray-800 hover:bg-gray-50 transition disabled:opacity-60 disabled:cursor-not-allowed"
+            className="flex items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] py-3 text-sm font-semibold text-white/80 transition hover:bg-white/[0.06] disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {oauthProvider === 'google' ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -250,7 +260,7 @@ export default function SignUpPage() {
             type="button"
             onClick={() => handleOAuth('github')}
             disabled={oauthBusy || isSubmitting}
-            className="flex items-center justify-center gap-2 border border-gray-200 rounded-xl py-3 text-sm font-semibold text-gray-800 hover:bg-gray-50 transition disabled:opacity-60 disabled:cursor-not-allowed"
+            className="flex items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] py-3 text-sm font-semibold text-white/80 transition hover:bg-white/[0.06] disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {oauthProvider === 'github' ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -264,22 +274,22 @@ export default function SignUpPage() {
         </div>
 
         {/* Link to login page */}
-        <p className="text-center text-sm text-gray-500 mt-6">
+        <p className="text-center text-sm text-white/50 mt-6">
           Already have an account?{' '}
-          <Link href="/signin" className="text-indigo-600 font-bold hover:underline">
+          <Link href="/signin" className="text-fuchsia-400 font-bold hover:text-fuchsia-300 hover:underline">
             Log in
           </Link>
         </p>
       </div>
 
       {/* Footer with legal links */}
-      <p className="text-xs text-gray-400 mt-8 text-center max-w-sm leading-relaxed">
+      <p className="relative z-10 text-xs text-white/30 mt-8 text-center max-w-sm leading-relaxed">
         By continuing, you agree to our{' '}
-        <Link href="/terms" className="underline hover:text-gray-600">
+        <Link href="/terms-of-service?from=signup" className="underline hover:text-white/60">
           Terms of Service
         </Link>{' '}
         and{' '}
-        <Link href="/privacy" className="underline hover:text-gray-600">
+        <Link href="/privacy?from=signup" className="underline hover:text-white/60">
           Privacy Policy
         </Link>
         .

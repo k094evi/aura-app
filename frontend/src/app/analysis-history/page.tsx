@@ -88,22 +88,32 @@ export default function AnalysisHistoryPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 pb-20 px-4">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+    <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#0c0a14] pt-20">
+      {/* Ambient background orbs, spaced down the full page so a long
+          list of analysis records doesn't run out into a flat,
+          orb-less section near the bottom. */}
+      <div className="pointer-events-none absolute -left-[150px] top-[120px] size-[600px] rounded-full bg-fuchsia-600/30 blur-[120px]" />
+      <div className="pointer-events-none absolute -right-[200px] top-[80px] size-[650px] rounded-full bg-violet-600/25 blur-[130px]" />
+      <div className="pointer-events-none absolute left-[35%] top-[850px] size-[550px] rounded-full bg-cyan-500/20 blur-[120px]" />
+      <div className="pointer-events-none absolute -right-[150px] top-[1500px] size-[550px] rounded-full bg-fuchsia-600/20 blur-[125px]" />
+      <div className="pointer-events-none absolute -left-[150px] top-[2150px] size-[520px] rounded-full bg-violet-600/20 blur-[120px]" />
+
+      {/* Sub-header / back link */}
+      <div className="relative z-10 flex w-full shrink-0 items-center px-8 pb-8 pt-5 md:px-16">
         <Link
           href="/dashboard"
-          className="flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-indigo-600 py-2.5"
+          className="flex items-center gap-2 text-sm font-semibold text-fuchsia-500 transition-colors hover:text-fuchsia-400"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="size-4" />
           Back to Dashboard
         </Link>
       </div>
 
-      {/* Content column, capped at max-w-7xl to line up with the navbar/logo above */}
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">My Analysis History</h1>
-          <p className="text-sm text-gray-400 mt-1">Track how your resume has improved over time.</p>
+      {/* Workspace */}
+      <div className="relative z-10 flex w-full flex-col gap-8 px-8 pb-16 md:px-16">
+        <div className="flex flex-col gap-2.5">
+          <h1 className="text-[32px] font-extrabold leading-normal text-white">My Analysis History</h1>
+          <p className="text-base font-normal text-white/60">Track how your resume has improved over time.</p>
         </div>
 
         {!hasRecords ? (
@@ -115,13 +125,13 @@ export default function AnalysisHistoryPage() {
             <AnalysisScoreTrendChart data={chartData} />
 
             {/* One card per past analysis, newest first (records[0] is treated as "latest" above) */}
-            <div className="space-y-4">
+            <div className="flex flex-col gap-5">
               {records.map((record) => (
                 <AnalysisRecordCard key={record.id} record={record} onDelete={setPendingDeleteId} />
               ))}
             </div>
 
-            <p className="text-center text-xs text-gray-400 mt-8">
+            <p className="pt-3 text-center text-[13px] text-white/40">
               Analysis records are automatically deleted after 90 days.
             </p>
           </>
