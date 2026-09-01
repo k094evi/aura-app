@@ -43,18 +43,21 @@ export function AnalysisSummaryStats({ total, best, latest, improvement }: Analy
   ];
 
   return (
-    <div className="grid grid-cols-4 gap-4 mb-6">
+    <div className="mb-6 grid grid-cols-2 gap-5 lg:grid-cols-4">
       {stats.map((m) => (
-        <div key={m.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center shrink-0">
-              <m.icon className="w-5 h-5 text-indigo-500" />
+        <div
+          key={m.label}
+          className="flex flex-col gap-3 rounded-[20px] border border-white/[0.07] bg-[#151221]/70 p-6 shadow-[0px_16px_32px_0px_rgba(0,0,0,0.25)] backdrop-blur-[20px]"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-violet-500/20 bg-violet-500/10">
+              <m.icon className="size-4 text-violet-400" />
             </div>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{m.label}</p>
+            <p className="text-[10px] font-extrabold uppercase tracking-wide text-white/40">{m.label}</p>
           </div>
-          <p className="text-3xl font-extrabold text-gray-900">
+          <p className="text-[32px] font-extrabold leading-none text-white">
             {m.value}
-            <span className="text-base font-semibold text-gray-400">{m.suffix}</span>
+            <span className="text-sm font-medium text-white/40">{m.suffix}</span>
           </p>
         </div>
       ))}
@@ -72,25 +75,25 @@ type AnalysisScoreTrendChartProps = {
 // oldest -> newest (page.tsx handles the reversal before passing it in).
 export function AnalysisScoreTrendChart({ data }: AnalysisScoreTrendChartProps) {
   return (
-    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 mb-6">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center">
-          <TrendingUp className="w-5 h-5 text-indigo-500" />
+    <div className="mb-6 w-full rounded-3xl border border-white/[0.07] bg-[#151221]/70 p-8 shadow-[0px_16px_32px_0px_rgba(0,0,0,0.25)] backdrop-blur-[20px]">
+      <div className="mb-6 flex items-center gap-3.5">
+        <div className="flex items-center justify-center rounded-xl border border-violet-500/20 bg-violet-500/10 p-2.5">
+          <TrendingUp className="size-5 text-violet-400" />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-gray-900">ATS Score Trend</h2>
-          <p className="text-sm text-gray-400">Your progress across all submissions</p>
+          <h2 className="text-lg font-bold text-white">ATS Score Trend</h2>
+          <p className="text-[13px] font-normal text-white/60">Your progress across all submissions</p>
         </div>
       </div>
       <div className="h-48">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
             <XAxis
               dataKey="name"
               fontSize={11}
               fontWeight={700}
-              tick={{ fill: '#9ca3af' }}
+              tick={{ fill: 'rgba(255,255,255,0.4)' }}
               axisLine={false}
               tickLine={false}
             />
@@ -101,26 +104,29 @@ export function AnalysisScoreTrendChart({ data }: AnalysisScoreTrendChartProps) 
               domain={[50, 100]}
               fontSize={11}
               fontWeight={700}
-              tick={{ fill: '#9ca3af' }}
+              tick={{ fill: 'rgba(255,255,255,0.4)' }}
               axisLine={false}
               tickLine={false}
             />
             <Tooltip
               contentStyle={{
                 borderRadius: '12px',
-                border: 'none',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                background: '#151221',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
                 fontSize: '12px',
                 fontWeight: 700,
+                color: '#fff',
               }}
+              labelStyle={{ color: 'rgba(255,255,255,0.6)' }}
             />
             <Line
               type="monotone"
               dataKey="score"
-              stroke="#6366f1"
+              stroke="#a78bfa"
               strokeWidth={3}
-              dot={{ fill: '#6366f1', r: 5 }}
-              activeDot={{ r: 7 }}
+              dot={{ fill: '#a78bfa', stroke: '#0c0a14', strokeWidth: 2, r: 5 }}
+              activeDot={{ r: 7, fill: '#d946ef' }}
             />
           </LineChart>
         </ResponsiveContainer>
@@ -133,17 +139,17 @@ export function AnalysisScoreTrendChart({ data }: AnalysisScoreTrendChartProps) 
 
 export function AnalysisHistoryEmptyState() {
   return (
-    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-12 text-center">
-      <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
-        <FileText className="w-7 h-7 text-indigo-400" />
+    <div className="rounded-3xl border border-white/[0.07] bg-[#151221]/70 p-12 text-center shadow-[0px_16px_32px_0px_rgba(0,0,0,0.25)] backdrop-blur-[20px]">
+      <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl border border-violet-500/20 bg-violet-500/10">
+        <FileText className="size-7 text-violet-400" />
       </div>
-      <h2 className="text-lg font-bold text-gray-900 mb-1">No analyses yet</h2>
-      <p className="text-sm text-gray-400 mb-6">
+      <h2 className="mb-1 text-lg font-bold text-white">No analyses yet</h2>
+      <p className="mb-6 text-sm text-white/40">
         Upload a resume to see your ATS score and analysis history here.
       </p>
       <Link
         href="/dashboard"
-        className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-colors"
+        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#8b5cf6] to-[#d946ef] px-5 py-2.5 text-sm font-bold text-white shadow-[0px_4px_6px_0px_rgba(139,92,246,0.25)] transition-opacity hover:opacity-90"
       >
         Upload a resume
       </Link>
@@ -166,11 +172,6 @@ type DeleteAnalysisModalProps = {
 //
 // Actions: the Delete button confirms the deletion; the X icon, backdrop
 // click, and Escape all back out via onClose.
-//
-// Note: the Delete button and its wrapping alignment div use inline
-// `style` instead of Tailwind utility classes (`bg-red-600`,
-// `flex justify-end`) to sidestep purge/JIT setups where dynamically
-// added classes don't make it into the generated CSS.
 export function DeleteAnalysisModal({ record, onClose, onConfirm }: DeleteAnalysisModalProps) {
   const open = record !== null;
 
@@ -188,33 +189,32 @@ export function DeleteAnalysisModal({ record, onClose, onConfirm }: DeleteAnalys
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="delete-analysis-title"
-        className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl"
+        className="w-full max-w-sm rounded-2xl border border-white/[0.08] bg-[#151221] p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between mb-4">
-          <h3 id="delete-analysis-title" className="text-base font-bold text-gray-900">
+        <div className="mb-4 flex items-start justify-between">
+          <h3 id="delete-analysis-title" className="text-base font-bold text-white">
             Delete this analysis?
           </h3>
-          <button onClick={onClose} aria-label="Close dialog" className="text-gray-400 hover:text-gray-600">
-            <X className="w-4 h-4" />
+          <button onClick={onClose} aria-label="Close dialog" className="text-white/40 hover:text-white/70">
+            <X className="size-4" />
           </button>
         </div>
-        <p className="text-sm text-gray-500">
-          This will permanently remove{' '}
-          <span className="font-semibold text-gray-700">{record.filename}</span> from your history.
+        <p className="text-sm text-white/60">
+          This will permanently remove <span className="font-semibold text-white">{record.filename}</span> from
+          your history.
         </p>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+        <div className="mt-5 flex justify-end">
           <button
             onClick={onConfirm}
-            style={{ backgroundColor: '#dc2626', color: '#ffffff' }}
-            className="px-4 py-2 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity"
+            className="rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white transition-opacity hover:opacity-90"
           >
             Delete
           </button>

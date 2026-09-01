@@ -25,6 +25,7 @@ export const dynamic = 'force-dynamic';
 type Section = {
   icon: LucideIcon;
   iconBg: string;
+  iconBorder: string;
   iconColor: string;
   title: string;
   description: string;
@@ -34,8 +35,9 @@ type Section = {
 const SECTIONS: Section[] = [
   {
     icon: FileText,
-    iconBg: 'bg-indigo-50',
-    iconColor: 'text-indigo-500',
+    iconBg: 'bg-violet-500/10',
+    iconBorder: 'border-violet-500/20',
+    iconColor: 'text-violet-400',
     title: 'Information We Collect',
     description: 'What we ask for when you use Aura',
     content: [
@@ -51,8 +53,9 @@ const SECTIONS: Section[] = [
   },
   {
     icon: Sparkles,
-    iconBg: 'bg-amber-50',
-    iconColor: 'text-amber-500',
+    iconBg: 'bg-amber-500/10',
+    iconBorder: 'border-amber-500/20',
+    iconColor: 'text-amber-400',
     title: 'How We Use Your Information',
     description: 'What your data powers inside the app',
     content: [
@@ -68,8 +71,9 @@ const SECTIONS: Section[] = [
   },
   {
     icon: ShieldCheck,
-    iconBg: 'bg-green-50',
-    iconColor: 'text-green-600',
+    iconBg: 'bg-emerald-500/10',
+    iconBorder: 'border-emerald-500/20',
+    iconColor: 'text-emerald-400',
     title: 'Data Storage and Security',
     description: 'How and where your data is kept',
     content: [
@@ -85,8 +89,9 @@ const SECTIONS: Section[] = [
   },
   {
     icon: Share2,
-    iconBg: 'bg-indigo-50',
-    iconColor: 'text-indigo-500',
+    iconBg: 'bg-violet-500/10',
+    iconBorder: 'border-violet-500/20',
+    iconColor: 'text-violet-400',
     title: 'Sharing of Information',
     description: 'Who we do — and don\u2019t — share data with',
     content: [
@@ -106,8 +111,9 @@ const SECTIONS: Section[] = [
   },
   {
     icon: UserCheck,
-    iconBg: 'bg-amber-50',
-    iconColor: 'text-amber-500',
+    iconBg: 'bg-amber-500/10',
+    iconBorder: 'border-amber-500/20',
+    iconColor: 'text-amber-400',
     title: 'Your Rights',
     description: 'What you can do with your own data',
     content: [
@@ -127,8 +133,9 @@ const SECTIONS: Section[] = [
   },
   {
     icon: Cookie,
-    iconBg: 'bg-indigo-50',
-    iconColor: 'text-indigo-500',
+    iconBg: 'bg-violet-500/10',
+    iconBorder: 'border-violet-500/20',
+    iconColor: 'text-violet-400',
     title: 'Cookies',
     description: 'How we use cookies on Aura',
     content: [
@@ -144,8 +151,9 @@ const SECTIONS: Section[] = [
   },
   {
     icon: Baby,
-    iconBg: 'bg-green-50',
-    iconColor: 'text-green-600',
+    iconBg: 'bg-emerald-500/10',
+    iconBorder: 'border-emerald-500/20',
+    iconColor: 'text-emerald-400',
     title: "Children's Privacy",
     description: 'Our policy on users under 18',
     content: [
@@ -157,8 +165,9 @@ const SECTIONS: Section[] = [
   },
   {
     icon: RefreshCw,
-    iconBg: 'bg-amber-50',
-    iconColor: 'text-amber-500',
+    iconBg: 'bg-amber-500/10',
+    iconBorder: 'border-amber-500/20',
+    iconColor: 'text-amber-400',
     title: 'Changes to This Policy',
     description: 'How we handle updates to this page',
     content: [
@@ -170,8 +179,9 @@ const SECTIONS: Section[] = [
   },
   {
     icon: Mail,
-    iconBg: 'bg-indigo-50',
-    iconColor: 'text-indigo-500',
+    iconBg: 'bg-violet-500/10',
+    iconBorder: 'border-violet-500/20',
+    iconColor: 'text-violet-400',
     title: 'Contact Us',
     description: 'Reach us with questions or concerns',
     content: [
@@ -207,26 +217,32 @@ export default async function PrivacyPolicyPage({
     : 'Back to Upload';
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 pb-20 px-4">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+    <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#0c0a14] pt-20">
+      {/* Ambient background orbs */}
+      <div className="pointer-events-none absolute -left-[100px] top-[150px] size-[500px] rounded-full bg-fuchsia-600/30 blur-[110px]" />
+      <div className="pointer-events-none absolute -right-[150px] top-[100px] size-[550px] rounded-full bg-violet-600/25 blur-[120px]" />
+      <div className="pointer-events-none absolute left-[35%] top-[550px] size-[450px] rounded-full bg-cyan-500/20 blur-[110px]" />
+
+      {/* Sub-header / back link */}
+      <div className="relative z-10 flex w-full shrink-0 items-center justify-between px-8 pb-8 pt-5 md:px-16">
         <Link
           href={backHref}
-          className="flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-indigo-600 py-2.5 transition-colors"
+          className="flex items-center gap-2 text-sm font-semibold text-fuchsia-500 transition-colors hover:text-fuchsia-400"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="size-4" />
           {backLabel}
         </Link>
       </div>
 
-      <div className="max-w-7xl mx-auto">
+      <div className="relative z-10 flex w-full flex-col px-8 pb-16 md:px-16">
         <div className="mb-8">
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Privacy Policy</h1>
-          <p className="text-sm text-gray-400 mt-1">Last Updated: June 17, 2025</p>
-          <p className="text-sm text-gray-500 mt-3 leading-relaxed">
+          <h1 className="text-[32px] font-extrabold leading-normal text-white [text-shadow:none]">Privacy Policy</h1>
+          <p className="mt-1 text-sm text-white/40">Last Updated: June 17, 2025</p>
+          <p className="mt-3 max-w-4xl text-sm leading-relaxed text-white/60">
             This Privacy Policy explains how Aura collects, uses, and
             protects the personal information of users in the Philippines in accordance
             with the{' '}
-            <span className="font-semibold text-gray-700">
+            <span className="font-semibold text-white/80">
               Data Privacy Act of 2012 (Republic Act No. 10173)
             </span>
             .
@@ -238,15 +254,17 @@ export default async function PrivacyPolicyPage({
           return (
             <div
               key={section.title}
-              className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 mb-6"
+              className="mb-6 w-full rounded-3xl border border-white/[0.07] bg-[#151221]/70 p-7 shadow-[0px_16px_32px_0px_rgba(0,0,0,0.25)] backdrop-blur-[20px]"
             >
-              <div className="flex items-center gap-3 mb-4">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${section.iconBg}`}>
-                  <Icon className={`w-5 h-5 ${section.iconColor}`} />
+              <div className="mb-5 flex items-center gap-3.5">
+                <div
+                  className={`flex size-10 shrink-0 items-center justify-center rounded-xl border ${section.iconBg} ${section.iconBorder}`}
+                >
+                  <Icon className={`size-5 ${section.iconColor}`} />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900">{section.title}</h2>
-                  <p className="text-sm text-gray-400">{section.description}</p>
+                  <h2 className="text-lg font-bold text-white">{section.title}</h2>
+                  <p className="text-[13px] text-white/50">{section.description}</p>
                 </div>
               </div>
 
@@ -254,9 +272,9 @@ export default async function PrivacyPolicyPage({
                 {section.content.map((item, i) => (
                   <div key={i}>
                     {item.subtitle && (
-                      <h3 className="text-sm font-bold text-gray-900 mb-1">{item.subtitle}</h3>
+                      <h3 className="mb-1 text-sm font-bold text-white">{item.subtitle}</h3>
                     )}
-                    <p className="text-sm text-gray-500 leading-relaxed">{item.text}</p>
+                    <p className="text-sm leading-relaxed text-white/60">{item.text}</p>
                   </div>
                 ))}
               </div>

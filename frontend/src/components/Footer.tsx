@@ -23,20 +23,20 @@ export const Footer = () => {
   const contactHref = from ? `/contact-us?from=${from}` : '/contact-us';
 
   return (
-    <footer className="mt-20 py-10 border-t border-gray-100 bg-gray-50/50">
-      <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between text-gray-400 text-sm">
+    <footer className="border-t border-white/[0.07] bg-[#0c0a14] py-9">
+      <div className="mx-auto flex max-w-7xl flex-col items-center justify-between px-4 text-sm text-white/40 md:flex-row">
         <div className="mb-4 md:mb-0">
           © 2026 Aura. All rights reserved.
         </div>
 
         <div className="flex gap-8">
-          <Link href={privacyHref} className="hover:text-gray-600 transition-colors">
+          <Link href={privacyHref} className="transition-colors hover:text-white/60">
             Privacy Policy
           </Link>
-          <Link href={termsHref} className="hover:text-gray-600 transition-colors">
+          <Link href={termsHref} className="transition-colors hover:text-white/60">
             Terms of Service
           </Link>
-          <Link href={contactHref} className="hover:text-gray-600 transition-colors">
+          <Link href={contactHref} className="transition-colors hover:text-white/60">
             Contact Us
           </Link>
         </div>

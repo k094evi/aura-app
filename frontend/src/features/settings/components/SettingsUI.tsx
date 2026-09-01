@@ -4,11 +4,11 @@ import { useEffect, useRef, type ElementType, type ReactNode } from 'react';
 
 /* -------------------------------------------------------------------------
  * Shared focus-visible ring, reused on every interactive element so
- * keyboard focus reads consistently across the settings page (previously
- * only the text inputs had a focus treatment).
+ * keyboard focus reads consistently across the settings page. Fuchsia to
+ * match the dark theme's accent color instead of the old indigo.
  * ---------------------------------------------------------------------- */
 export const FOCUS_RING =
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2';
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0c0a14]';
 
 /* -------------------------------------------------------------------------
  * Modal — shared dialog shell used by every popover on the settings page
@@ -95,7 +95,7 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
@@ -104,7 +104,7 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={labelledBy}
         tabIndex={-1}
-        className={`bg-white rounded-2xl p-6 w-full shadow-xl outline-none ${maxWidthClassName}`}
+        className={`w-full rounded-2xl border border-white/[0.08] bg-[#151221] p-6 shadow-2xl outline-none ${maxWidthClassName}`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}
@@ -130,14 +130,16 @@ export function ToggleRow({ icon: Icon, title, description, checked, onChange, d
   const labelId = `toggle-label-${title.toLowerCase().replace(/\s+/g, '-')}`;
 
   return (
-    <div className="flex items-center justify-between gap-4 py-4">
-      <div className="flex items-start gap-3 min-w-0">
-        <div className="w-9 h-9 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center shrink-0 mt-0.5">
-          <Icon className="w-4 h-4 text-gray-400" />
+    <div className="flex items-center justify-between gap-4 border-b border-white/[0.04] py-4 last:border-b-0">
+      <div className="flex min-w-0 items-start gap-4">
+        <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-[10px] border border-white/[0.07] bg-white/[0.03]">
+          <Icon className="size-[18px] text-white/50" />
         </div>
         <div className="min-w-0">
-          <p id={labelId} className="text-sm font-bold text-gray-900">{title}</p>
-          <p className="text-xs text-gray-400 mt-0.5">{description}</p>
+          <p id={labelId} className="text-[15px] font-semibold text-white">
+            {title}
+          </p>
+          <p className="mt-1 text-[13px] leading-[1.4] text-white/50">{description}</p>
         </div>
       </div>
       <button
@@ -160,8 +162,8 @@ export function ToggleRow({ icon: Icon, title, description, checked, onChange, d
           padding: 0,
           cursor: disabled ? 'not-allowed' : 'pointer',
           opacity: disabled ? 0.5 : 1,
-          backgroundColor: checked ? '#4f46e5' : '#e5e7eb',
-          transition: 'background-color 0.2s ease',
+          background: checked ? 'linear-gradient(to right, #8b5cf6, #d946ef)' : 'rgba(255,255,255,0.12)',
+          transition: 'background 0.2s ease',
         }}
       >
         <span
@@ -173,7 +175,7 @@ export function ToggleRow({ icon: Icon, title, description, checked, onChange, d
             height: '20px',
             borderRadius: '9999px',
             backgroundColor: '#ffffff',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.4)',
             transform: checked ? 'translateX(20px)' : 'translateX(0)',
             transition: 'transform 0.2s ease',
           }}
@@ -207,15 +209,15 @@ export function ActionRow({
 }) {
   const content = (
     <>
-      <div className="flex items-start gap-3 min-w-0">
+      <div className="flex min-w-0 flex-1 items-center gap-4">
         {Icon && (
-          <div className="w-9 h-9 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center shrink-0 mt-0.5">
-            <Icon className="w-4 h-4 text-gray-400" />
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-[10px] border border-white/[0.07] bg-white/[0.03]">
+            <Icon className="size-[18px] text-white/50" />
           </div>
         )}
-        <div className="min-w-0">
-          <p className="text-sm font-bold text-gray-900">{title}</p>
-          <p className="text-xs text-gray-400 mt-0.5">{description}</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-semibold text-white">{title}</p>
+          <p className="mt-1 text-[13px] leading-[1.4] text-white/50">{description}</p>
         </div>
       </div>
       {trailing}
@@ -223,7 +225,11 @@ export function ActionRow({
   );
 
   if (!onClick) {
-    return <div className="flex items-center justify-between gap-4 py-4">{content}</div>;
+    return (
+      <div className="flex items-center justify-between gap-4 border-b border-white/[0.04] py-4 last:border-b-0">
+        {content}
+      </div>
+    );
   }
 
   return (
@@ -231,7 +237,7 @@ export function ActionRow({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`w-full flex items-center justify-between gap-4 py-4 text-left group rounded-xl disabled:cursor-not-allowed ${FOCUS_RING}`}
+      className={`flex w-full items-center justify-between gap-4 rounded-xl border-b border-white/[0.04] py-4 text-left last:border-b-0 disabled:cursor-not-allowed ${FOCUS_RING}`}
     >
       {content}
     </button>
@@ -239,36 +245,34 @@ export function ActionRow({
 }
 
 /* -------------------------------------------------------------------------
- * SectionCard — the white card shell (icon + title + description header,
+ * SectionCard — the glass card shell (icon + title + description header,
  * divided list of rows) used for Account & Security and Notifications.
  * ---------------------------------------------------------------------- */
 export function SectionCard({
   icon: Icon,
-  iconBg,
-  iconColor,
   title,
   description,
   children,
 }: {
   icon: ElementType;
-  iconBg: string;
-  iconColor: string;
+  iconBg?: string;
+  iconColor?: string;
   title: string;
   description: string;
   children: ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 mb-6">
-      <div className="flex items-center gap-3 mb-2">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${iconBg}`}>
-          <Icon className={`w-5 h-5 ${iconColor}`} />
+    <div className="mb-6 w-full rounded-3xl border border-white/[0.07] bg-[#151221]/70 p-7 shadow-[0px_16px_32px_0px_rgba(0,0,0,0.25)] backdrop-blur-[20px]">
+      <div className="mb-1 flex items-center gap-3.5">
+        <div className="flex shrink-0 items-center justify-center rounded-xl border border-violet-500/20 bg-violet-500/10 p-2.5">
+          <Icon className="size-5 text-violet-400" />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-gray-900">{title}</h2>
-          <p className="text-sm text-gray-400">{description}</p>
+          <h2 className="text-lg font-bold text-white">{title}</h2>
+          <p className="text-[13px] text-white/50">{description}</p>
         </div>
       </div>
-      <div className="divide-y divide-gray-100">{children}</div>
+      <div>{children}</div>
     </div>
   );
 }
