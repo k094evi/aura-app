@@ -105,9 +105,9 @@ export default function DashboardPage() {
 
           {/* Main dashboard content */}
           <div className="min-w-0 flex-1 space-y-4">
-            <KeywordSkillOptimization skillGaps={result.skill_gaps} />
-
             <CompanyMatchCarousel companies={result.companies} />
+
+            <KeywordSkillOptimization skillGaps={result.skill_gaps} />
 
             <FormattingReadability grammarIssues={result.grammar_issues} />
 

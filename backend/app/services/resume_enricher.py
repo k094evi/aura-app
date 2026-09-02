@@ -38,8 +38,10 @@
 #   5. _detect_skill_gaps — cross-references the resume against both the
 #      skill taxonomy and the vocabulary of the user's top-matching job
 #      postings to flag which skills are present vs. missing.
-#   6. _check_grammar — regex-based style/tone checks (passive voice,
-#      first-person pronouns, resume clichés, filler words, etc.).
+#   6. _check_grammar — Formatting & Readability checks: visual flow
+#      (bullet-glyph consistency, date-format consistency, wall-of-text
+#      detection) plus linguistic clarity (passive voice, first-person
+#      pronouns, resume clichés, filler words, overlong sentences, etc.).
 #   7. enrich_resume_local() — PUBLIC ENTRY POINT. Ties everything above
 #      together: runs all 5 dimension scorers, computes the weighted
 #      overall ATS score, and returns one dict shaped exactly like the
@@ -93,6 +95,14 @@ from typing import Optional
 
 from app.models.schemas import ParsedResume
 
+# pyspellchecker is an optional dependency for the spelling check below
+# (add "pyspellchecker" to requirements.txt). If it isn't installed, the
+# spelling check is skipped gracefully rather than crashing the pipeline.
+try:
+    from spellchecker import SpellChecker as _SpellChecker
+except ImportError:
+    _SpellChecker = None
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SKILL TAXONOMY
@@ -137,7 +147,7 @@ IMPACT_PATTERNS = [
     r"\b\d+\s*(million|billion|thousand|hundred)\b",
 ]
 
-# Grammar / style anti-patterns
+# Grammar / style anti-patterns (LINGUISTIC CLARITY — sentence-level wording)
 GRAMMAR_CHECKS = [
     {
         "pattern": r"\b(responsible for|in charge of|duties included|tasked with)\b",
@@ -170,6 +180,106 @@ GRAMMAR_CHECKS = [
         "text": "Remove resume clichés like 'hardworking' or 'passionate' — show these traits through accomplishments instead.",
     },
 ]
+
+# Bullet-point glyphs we recognize as "this line is a bullet".
+_BULLET_GLYPHS = ["•", "◦", "▪", "‣", "●", "-", "*", "–", "—"]
+_BULLET_LINE_RE = re.compile(r"^\s*([•◦▪‣●\-*–—]|\d{1,2}[.)])\s+\S")
+
+# Date-format families. If a resume mixes 2+ of these, dates read inconsistently.
+_DATE_FORMATS = {
+    "Month Year (e.g. 'Jan 2020')": re.compile(
+        r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{4}\b", re.IGNORECASE
+    ),
+    "MM/YYYY or MM-YYYY": re.compile(r"\b\d{1,2}[/\-]\d{4}\b"),
+    "YYYY–YYYY range": re.compile(r"\b\d{4}\s*[-–—]\s*(?:\d{4}|present|current)\b", re.IGNORECASE),
+}
+
+# A sentence longer than this (in words) is hard to scan at a glance.
+MAX_READABLE_SENTENCE_WORDS = 35
+# A single line/bullet longer than this (in chars) with no break suggests a wall-of-text bullet.
+MAX_READABLE_LINE_CHARS = 280
+# A resume below this word count doesn't have enough text for the visual-flow
+# and readability checks to say anything meaningful — flag that explicitly
+# instead of silently falling through to a false "no issues" result.
+MIN_WORDS_FOR_READABILITY_CHECK = 120
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CONTACT INFO PATTERNS
+# ─────────────────────────────────────────────────────────────────────────────
+
+_EMAIL_RE = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
+_PHONE_RE = re.compile(r"(\+?\d[\d\-\.\s\(\)]{7,}\d)")
+_LINKEDIN_RE = re.compile(r"linkedin\.com/in/[^\s]+", re.IGNORECASE)
+_URL_RE = re.compile(r"(https?://|www\.)[^\s]+", re.IGNORECASE)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION ORDER
+# ATS-friendly convention: Summary -> Experience -> Education -> Skills.
+# Detected via the earliest position of any representative keyword for each
+# section within raw_text (a lightweight proxy — resume_enricher only has
+# ParsedResume's extracted blocks, not the parser's original header order).
+# ─────────────────────────────────────────────────────────────────────────────
+
+_SECTION_ORDER_KEYWORDS = {
+    "summary":    ["summary", "objective", "professional profile"],
+    "experience": ["experience", "employment", "work history"],
+    "education":  ["education", "academic background"],
+    "skills":     ["skills", "core competencies", "technical skills"],
+}
+_IDEAL_SECTION_ORDER = ["summary", "experience", "education", "skills"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EXPERIENCE ROLE SPLITTING
+# Several checks below (bullet count, tense consistency, achievement ratio)
+# need to reason about ONE job entry at a time rather than the whole
+# experience_block as a single blob.
+# ─────────────────────────────────────────────────────────────────────────────
+
+MIN_BULLETS_PER_ROLE = 2
+MAX_BULLETS_PER_ROLE = 8
+
+# Common resume action verbs, paired present-tense / past-tense forms.
+# Used for the within-role tense-consistency check — deliberately a small,
+# high-confidence list (regular -ed verbs only) rather than a full NLP
+# tense tagger, to keep this dependency-free and predictable.
+_PRESENT_TENSE_VERBS = {
+    "lead", "manage", "build", "develop", "design", "create", "own",
+    "drive", "oversee", "coordinate", "analyze", "write", "run",
+    "deliver", "implement", "launch", "support", "maintain", "optimize",
+    "train", "mentor", "collaborate", "plan", "execute", "streamline",
+    "spearhead", "facilitate", "monitor", "operate", "handle",
+}
+_PAST_TENSE_VERBS = {
+    "led", "managed", "built", "developed", "designed", "created", "owned",
+    "drove", "oversaw", "coordinated", "analyzed", "wrote", "ran",
+    "delivered", "implemented", "launched", "supported", "maintained",
+    "optimized", "trained", "mentored", "collaborated", "planned",
+    "executed", "streamlined", "spearheaded", "facilitated", "monitored",
+    "operated", "handled",
+}
+
+# Bullets opening with the same first verb this many times (or more) reads
+# as repetitive rather than varied.
+VERB_REPETITION_THRESHOLD = 4
+
+# Words the spellchecker's general-English dictionary doesn't know but that
+# are legitimate, common resume/tech vocabulary — excluded from spelling
+# flags so real typos aren't buried under false positives.
+SPELLING_WHITELIST = {
+    "html", "css", "sql", "nosql", "api", "apis", "aws", "gcp", "azure",
+    "devops", "cicd", "saas", "paas", "iaas", "seo", "sem", "crm", "erp",
+    "kpi", "kpis", "roi", "okr", "okrs", "ux", "ui", "nlp",
+    "python", "java", "javascript", "typescript", "golang", "kotlin",
+    "django", "flask", "fastapi", "react", "vue", "angular", "node",
+    "kubernetes", "docker", "terraform", "jenkins", "github", "gitlab",
+    "jira", "figma", "sketch", "tableau", "excel", "powerpoint",
+    "postgresql", "mysql", "mongodb", "redis", "graphql", "microservices",
+    "tensorflow", "pytorch", "scikit", "numpy", "pandas", "linkedin",
+    "onboarding", "fullstack", "frontend", "backend", "hyperparameter",
+    "hyperparameters", "webhook", "webhooks", "middleware", "endpoint",
+    "endpoints", "codebase", "workflow", "workflows", "dashboarding",
+    "cybersecurity", "scrum", "kanban", "agile",
+}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -759,39 +869,508 @@ def _detect_skill_gaps(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# GRAMMAR / STYLE CHECKER
+# FORMATTING & READABILITY CHECKER
+# Two families of checks, both feeding the same "grammar_issues" output list
+# (kept as-is for frontend/API compatibility):
+#
+#   1. VISUAL FLOW  — structural/visual consistency: bullet glyphs, date
+#      formats, wall-of-text bullets. These affect how easily a human (and
+#      some ATS parsers) can scan the document, independent of wording.
+#   2. LINGUISTIC CLARITY — sentence-level wording: passive voice, tense,
+#      filler, clichés, first-person pronouns, overlong sentences.
+#
+# Each issue carries a "type" so the frontend can group/label them; issues
+# are deduped by type (max one of each) and capped at 6 total, ordered
+# visual-flow first since structural issues are usually higher-impact and
+# faster to fix than wording tweaks.
 # ─────────────────────────────────────────────────────────────────────────────
+
+MAX_FORMATTING_READABILITY_ISSUES = 8
+
+
+def _bulleted_lines(block: Optional[str]) -> list[str]:
+    """Returns lines within a block that open with a recognized bullet glyph."""
+    if not block:
+        return []
+    return [line for line in block.split("\n") if _BULLET_LINE_RE.match(line)]
+
+
+def _check_content_sufficiency(resume: ParsedResume) -> Optional[dict]:
+    """
+    Flags resumes too short for the other checks to meaningfully evaluate.
+    Without this, a near-empty resume triggers none of the pattern-based
+    checks below (nothing to mismatch) and silently falls through to a
+    false-positive "no issues detected" result.
+    """
+    if resume.word_count < MIN_WORDS_FOR_READABILITY_CHECK:
+        return {
+            "type": "Content",
+            "text": f"Resume has very little text ({resume.word_count} words) — "
+                    "there isn't enough content here to reliably assess formatting and "
+                    "readability. Add more detail to your experience section first.",
+        }
+    return None
+
+
+def _check_bullet_consistency(resume: ParsedResume) -> Optional[dict]:
+    """
+    Flags mixed bullet glyphs (e.g. some lines use '•', others '-' or '*')
+    within the same section. Inconsistent bullets are one of the most common
+    "looks unpolished" signals recruiters and ATS renderers pick up on.
+    """
+    lines = _bulleted_lines(resume.experience_block) + _bulleted_lines(resume.projects_block)
+    if len(lines) < 3:
+        return None  # not enough bulleted content to judge consistency
+
+    glyphs_used: set[str] = set()
+    for line in lines:
+        m = _BULLET_LINE_RE.match(line)
+        glyphs_used.add(m.group(1)[0])  # first char of the matched bullet token
+
+    if len(glyphs_used) > 1:
+        example = ", ".join(sorted(glyphs_used)[:3])
+        return {
+            "type": "Formatting",
+            "text": f"Bullet style is inconsistent across sections (mixing '{example}') — "
+                    "pick one bullet glyph and use it throughout for a cleaner, more scannable layout.",
+        }
+    return None
+
+
+def _check_date_format_consistency(resume: ParsedResume) -> Optional[dict]:
+    """
+    Flags mixed date formats (e.g. 'Jan 2020' alongside '01/2020') anywhere
+    in the resume. Inconsistent dates disrupt visual scanning and can also
+    confuse ATS date-range parsing.
+    """
+    text = resume.raw_text or ""
+    families_found = [name for name, pattern in _DATE_FORMATS.items() if pattern.search(text)]
+    if len(families_found) > 1:
+        return {
+            "type": "Consistency",
+            "text": "Date formatting is inconsistent (mixing styles like "
+                    f"{' and '.join(families_found[:2])}) — standardize on one format throughout.",
+        }
+    return None
+
+
+def _check_wall_of_text(resume: ParsedResume) -> Optional[dict]:
+    """
+    Flags an experience section that reads as dense paragraphs rather than
+    scannable bullets — either no bullet glyphs at all, or individual
+    lines/bullets that run long without a break.
+    """
+    block = resume.experience_block
+    if not block or len(block.strip()) < 80:
+        return None
+
+    bulleted = _bulleted_lines(block)
+    lines = [l for l in block.split("\n") if l.strip()]
+
+    if not bulleted and len(lines) <= 2:
+        return {
+            "type": "Readability",
+            "text": "Experience section reads as a dense paragraph rather than bullet points — "
+                    "break accomplishments into short bullets so recruiters can scan them in seconds.",
+        }
+
+    longest = max((len(l) for l in lines), default=0)
+    if longest > MAX_READABLE_LINE_CHARS:
+        return {
+            "type": "Readability",
+            "text": "Some experience lines run very long without a break — "
+                    "split dense bullets into two shorter ones focused on a single accomplishment each.",
+        }
+    return None
+
+
+def _check_sentence_length(resume: ParsedResume) -> Optional[dict]:
+    """
+    Flags overly long sentences (35+ words) in the summary/experience text,
+    which hurt both human readability and ATS keyword-proximity parsing.
+    """
+    text = " ".join(filter(None, [resume.summary_block, resume.experience_block]))
+    if not text:
+        return None
+
+    for sentence in re.split(r"[.!?\n]+", text):
+        words = sentence.split()
+        if len(words) > MAX_READABLE_SENTENCE_WORDS:
+            preview = " ".join(words[:12]) + "…"
+            return {
+                "type": "Sentence Length",
+                "text": f"Found an overly long sentence (\"{preview}\") — "
+                        "break long sentences into two shorter ones for easier scanning.",
+            }
+    return None
+
+
+def _check_contact_info(resume: ParsedResume) -> Optional[dict]:
+    """
+    Flags missing email, phone, or LinkedIn/portfolio URL. Contact info can
+    parse fine as *text* (so resume_parser.py's "looks like a resume" gate
+    passes) while still being incomplete for a human recruiter or an ATS's
+    contact-routing fields — e.g. an email present but no phone, or no
+    LinkedIn/portfolio link at all.
+    """
+    text = resume.raw_text or ""
+    missing = []
+    if not _EMAIL_RE.search(text):
+        missing.append("email address")
+    if not _PHONE_RE.search(text):
+        missing.append("phone number")
+    if not (_LINKEDIN_RE.search(text) or _URL_RE.search(text)):
+        missing.append("LinkedIn or portfolio URL")
+
+    if missing:
+        return {
+            "type": "Contact",
+            "text": f"Missing {', '.join(missing)} — recruiters and ATS systems "
+                    "both rely on complete, correctly formatted contact details "
+                    "to route or reach out about your application.",
+        }
+    return None
+
+
+def _check_section_order(resume: ParsedResume) -> Optional[dict]:
+    """
+    Flags a section order that deviates from the ATS-friendly convention
+    (Summary -> Experience -> Education -> Skills). Detected via the
+    earliest position of each section's representative keywords in
+    raw_text, since ParsedResume only exposes extracted blocks, not the
+    parser's original header order.
+    """
+    text = (resume.raw_text or "").lower()
+    positions: list[tuple[int, str]] = []
+    for section, kws in _SECTION_ORDER_KEYWORDS.items():
+        best = None
+        for kw in kws:
+            idx = text.find(kw)
+            if idx != -1 and (best is None or idx < best):
+                best = idx
+        if best is not None:
+            positions.append((best, section))
+
+    if len(positions) < 3:
+        return None  # not enough detected sections to judge order meaningfully
+
+    positions.sort()
+    found_order = [s for _, s in positions]
+    ideal_relevant = [s for s in _IDEAL_SECTION_ORDER if s in found_order]
+
+    if found_order != ideal_relevant:
+        pretty = " → ".join(s.title() for s in found_order)
+        return {
+            "type": "Section Order",
+            "text": f"Section order ({pretty}) doesn't follow the ATS-friendly "
+                    "convention (Summary → Experience → Education → Skills) — "
+                    "reordering helps both parsers and human reviewers scan faster.",
+        }
+    return None
+
+
+def _split_experience_roles(experience_block: Optional[str]) -> list[dict]:
+    """
+    Splits experience_block into individual role entries using a lightweight
+    heuristic: consecutive non-bullet lines (job title, company, dates)
+    accumulate into a role's header; the bullet lines that follow become
+    that role's content. A new non-bullet line after bullets have already
+    started signals the start of the next role.
+
+    Returns a list of {"header": str, "bullets": list[str]} dicts — only
+    for roles that actually have bullet content, since role-level checks
+    below need bullets to evaluate.
+    """
+    if not experience_block:
+        return []
+
+    lines = [l for l in experience_block.split("\n") if l.strip()]
+    roles: list[dict] = []
+    header_parts: list[str] = []
+    current: Optional[dict] = None
+
+    for line in lines:
+        if _BULLET_LINE_RE.match(line):
+            if current is None:
+                current = {"header": " — ".join(header_parts) or "Unlabeled role", "bullets": []}
+                roles.append(current)
+                header_parts = []
+            current["bullets"].append(line.strip())
+        else:
+            if current is not None and current["bullets"]:
+                current = None  # previous role's bullets are done; this starts a new one
+            header_parts.append(line.strip())
+
+    return [r for r in roles if r["bullets"]]
+
+
+def _bullet_first_word(line: str) -> str:
+    """Strips a bullet line's glyph/number prefix and returns its first word."""
+    text = re.sub(r"^\s*([•◦▪‣●\-*–—]|\d{1,2}[.)])\s+", "", line).strip()
+    words = text.split()
+    return words[0] if words else ""
+
+
+def _check_bullet_count_per_role(resume: ParsedResume) -> Optional[dict]:
+    """
+    Flags a role with too few bullets (<2, looks thin/unfinished) or too
+    many (>8, unfocused — the strongest accomplishments get buried).
+    """
+    roles = _split_experience_roles(resume.experience_block)
+    for role in roles:
+        n = len(role["bullets"])
+        label = role["header"] or "one of your roles"
+        if len(label) > 70:
+            label = label[:67].rstrip() + "..."
+        if n < MIN_BULLETS_PER_ROLE:
+            return {
+                "type": "Bullet Count",
+                "text": f"\"{label}\" has only {n} bullet point(s) — roles with fewer than "
+                        f"{MIN_BULLETS_PER_ROLE} bullets look thin; add more detail or "
+                        "consider merging it with a related entry.",
+            }
+        if n > MAX_BULLETS_PER_ROLE:
+            return {
+                "type": "Bullet Count",
+                "text": f"\"{label}\" has {n} bullet points — that's a lot for one role; "
+                        f"trim to your {MAX_BULLETS_PER_ROLE} strongest accomplishments so they "
+                        "don't get buried.",
+            }
+    return None
+
+
+def _check_achievement_task_ratio(resume: ParsedResume) -> Optional[dict]:
+    """
+    Flags a role where every bullet describes a duty ("managed X",
+    "responsible for Y") with zero quantified outcomes — a lower bar than
+    the whole-resume _score_impact dimension, catching a single weak role
+    even when other roles pull the overall impact score up.
+    """
+    roles = _split_experience_roles(resume.experience_block)
+    for role in roles:
+        bullets = role["bullets"]
+        if len(bullets) < 3:
+            continue  # too few bullets for the ratio to mean much
+        has_achievement = any(
+            any(re.search(p, b, re.IGNORECASE) for p in IMPACT_PATTERNS)
+            for b in bullets
+        )
+        if not has_achievement:
+            label = role["header"] or "one of your roles"
+            if len(label) > 70:
+                label = label[:67].rstrip() + "..."
+            return {
+                "type": "Impact",
+                "text": f"All {len(bullets)} bullets under \"{label}\" describe duties with no "
+                        "measurable outcome — rewrite one or two as results (numbers, %, scale) "
+                        "so the role shows impact, not just tasks.",
+            }
+    return None
+
+
+def _check_tense_consistency_per_role(resume: ParsedResume) -> Optional[dict]:
+    """
+    Flags a role whose bullets mix past-tense and present-tense opening
+    verbs (e.g. "Led the migration" next to "Manage the team"). Different
+    from the resume-wide GRAMMAR_CHECKS tense pattern, which only catches
+    the "is/are + -ing" construction — this checks internal consistency
+    within one job entry using a small paired present/past verb list.
+    """
+    roles = _split_experience_roles(resume.experience_block)
+    for role in roles:
+        bullets = role["bullets"]
+        if len(bullets) < 2:
+            continue
+        tenses_found: set[str] = set()
+        for b in bullets:
+            word = _bullet_first_word(b).lower().strip(".,;:")
+            if word in _PAST_TENSE_VERBS:
+                tenses_found.add("past")
+            elif word in _PRESENT_TENSE_VERBS:
+                tenses_found.add("present")
+        if len(tenses_found) > 1:
+            label = role["header"] or "one of your roles"
+            if len(label) > 70:
+                label = label[:67].rstrip() + "..."
+            return {
+                "type": "Tense Consistency",
+                "text": f"Bullets under \"{label}\" mix past and present tense verbs — "
+                        "use present tense for your current role and past tense for "
+                        "previous roles, consistently within each entry.",
+            }
+    return None
+
+
+def _check_verb_repetition(resume: ParsedResume) -> Optional[dict]:
+    """
+    Flags an opening action verb reused across many bullets (e.g. "Managed"
+    starting 5+ bullets). Repeated openers make bullets blur together even
+    when the underlying accomplishments differ.
+    """
+    lines = _bulleted_lines(resume.experience_block) + _bulleted_lines(resume.projects_block)
+    if len(lines) < 4:
+        return None
+
+    counts: dict[str, int] = {}
+    for line in lines:
+        word = re.sub(r"[^a-z]", "", _bullet_first_word(line).lower())
+        if len(word) < 3:
+            continue
+        counts[word] = counts.get(word, 0) + 1
+
+    if not counts:
+        return None
+
+    verb, count = max(counts.items(), key=lambda kv: kv[1])
+    if count >= VERB_REPETITION_THRESHOLD:
+        return {
+            "type": "Variety",
+            "text": f"The verb \"{verb.title()}\" opens {count} of your bullets — repeating "
+                    "the same starting verb makes accomplishments blur together; vary it with "
+                    "other strong verbs (built, drove, launched, streamlined) that fit each one.",
+        }
+    return None
+
+
+_spell_checker_instance = None
+
+
+def _get_spell_checker():
+    global _spell_checker_instance
+    if _spell_checker_instance is None and _SpellChecker is not None:
+        _spell_checker_instance = _SpellChecker(distance=1)
+    return _spell_checker_instance
+
+
+def _check_spelling(resume: ParsedResume) -> Optional[dict]:
+    """
+    Real dictionary-based spellcheck (via pyspellchecker) over the
+    summary/experience/education text — everything else in this module is
+    pattern-based, so a genuine misspelling never gets caught anywhere
+    else. Skips the check entirely if pyspellchecker isn't installed,
+    rather than failing the whole enrichment pipeline.
+
+    False-positive reduction:
+      - skills_block terms are excluded (technical/product names)
+      - words containing any uppercase letter after the first character
+        are excluded (brand names, camelCase like "JavaScript")
+      - fully-uppercase words are excluded (acronyms)
+      - a small SPELLING_WHITELIST covers common tech/resume vocabulary
+        that a general-English dictionary doesn't recognize
+      - words under 4 letters are excluded (dictionary coverage for very
+        short tokens is unreliable and produces noisy false positives)
+    """
+    spell = _get_spell_checker()
+    if spell is None:
+        return None
+
+    text = " ".join(filter(None, [
+        resume.summary_block, resume.experience_block, resume.education_block,
+    ]))
+    if len(text.split()) < 40:
+        return None  # not enough content for a meaningful spellcheck pass
+
+    skills_text = (resume.skills_block or "").lower()
+    words = re.findall(r"[A-Za-z]+", text)
+
+    candidates: list[str] = []
+    for w in words:
+        if len(w) < 4 or not w.islower():
+            continue
+        if w in skills_text or w in SPELLING_WHITELIST:
+            continue
+        candidates.append(w)
+
+    if not candidates:
+        return None
+
+    unknown = spell.unknown(candidates)
+    unknown = {w for w in unknown if w not in SPELLING_WHITELIST}
+    if not unknown:
+        return None
+
+    examples: list[str] = []
+    seen: set[str] = set()
+    for w in candidates:
+        if w in unknown and w not in seen:
+            seen.add(w)
+            examples.append(w)
+        if len(examples) >= 3:
+            break
+
+    return {
+        "type": "Spelling",
+        "text": f"Possible spelling issue(s) detected: {', '.join(examples)} — "
+                "double-check these against a dictionary; typos are one of the "
+                "most damaging things a resume can have with both recruiters and ATS parsers.",
+    }
+
 
 def _check_grammar(resume: ParsedResume) -> list[dict]:
     """
-    Runs regex-based style checks on the full resume text.
-    Returns up to 4 issues, deduped by type (one per type).
+    Runs the full Formatting & Readability check set:
+      1. Content gate: is there enough text to evaluate at all.
+      2. Contact & structure: contact info completeness, section order.
+      3. Visual flow: bullet consistency, date-format consistency, wall-of-text.
+      4. Per-role structure: bullet count, achievement/task ratio, tense consistency.
+      5. Word-choice: verb repetition, real spelling errors.
+      6. Linguistic clarity: overlong sentences, plus the pattern-based
+         GRAMMAR_CHECKS (passive voice, tense, filler, clichés, pronouns).
+
+    Returns up to MAX_FORMATTING_READABILITY_ISSUES issues, deduped by type,
+    ordered roughly by impact/fix-speed (structural and factual issues —
+    missing contact info, real typos — surface before wording nitpicks).
     """
-    text = resume.raw_text.lower()
     issues: list[dict] = []
     seen_types: set[str] = set()
 
+    def _add(issue: Optional[dict]) -> None:
+        if issue and issue["type"] not in seen_types:
+            issues.append(issue)
+            seen_types.add(issue["type"])
+
+    # ── 0. Content sufficiency gate ────────────────────────────────────────
+    _add(_check_content_sufficiency(resume))
+
+    # ── 1. Contact & document structure ────────────────────────────────────
+    _add(_check_contact_info(resume))
+    _add(_check_section_order(resume))
+
+    # ── 2. Visual flow checks (structural/visual consistency) ─────────────
+    _add(_check_bullet_consistency(resume))
+    _add(_check_date_format_consistency(resume))
+    _add(_check_wall_of_text(resume))
+
+    # ── 3. Per-role structure checks ───────────────────────────────────────
+    _add(_check_bullet_count_per_role(resume))
+    _add(_check_achievement_task_ratio(resume))
+    _add(_check_tense_consistency_per_role(resume))
+
+    # ── 4. Word-choice checks ──────────────────────────────────────────────
+    _add(_check_verb_repetition(resume))
+    _add(_check_spelling(resume))
+
+    # ── 5. Linguistic clarity checks (sentence-level wording) ─────────────
+    _add(_check_sentence_length(resume))
+
+    text = (resume.raw_text or "").lower()
     for check in GRAMMAR_CHECKS:
+        if len(issues) >= MAX_FORMATTING_READABILITY_ISSUES:
+            break
         if check["type"] in seen_types:
             continue
         if re.search(check["pattern"], text, re.IGNORECASE):
-            issues.append({
-                "type": check["type"],
-                "text": check["text"],
-            })
-            seen_types.add(check["type"])
+            _add({"type": check["type"], "text": check["text"]})
 
-        if len(issues) >= 4:
-            break
-
-    # If no issues found, return a positive note
+    # If no issues found across any category, return a positive note
     if not issues:
         issues = [{
             "type": "Style",
-            "text": "No major style issues detected — resume reads clearly and professionally.",
+            "text": "No major formatting or readability issues detected — "
+                    "resume is visually consistent and reads clearly.",
         }]
 
-    return issues
+    return issues[:MAX_FORMATTING_READABILITY_ISSUES]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -830,7 +1409,7 @@ def enrich_resume_local(
             strengths:      [str] × 3–4,
             improvements:   [str] × 3–4,
             skill_gaps:     [{ skill, missing, recommendation }] × ≤6,
-            grammar_issues: [{ type, text }] × ≤4,
+            grammar_issues: [{ type, text }] × ≤MAX_FORMATTING_READABILITY_ISSUES (8),
         }
     """
     # ── Compute dimension scores ──────────────────────────────────────────────
