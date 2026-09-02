@@ -1,0 +1,5 @@
+supabase
+Flask
+pypdf
+python-docx
+spacy

@@ -1,19 +1,19 @@
-// Represents a single skill, whether it's missing from the resume, and a recommendation
-type SkillGap = {
+// features/dashboard/components/KeywordSkillOptimization.tsx
+type SkillEntry = {
   skill: string;
-  missing: boolean;
-  recommendation: string;
+  present: boolean;
+  importance: 'required' | 'optional';
 };
 
 type KeywordSkillOptimizationProps = {
-  skillGaps: SkillGap[];
+  skills: SkillEntry[];
 };
 
-// Card displaying a grid of skills, flagging which are missing vs. present
-export default function KeywordSkillOptimization({ skillGaps }: KeywordSkillOptimizationProps) {
+export default function KeywordSkillOptimization({ skills }: KeywordSkillOptimizationProps) {
+  const missingSkills = skills.filter((item) => !item.present);
+
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-      {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center">
           <svg className="w-6 h-6 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -27,34 +27,32 @@ export default function KeywordSkillOptimization({ skillGaps }: KeywordSkillOpti
         </div>
       </div>
 
-      {/* Skills grid - each item shows skill name, status badge, and recommendation */}
-      <div className="grid grid-cols-2 gap-3">
-        {skillGaps.map((item) => (
-          <div
-            key={item.skill}
-            className={`rounded-xl p-4 flex flex-col gap-2 border ${
-              item.missing
-                ? 'bg-orange-50 border-orange-100'
-                : 'bg-green-50 border-green-100'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-gray-900">{item.skill}</span>
-              {/* Badge indicates whether the skill is missing (optional) or present (required) */}
-              {item.missing ? (
-                <span className="text-xs font-bold px-2 py-0.5 rounded bg-orange-100 text-orange-500 tracking-wide">
-                  OPTIONAL
+      {missingSkills.length === 0 ? (
+        <p className="text-sm text-gray-500">You have not missed any key skills for this role yet.</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          {missingSkills.map((item) => (
+            <div
+              key={item.skill}
+              className="rounded-xl p-4 flex flex-col gap-2 border bg-orange-50 border-orange-100"
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-gray-900 capitalize">{item.skill}</span>
+                <span
+                  className={`text-xs font-bold px-2 py-0.5 rounded tracking-wide ${
+                    item.importance === 'required'
+                      ? 'bg-indigo-100 text-indigo-600'
+                      : 'bg-gray-100 text-gray-500'
+                  }`}
+                >
+                  {item.importance.toUpperCase()}
                 </span>
-              ) : (
-                <span className="text-xs font-bold px-2 py-0.5 rounded bg-green-100 text-green-600 tracking-wide">
-                  REQUIRED
-                </span>
-              )}
+              </div>
+              <p className="text-sm text-gray-400 leading-snug">Consider adding this to your resume</p>
             </div>
-            <p className="text-sm text-gray-400 leading-snug">{item.recommendation}</p>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

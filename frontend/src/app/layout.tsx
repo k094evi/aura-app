@@ -1,6 +1,7 @@
 import "./globals.css";
 // import { Noto_Sans } from "next/font/google";
 import { ConditionalLayout } from "@/components/ConditionalLayout";
+import ReactQueryProvider from "@/providers/ReactQueryProvider";
 
 // Page metadata used for SEO and browser tab title
 export const metadata = {
@@ -23,8 +24,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        {/* Wraps pages with layout that varies based on the current route */}
-        <ConditionalLayout>{children}</ConditionalLayout>
+        <ReactQueryProvider>
+          {/* Wraps pages with layout that varies based on the current route */}
+          <ConditionalLayout>{children}</ConditionalLayout>
+        </ReactQueryProvider>
       </body>
     </html>
   )

@@ -1,15 +1,19 @@
 # app/services/skill_extractor.py
-import spacy
-from spacy.matcher import PhraseMatcher
+
+from app.utils.phrase_matching import build_matcher, find_matches
 from app.data.job_requirements import get_all_known_skills
 
-_nlp = spacy.blank("en")
-_matcher = PhraseMatcher(_nlp.vocab, attr="LOWER")
-_matcher.add("SKILLS", [_nlp.make_doc(skill) for skill in get_all_known_skills()])
+
+# Build one matcher containing every skill supported by AURA.
+_matcher = build_matcher(
+    get_all_known_skills(),
+    label="SKILLS",
+)
 
 
 def extract_skills(text: str) -> list[str]:
-    doc = _nlp(text)
-    matches = _matcher(doc)
-    found = {doc[start:end].text.lower() for _, start, end in matches}
-    return sorted(found)
+    # Find known AURA skills inside the extracted resume text.
+    matches = find_matches(text, _matcher)
+
+    # Return skills alphabetically for consistent results.
+    return sorted(matches)

@@ -66,15 +66,24 @@ export default function SignUpPage() {
   };
 
   // Handles Google and GitHub OAuth signup/login
-  const handleOAuthLogin = async (provider: 'google' | 'github') => {
-    const supabase = createClient();
-    await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+const handleOAuthLogin = async (provider: 'google' | 'github') => {
+  const supabase = createClient();
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo: `${window.location.origin}/auth/callback`,
+    },
+  });
+
+  if (error) {
+    console.error(`OAuth error (${provider}):`, error.message);
+    setAuthError(error.message);
+    return;
   }
+
+  console.log(`OAuth redirect URL (${provider}):`, data.url);
+};
 
 
   return (
