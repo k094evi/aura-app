@@ -150,9 +150,9 @@ export default function DashboardPage() {
 
                         {job.matched_skills.length > 0 && (
                           <div className="mt-2 flex flex-wrap gap-1">
-                            {job.matched_skills.slice(0, 4).map((skill) => (
+                            {job.matched_skills.slice(0, 4).map((skill, skillIndex) => (
                               <span
-                                key={skill}
+                                key={`${skill}-${skillIndex}`}
                                 className="rounded-md border border-emerald-500/15 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-300"
                               >
                                 {skill}

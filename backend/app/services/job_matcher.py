@@ -98,6 +98,7 @@ class JobMatcher:
     def match(
         self,
         resume: ParsedResume,
+        target_job: str = "",
         target_job_description: str = "",
         target_companies: Optional[List[str]] = None,
     ) -> MatchResult:
@@ -106,6 +107,16 @@ class JobMatcher:
         score-jobs -> rank-companies pipeline for one resume and returns
         the combined result.
 
+        target_job: the short target job TITLE the user typed on the
+            upload form (e.g. "Data Analyst"). This is the user's most
+            direct statement of the role they want — it doesn't depend
+            on their resume containing the right words, and it's always
+            present when the field is filled in (unlike
+            target_job_description, which the current frontend never
+            actually sends). Used verbatim as the top search term AND
+            folded into keyword extraction / scoring below, so job
+            search and company ranking are steered by what the user
+            asked for, not only by what their resume happens to say.
         target_job_description: optional free-text JD the user pasted in
             on the upload form. When present, its keywords are merged
             ahead of the resume's own keywords (it's a more precise
@@ -119,22 +130,32 @@ class JobMatcher:
             ranked company list.
         """
         target_companies = target_companies or []
+        target_job = (target_job or "").strip()
 
         logger.info("Extracting keywords from resume...")
         resume_keywords = extract_keywords(resume, top_n=self.top_keywords)
 
-        jd_keywords: List[str] = []
-        if target_job_description:
-            logger.info("Extracting keywords from target job description...")
-            jd_keywords = extract_keywords_from_text(target_job_description, top_n=10)
+        # Combine the explicit target-job title with any pasted JD text
+        # into one "what the user says they want" signal. The title is
+        # short but always present when set; a pasted JD is longer/more
+        # specific but optional (and, as of this revision, not even
+        # wired up on the frontend) — both should count when present.
+        target_text = " ".join(t for t in [target_job, target_job_description] if t).strip()
 
-        # Merge: JD keywords first (they're the user's explicit statement
-        # of the role they want), then resume keywords, deduplicated.
+        jd_keywords: List[str] = []
+        if target_text:
+            logger.info("Extracting keywords from target job / description...")
+            jd_keywords = extract_keywords_from_text(target_text, top_n=10)
+
+        # Merge: the target-job title itself (verbatim, not run through
+        # TF-IDF — it's too short/precise for that to help), then JD
+        # keywords, then resume keywords, deduplicated. Earlier entries
+        # win ties for search-term priority below.
         keywords: List[str] = []
         seen: set[str] = set()
-        for kw in jd_keywords + resume_keywords:
+        for kw in ([target_job] if target_job else []) + jd_keywords + resume_keywords:
             key = kw.lower()
-            if key not in seen:
+            if key and key not in seen:
                 seen.add(key)
                 keywords.append(kw)
 
@@ -144,13 +165,16 @@ class JobMatcher:
             logger.warning("No keywords extracted — returning empty result.")
             return MatchResult(keywords=[], total_jobs=0, top_jobs=[], top_companies=[])
 
-        # Base search terms: the merged, ranked keyword list.
+        # Base search terms: the merged, ranked keyword list. target_job
+        # (if present) is already keywords[0] from the merge above, so
+        # it's guaranteed to be the first/highest-priority search term
+        # JSearch actually queries with.
         search_terms = list(keywords[:self.max_keywords_queried])
 
         # Add a few company-steered queries so listings from the user's
         # named target companies have a real chance of showing up, even
-        # if "software engineer" alone wouldn't have surfaced them.
-        top_term = jd_keywords[0] if jd_keywords else (resume_keywords[0] if resume_keywords else None)
+        # if "data analyst" alone wouldn't have surfaced them.
+        top_term = target_job or (jd_keywords[0] if jd_keywords else (resume_keywords[0] if resume_keywords else None))
         if top_term:
             for company in target_companies[:3]:
                 company = company.strip()
@@ -169,7 +193,7 @@ class JobMatcher:
             return MatchResult(keywords=keywords, total_jobs=0, top_jobs=[], top_companies=[], raw_jobs=[])
 
         logger.info("Scoring %d jobs against resume...", len(jobs))
-        scorer      = JobScorer(resume=resume, keywords=keywords, target_description=target_job_description)
+        scorer      = JobScorer(resume=resume, keywords=keywords, target_description=target_text)
         scored_jobs = scorer.score_all(jobs)
         companies   = scorer.rank_companies(
             scored_jobs,

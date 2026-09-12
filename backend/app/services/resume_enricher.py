@@ -112,7 +112,7 @@ import math
 from typing import Optional
 
 from app.models.schemas import ParsedResume
-from app.services.keyword_extractor import extract_keywords_from_text
+from app.services.keyword_extractor import extract_keywords_from_text, extract_skill_terms_from_posting
 
 # pyspellchecker is an optional dependency for the spelling check below
 # (add "pyspellchecker" to requirements.txt). If it isn't installed, the
@@ -781,6 +781,7 @@ def _detect_skill_gaps_from_posting(
     resume: ParsedResume,
     job_posting_text: str,
     source_label: str,
+    exclude_terms: Optional[set[str]] = None,
 ) -> list[dict]:
     """
     PRIMARY skill-gap path (new this revision): extracts skill/keyword
@@ -797,15 +798,24 @@ def _detect_skill_gaps_from_posting(
     No taxonomy, no aggregation across multiple jobs, no static
     per-role checklist — this reads ONE real posting's actual text.
 
-    Reuses extract_keywords_from_text() (already built for pulling
-    skills out of arbitrary JD text — see keyword_extractor.py), rather
-    than duplicating that extraction logic here.
+    Uses extract_skill_terms_from_posting() — a precision-oriented
+    extractor built specifically for this use case (see its docstring in
+    keyword_extractor.py for why it's a separate function from
+    extract_keywords_from_text(), which stays a looser, recall-oriented
+    extractor used only for building JSearch/Adzuna search queries).
+
+    exclude_terms should be the job's own title + company name, tokenized
+    by the caller (see analyze_controller._select_job_posting_text) —
+    this stops company-name fragments (e.g. "Solutions" from "SIGINT
+    Solutions, LLC") from ever being reported as a required skill.
 
     Falls back to _detect_skill_gaps() (the pre-existing
     taxonomy/aggregate approach) when job_posting_text is empty — see
     enrich_resume_local()'s branch below.
     """
-    posting_terms = extract_keywords_from_text(job_posting_text, top_n=20)
+    posting_terms = extract_skill_terms_from_posting(
+        job_posting_text, top_n=20, exclude_terms=exclude_terms
+    )
     if not posting_terms:
         return []
 
@@ -1472,6 +1482,7 @@ def enrich_resume_local(
     target_job_gap: Optional[dict] = None,
     job_posting_text: Optional[str] = None,
     job_posting_source: Optional[str] = None,
+    job_posting_exclude_terms: Optional[set[str]] = None,
 ) -> dict:
     """
     PUBLIC ENTRY POINT for this file — this is the only function other
@@ -1503,6 +1514,12 @@ def enrich_resume_local(
             echoed back in the result as skill_gap_source, so the caller
             can be transparent with the user about which mode produced
             these results.
+        job_posting_exclude_terms: tokenized words from the matched
+            job's own title + company name (e.g. {"network", "engineer",
+            "athenix", "cyber", "sigint", "solutions", "llc"}). Passed
+            through to extract_skill_terms_from_posting() so the job's
+            own metadata is never mistaken for one of its required
+            skills. Safe to omit — defaults to no exclusions.
 
     Returns:
         {
@@ -1537,7 +1554,10 @@ def enrich_resume_local(
     #    fallback to the existing taxonomy/aggregate approach ────────────────
     if job_posting_text and job_posting_text.strip():
         skill_gaps = _detect_skill_gaps_from_posting(
-            resume, job_posting_text, job_posting_source or "the job posting"
+            resume,
+            job_posting_text,
+            job_posting_source or "the job posting",
+            exclude_terms=job_posting_exclude_terms,
         )
         skill_gap_source = job_posting_source or "job posting"
         # A posting that yields zero extractable terms (e.g. very short/odd

@@ -24,7 +24,7 @@ MAX_KEYWORDS     = 5
 
 # Location terms appended to every query to bias results
 # toward Philippines and nearby remote-friendly markets
-LOCATION_TERMS = ["Philippines", "Manila", "Remote Philippines"]
+LOCATION_TERMS = ["Philippines", "Remote Philippines"]
 
 # Keys under which the actual job array might be nested if
 # JSearch returns "data" as an object instead of a bare list.

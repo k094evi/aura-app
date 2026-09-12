@@ -52,6 +52,7 @@ Coordinates the /api/analyze flow.
 
 import json
 import os
+import re
 from typing import Any
 
 from fastapi import HTTPException, UploadFile
@@ -1140,9 +1141,23 @@ def _persist_analysis_result(
 # JOB-POSTING TEXT SELECTION (for skill-gap comparison)
 # ==============================================================================
 
+def _tokenize_for_exclusion(text: str) -> set[str]:
+    """
+    Splits job title / company name text into lowercase tokens suitable
+    for excluding from skill-gap extraction (see
+    extract_skill_terms_from_posting()'s exclude_terms param).
+
+    This is deliberately a plain, dumb tokenizer (no stemming, no stop
+    words) — its only job is to make sure literal words from the job's
+    own title/company (e.g. "Network", "Engineer", "Solutions") can't be
+    reported back as one of that same job's required skills.
+    """
+    return {t for t in re.findall(r"[a-zA-Z][a-zA-Z0-9]*", text.lower()) if len(t) > 1}
+
+
 def _select_job_posting_text(
     result,
-) -> tuple[str | None, str | None]:
+) -> tuple[str | None, str | None, set[str]]:
     """
     Decides what text (if any) resume_enricher.enrich_resume_local() should
     treat as "the job posting" for the PRIMARY skill-gap comparison path.
@@ -1165,10 +1180,16 @@ def _select_job_posting_text(
     skill-gap comparison source on its own. Only a real JSearch listing
     or the hardcoded taxonomy fallback are.
 
-    Returns (job_posting_text, job_posting_source) — source is a short,
-    human-readable label echoed back to the frontend via the response's
-    skill_gap_source field, so it's transparent which mode produced the
-    skill_gaps the user is looking at.
+    Returns (job_posting_text, job_posting_source, exclude_terms):
+      - source is a short, human-readable label echoed back to the
+        frontend via the response's skill_gap_source field, so it's
+        transparent which mode produced the skill_gaps the user is
+        looking at.
+      - exclude_terms is the tokenized job title + company name, so
+        resume_enricher can strip the job's own metadata (e.g.
+        "Solutions" from "SIGINT Solutions, LLC") out of the skill-gap
+        candidate pool before it's ever scored. See
+        extract_skill_terms_from_posting()'s exclude_terms param.
     """
     if result.top_jobs:
         top_scored_job = result.top_jobs[0]
@@ -1177,9 +1198,14 @@ def _select_job_posting_text(
         if description and description.strip():
             title = _clean_string(_get_attr(job, "title", "job_title"), default="a matched role")
             company = _clean_string(_get_attr(job, "company", "employer_name"), default="a matched company")
-            return description.strip(), f"your top-matching job posting ({title} at {company})"
+            exclude_terms = _tokenize_for_exclusion(f"{title} {company}")
+            return (
+                description.strip(),
+                f"your top-matching job posting ({title} at {company})",
+                exclude_terms,
+            )
 
-    return None, None
+    return None, None, set()
 
 
 # ==============================================================================
@@ -1304,6 +1330,7 @@ async def handle_analyze(
 
         result = matcher.match(
             parsed,
+            target_job=target_job,
             target_job_description=job_description,
             target_companies=target_companies_list,
         )
@@ -1391,7 +1418,7 @@ async def handle_analyze(
     # hardcoded job_requirements.py / SKILL_TAXONOMY taxonomy).
     # ==========================================================================
 
-    job_posting_text, job_posting_source = _select_job_posting_text(result)
+    job_posting_text, job_posting_source, job_posting_exclude_terms = _select_job_posting_text(result)
 
     if job_posting_text:
         logger.info("Skill-gap comparison source: %s", job_posting_source)
@@ -1418,6 +1445,7 @@ async def handle_analyze(
             target_job_gap=target_job_gap,
             job_posting_text=job_posting_text,
             job_posting_source=job_posting_source,
+            job_posting_exclude_terms=job_posting_exclude_terms,
         )
 
     except Exception:
