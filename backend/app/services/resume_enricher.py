@@ -37,7 +37,10 @@
 #      bullet points quoting the user's actual resume content.
 #   5. _detect_skill_gaps — cross-references the resume against both the
 #      skill taxonomy and the vocabulary of the user's top-matching job
-#      postings to flag which skills are present vs. missing.
+#      postings to flag which skills are present vs. missing. THIS IS THE
+#      BACKUP/FALLBACK path — see _detect_skill_gaps_from_posting below
+#      for the new PRIMARY path that runs when actual job-posting text
+#      (pasted JD or a matched real job listing) is available.
 #   6. _check_grammar — Formatting & Readability checks: visual flow
 #      (bullet-glyph consistency, date-format consistency, wall-of-text
 #      detection) plus linguistic clarity (passive voice, first-person
@@ -55,6 +58,21 @@
 #     - top_jobs: shaped/scored job dicts (from jsearch_client + a job
 #                 scorer step) — each expected to have at least
 #                 "title", "description", and optionally "matched_skills".
+#
+# SKILL-GAP SOURCE PRIORITY (added this revision):
+#   1. job_posting_text (if given)  — PRIMARY. Extracts skills directly
+#      from the single best-matching REAL job listing from JSearch and
+#      compares them against the resume: Matched vs Missing, exactly as
+#      originally specified — no taxonomy, no aggregation across
+#      multiple jobs. The caller (analyze_controller.py) is responsible
+#      for choosing this text; as of this revision, it's always a
+#      JSearch listing's description, never the user's pasted JD.
+#   2. Otherwise — BACKUP. Falls back to the existing _detect_skill_gaps
+#      (target_job_gap checklist + aggregated top_jobs matched_skills +
+#      hardcoded SKILL_TAXONOMY categories), unchanged from before —
+#      used whenever JSearch returned no usable job listing at all.
+#   See _detect_skill_gaps_from_posting() and enrich_resume_local()'s
+#   job_posting_text/job_posting_source params.
 # ==============================================================================
 
 # app/services/resume_enricher.py
@@ -94,6 +112,7 @@ import math
 from typing import Optional
 
 from app.models.schemas import ParsedResume
+from app.services.keyword_extractor import extract_keywords_from_text
 
 # pyspellchecker is an optional dependency for the spelling check below
 # (add "pyspellchecker" to requirements.txt). If it isn't installed, the
@@ -755,7 +774,69 @@ def _generate_improvements(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SKILL GAP DETECTOR
+# SKILL GAP DETECTOR — PRIMARY PATH (direct job-posting comparison)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _detect_skill_gaps_from_posting(
+    resume: ParsedResume,
+    job_posting_text: str,
+    source_label: str,
+) -> list[dict]:
+    """
+    PRIMARY skill-gap path (new this revision): extracts skill/keyword
+    terms directly from a real job posting (either the user's pasted JD,
+    or the single best-matching real JSearch listing) and compares them
+    straight against the resume — Matched vs Missing — exactly per the
+    original spec:
+
+        JOB POSTING: Python, FastAPI, PostgreSQL, Docker, AWS, ...
+        RESUME:      Python, Flask, PostgreSQL, Git
+        Matched:     Python, PostgreSQL
+        Missing:     FastAPI, Docker, AWS, ...
+
+    No taxonomy, no aggregation across multiple jobs, no static
+    per-role checklist — this reads ONE real posting's actual text.
+
+    Reuses extract_keywords_from_text() (already built for pulling
+    skills out of arbitrary JD text — see keyword_extractor.py), rather
+    than duplicating that extraction logic here.
+
+    Falls back to _detect_skill_gaps() (the pre-existing
+    taxonomy/aggregate approach) when job_posting_text is empty — see
+    enrich_resume_local()'s branch below.
+    """
+    posting_terms = extract_keywords_from_text(job_posting_text, top_n=20)
+    if not posting_terms:
+        return []
+
+    resume_text = (resume.raw_text or "").lower()
+
+    results: list[dict] = []
+    for term in posting_terms:
+        present = term.lower() in resume_text
+        # Title-case short/lowercase tokens for display (e.g. "python" ->
+        # "Python"); leave anything already mixed-case (e.g. "PostgreSQL",
+        # "CI/CD") exactly as extracted, since forcing .title() on those
+        # would mangle them (e.g. "Ci/Cd").
+        display_skill = term.title() if term.islower() else term
+        results.append({
+            "skill": display_skill,
+            "missing": not present,
+            "recommendation": (
+                f"Found in your resume — matches {source_label}."
+                if present else
+                f"Listed in {source_label} but not found in your resume — add it if it truthfully applies to your experience."
+            ),
+        })
+
+    # Matched skills first (what you already have), then gaps — mirrors
+    # how the original Matched/Missing spec reads top-to-bottom.
+    results.sort(key=lambda r: r["missing"])
+    return results[:12]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SKILL GAP DETECTOR — BACKUP/FALLBACK PATH (unchanged from before)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _detect_skill_gaps(
@@ -764,6 +845,9 @@ def _detect_skill_gaps(
     target_job_gap: Optional[dict] = None,
 ) -> list[dict]:
     """
+    BACKUP path — used only when no job-posting text is available at all
+    (no pasted JD and no matched job listing; see enrich_resume_local()).
+
     Cross-references the resume's skills_block against:
       0. The user's target_job checklist (target_job_matcher), if their
          target job title matched a known supported role — highest
@@ -925,6 +1009,10 @@ def _check_bullet_consistency(resume: ParsedResume) -> Optional[dict]:
     glyphs_used: set[str] = set()
     for line in lines:
         m = _BULLET_LINE_RE.match(line)
+
+        if m is None:
+            continue
+
         glyphs_used.add(m.group(1)[0])  # first char of the matched bullet token
 
     if len(glyphs_used) > 1:
@@ -1382,6 +1470,8 @@ def enrich_resume_local(
     keywords: list[str],
     top_jobs: list[dict],
     target_job_gap: Optional[dict] = None,
+    job_posting_text: Optional[str] = None,
+    job_posting_source: Optional[str] = None,
 ) -> dict:
     """
     PUBLIC ENTRY POINT for this file — this is the only function other
@@ -1399,8 +1489,20 @@ def enrich_resume_local(
         target_job_gap: optional dict from
             target_job_matcher.calculate_target_job_gap(target_job, resume)
             — None if the user left target_job blank or it didn't match a
-            supported role. When present, its skills are surfaced first
-            in skill_gaps below.
+            supported role. Only used by the BACKUP skill-gap path below.
+        job_posting_text: optional real job-posting text — the full
+            description of the single best-matching real job listing
+            from JSearch. When present, this becomes the PRIMARY source
+            for skill_gaps (see _detect_skill_gaps_from_posting): a
+            direct Matched/Missing comparison against this actual
+            posting, no taxonomy involved.
+        job_posting_source: human-readable label describing where
+            job_posting_text came from (e.g. "your top-matching job
+            posting (Backend Engineer at Acme)") — used in skill_gaps
+            recommendations and
+            echoed back in the result as skill_gap_source, so the caller
+            can be transparent with the user about which mode produced
+            these results.
 
     Returns:
         {
@@ -1408,8 +1510,9 @@ def enrich_resume_local(
             sections:       [{ name, value }] × 5,
             strengths:      [str] × 3–4,
             improvements:   [str] × 3–4,
-            skill_gaps:     [{ skill, missing, recommendation }] × ≤6,
+            skill_gaps:     [{ skill, missing, recommendation }] × ≤12,
             grammar_issues: [{ type, text }] × ≤MAX_FORMATTING_READABILITY_ISSUES (8),
+            skill_gap_source: str — which path/source produced skill_gaps.
         }
     """
     # ── Compute dimension scores ──────────────────────────────────────────────
@@ -1430,6 +1533,29 @@ def enrich_resume_local(
     # Clamp to valid range
     ats_score = max(0, min(100, ats_score))
 
+    # ── Skill gaps: PRIMARY (direct job-posting comparison) with BACKUP
+    #    fallback to the existing taxonomy/aggregate approach ────────────────
+    if job_posting_text and job_posting_text.strip():
+        skill_gaps = _detect_skill_gaps_from_posting(
+            resume, job_posting_text, job_posting_source or "the job posting"
+        )
+        skill_gap_source = job_posting_source or "job posting"
+        # A posting that yields zero extractable terms (e.g. very short/odd
+        # text) shouldn't silently produce an empty skill_gaps list — fall
+        # back to the backup path rather than showing nothing.
+        if not skill_gaps:
+            skill_gaps = _detect_skill_gaps(resume, top_jobs, target_job_gap=target_job_gap)
+            skill_gap_source = (
+                "fallback hardcoded taxonomy (job_requirements.py / SKILL_TAXONOMY) — "
+                "the matched job listing's text didn't yield any extractable skill terms"
+            )
+    else:
+        skill_gaps = _detect_skill_gaps(resume, top_jobs, target_job_gap=target_job_gap)
+        skill_gap_source = (
+            "fallback hardcoded taxonomy (job_requirements.py / SKILL_TAXONOMY) — "
+            "no job listing was matched by JSearch"
+        )
+
     # ── Build output ─────────────────────────────────────────────────────────
     return {
         "ats_score": ats_score,
@@ -1446,6 +1572,7 @@ def enrich_resume_local(
         "improvements":   _generate_improvements(
             resume, kw_score, skills_score, impact_score, format_score, length_score, top_jobs
         ),
-        "skill_gaps":     _detect_skill_gaps(resume, top_jobs, target_job_gap=target_job_gap),
+        "skill_gaps":       skill_gaps,
+        "skill_gap_source": skill_gap_source,
         "grammar_issues": _check_grammar(resume),
     }
