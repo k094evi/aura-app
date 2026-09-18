@@ -839,7 +839,16 @@ def _detect_skill_gaps(
     for category, terms in SKILL_TAXONOMY.items():
         if len(results) >= 6:
             break
-        if category in seen:
+        # NOTE: `seen` holds lowercased keys everywhere else (see steps 0/1
+        # above), but `category` is title-cased as written in
+        # SKILL_TAXONOMY (e.g. "Communication"). Comparing it against
+        # `seen` case-sensitively let a skill already added in step 1
+        # (e.g. "communication") slip past this check and get added
+        # again here under its title-cased form — producing two results
+        # with the same `skill` value (and, on the frontend, a duplicate
+        # React key). Normalize to lowercase for the check.
+        category_key = category.lower()
+        if category_key in seen:
             continue
 
         # Check if any term from this category appears in skills_block or resume
@@ -848,14 +857,14 @@ def _detect_skill_gaps(
 
         # Only surface gaps (not present at all) or strengths (in skills block)
         if present_in_skills:
-            seen.add(category)
+            seen.add(category_key)
             results.append({
                 "skill": category,
                 "missing": False,
                 "recommendation": f"Evident in your skills section — good coverage.",
             })
         elif not present_in_resume:
-            seen.add(category)
+            seen.add(category_key)
             results.append({
                 "skill": category,
                 "missing": True,

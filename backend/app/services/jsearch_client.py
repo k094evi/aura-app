@@ -242,12 +242,24 @@ class JSearchClient:
                     )
                     continue
 
+                # TEMP DEBUG — how many raw jobs did THIS query actually
+                # return, before slicing to results_per_keyword and before
+                # dedup collapses any of them?
+                logger.warning(
+                    "DEBUG '%s' returned %d raw jobs (taking up to %d)",
+                    kw, len(results), results_per_keyword,
+                )
+
                 for raw in results[:results_per_keyword]:
                     if not isinstance(raw, dict):
                         logger.warning("Skipping non-dict job entry for '%s': %r", kw, raw)
                         continue
                     jid = raw.get("job_id", "")
                     if jid in seen:
+                        logger.warning(
+                            "DEBUG duplicate job_id '%s' for '%s' (already seen from %s)",
+                            jid, kw, seen[jid].keywords_matched,
+                        )
                         if kw not in seen[jid].keywords_matched:
                             seen[jid].keywords_matched.append(kw)
                     else:
