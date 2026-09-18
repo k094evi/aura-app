@@ -18,11 +18,18 @@ HOW IT FITS INTO THE PROGRAM
 """
 
 from fastapi import APIRouter
-from app.services.target_job_matcher import get_supported_target_jobs
+
+from app.data.job_requirements import JOB_REQUIREMENTS
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
 
-@router.get("/supported", summary="List supported target-job roles")
-def supported_jobs():
-    return {"jobs": get_supported_target_jobs()}
+@router.get("/supported")
+def get_supported_jobs():
+    """
+    Return all job titles defined in job_requirements.py.
+    """
+
+    return {
+        "jobs": list(JOB_REQUIREMENTS.keys())
+    }

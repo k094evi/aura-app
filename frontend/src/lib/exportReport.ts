@@ -1,173 +1,308 @@
 import { jsPDF } from 'jspdf';
-
 import type { AnalysisResult } from '@/types/analysis';
 
+export interface SupabaseUser {
+  id?: string;
+  email?: string | null;
+  full_name?: string | null;
+  created_at?: string;
+  // Included to handle raw Supabase Auth user objects seamlessly
+  user_metadata?: {
+    full_name?: string;
+    name?: string;
+    [key: string]: unknown;
+  };
+}
+
 // ─────────────────────────────────────────────
-// Layout constants (A4, points)
+// Layout & Color System (A4 in points)
 // ─────────────────────────────────────────────
-const MARGIN = 48;
+const MARGIN = 40;
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
-const BOTTOM_LIMIT = PAGE_HEIGHT - MARGIN;
+const BOTTOM_LIMIT = PAGE_HEIGHT - 50;
 
 const COLOR = {
-  indigo: [79, 70, 229] as [number, number, number],
-  gray900: [17, 24, 39] as [number, number, number],
-  gray500: [107, 114, 128] as [number, number, number],
-  gray400: [156, 163, 175] as [number, number, number],
-  green: [34, 197, 94] as [number, number, number],
-  amber: [217, 119, 6] as [number, number, number],
+  primary: [79, 70, 229] as [number, number, number],       // Indigo #4F46E5
+  primaryDark: [49, 46, 129] as [number, number, number],   // Dark Indigo #312E81
+  slate900: [15, 23, 42] as [number, number, number],       // Slate 900
+  slate700: [51, 65, 85] as [number, number, number],       // Slate 700
+  slate500: [100, 116, 139] as [number, number, number],    // Slate 500
+  slate200: [226, 232, 240] as [number, number, number],    // Slate 200
+  slate50: [248, 250, 252] as [number, number, number],     // Slate 50
+  emerald: [16, 185, 129] as [number, number, number],      // Green #10B981
+  amber: [245, 158, 11] as [number, number, number],        // Amber #F59E0B
+  rose: [244, 63, 94] as [number, number, number],          // Rose #F43F5E
+  white: [255, 255, 255] as [number, number, number],
 };
 
 /**
- * Builds and downloads a PDF report from the analysis result.
- * Pure text/vector layout (no canvas/screenshot step), so it stays
- * crisp and small regardless of the dashboard's current DOM state.
+ * Builds and downloads an executive-grade PDF analysis report.
  */
 export function generateReportPDF(
   result: AnalysisResult,
-  fileName = 'aura-resume-report.pdf'
+  user?: SupabaseUser | null,
+  customFileName?: string
 ): void {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   let y = MARGIN;
 
+  // ── Extract User Information safely across DB & Auth structures ──
+  const rawName =
+    user?.full_name?.trim() ||
+    user?.user_metadata?.full_name?.trim() ||
+    user?.user_metadata?.name?.trim() ||
+    '';
+
+  const candidateName = rawName || (user?.email ? user.email.split('@')[0] : 'Valued Candidate');
+  const candidateEmail = user?.email || 'N/A';
+
+  // ── Format Dynamic Filename: name-aura-resume_report.pdf ───────
+  const nameSlug = rawName
+    ? rawName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    : user?.email
+    ? user.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    : 'user';
+
+  const fileName = customFileName || `${nameSlug}-aura-resume_report.pdf`;
+
+  // ── Helper: Page Overflow Guard ───────────────────────
   const ensureSpace = (needed: number) => {
     if (y + needed > BOTTOM_LIMIT) {
       doc.addPage();
-      y = MARGIN;
+      y = MARGIN + 20;
     }
   };
 
-  const heading = (text: string, size = 14) => {
-    ensureSpace(size + 14);
+  // ── Helper: Section Heading with Accent Bar ───────────
+  const renderSectionHeader = (title: string) => {
+    ensureSpace(35);
+    doc.setFillColor(...COLOR.primary);
+    doc.rect(MARGIN, y, 4, 14, 'F');
+
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(size);
-    doc.setTextColor(...COLOR.gray900);
-    doc.text(text, MARGIN, y);
-    y += size + 10;
+    doc.setFontSize(13);
+    doc.setTextColor(...COLOR.slate900);
+    doc.text(title.toUpperCase(), MARGIN + 12, y + 11);
+    y += 24;
   };
 
-  const paragraph = (
-    text: string,
-    size = 10,
-    color: [number, number, number] = COLOR.gray500
-  ) => {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(size);
-    doc.setTextColor(...color);
-    const lines = doc.splitTextToSize(text, CONTENT_WIDTH);
-    ensureSpace(lines.length * (size + 4));
-    doc.text(lines, MARGIN, y);
-    y += lines.length * (size + 4) + 3;
-  };
+  // ── 1. Top Decorative Brand Banner ────────────────────
+  doc.setFillColor(...COLOR.primaryDark);
+  doc.rect(0, 0, PAGE_WIDTH, 8, 'F');
 
-  const bullet = (text: string, dotColor: [number, number, number] = COLOR.indigo) => {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(...COLOR.gray900);
-    const lines = doc.splitTextToSize(text, CONTENT_WIDTH - 16);
-    ensureSpace(lines.length * 13 + 6);
-    doc.setFillColor(...dotColor);
-    doc.circle(MARGIN + 3, y - 3, 2.2, 'F');
-    doc.text(lines, MARGIN + 14, y);
-    y += lines.length * 13 + 6;
-  };
-
-  const divider = () => {
-    ensureSpace(16);
-    doc.setDrawColor(230, 230, 230);
-    doc.line(MARGIN, y, PAGE_WIDTH - MARGIN, y);
-    y += 16;
-  };
-
-  // ── Title block ──────────────────────────────────────
+  // ── 2. Report Header Block ────────────────────────────
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(20);
-  doc.setTextColor(...COLOR.indigo);
-  doc.text('Aura Resume Analysis Report', MARGIN, y);
-  y += 26;
+  doc.setFontSize(22);
+  doc.setTextColor(...COLOR.primaryDark);
+  doc.text('AURA RESUME ANALYSIS', MARGIN, y + 20);
 
-  paragraph(
-    `Generated ${new Date().toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    })}`,
-    9,
-    COLOR.gray400
-  );
-  y += 4;
-  divider();
-
-  // ── ATS score + dimensions ───────────────────────────
-  heading(`Overall ATS Score: ${result.ats_score}%`, 16);
-  result.sections.forEach((s) => {
-    paragraph(`${s.name}: ${s.value}%`, 10, COLOR.gray900);
+  // User details block (Top Right)
+  const reportDate = new Date().toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
   });
-  y += 6;
-  divider();
 
-  // ── Strengths ─────────────────────────────────────────
-  heading('Key Strengths');
-  if (result.strengths.length === 0) {
-    paragraph('No strengths were identified.');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(...COLOR.slate900);
+  doc.text(candidateName, PAGE_WIDTH - MARGIN, y + 8, { align: 'right' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...COLOR.slate500);
+  doc.text(candidateEmail, PAGE_WIDTH - MARGIN, y + 20, { align: 'right' });
+  doc.text(`Generated: ${reportDate}`, PAGE_WIDTH - MARGIN, y + 31, { align: 'right' });
+
+  y += 48;
+
+  // Divider
+  doc.setDrawColor(...COLOR.slate200);
+  doc.setLineWidth(0.75);
+  doc.line(MARGIN, y, PAGE_WIDTH - MARGIN, y);
+  y += 18;
+
+  // ── 3. Executive ATS Score Summary Card ───────────────
+  ensureSpace(90);
+  const cardHeight = 82;
+  doc.setFillColor(...COLOR.slate50);
+  doc.setDrawColor(...COLOR.slate200);
+  doc.roundedRect(MARGIN, y, CONTENT_WIDTH, cardHeight, 6, 6, 'FD');
+
+  const score = result.ats_score ?? 0;
+  const scoreColor = score >= 80 ? COLOR.emerald : score >= 60 ? COLOR.amber : COLOR.rose;
+
+  doc.setFillColor(...scoreColor);
+  doc.roundedRect(MARGIN + 12, y + 12, 70, 58, 4, 4, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.setTextColor(...COLOR.white);
+  doc.text(`${score}%`, MARGIN + 47, y + 42, { align: 'center' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.text('ATS SCORE', MARGIN + 47, y + 57, { align: 'center' });
+
+  let sectionX = MARGIN + 100;
+  let sectionY = y + 22;
+  const maxSectionsPerRow = 3;
+  const colWidth = (CONTENT_WIDTH - 110) / maxSectionsPerRow;
+
+  result.sections.forEach((sec, idx) => {
+    if (idx > 0 && idx % maxSectionsPerRow === 0) {
+      sectionX = MARGIN + 100;
+      sectionY += 28;
+    }
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...COLOR.slate500);
+    doc.text(sec.name, sectionX, sectionY);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(...COLOR.slate900);
+    doc.text(`${sec.value}%`, sectionX, sectionY + 13);
+
+    sectionX += colWidth;
+  });
+
+  y += cardHeight + 20;
+
+  // ── 4. Key Strengths ──────────────────────────────────
+  renderSectionHeader('Key Strengths');
+  if (!result.strengths || result.strengths.length === 0) {
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(9.5);
+    doc.setTextColor(...COLOR.slate500);
+    doc.text('No strengths identified in the current pass.', MARGIN, y);
+    y += 16;
   } else {
-    result.strengths.forEach((s) => bullet(s, COLOR.green));
-  }
-  y += 4;
-  divider();
+    result.strengths.forEach((strength) => {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9.5);
+      doc.setTextColor(...COLOR.slate700);
 
-  // ── Improvements ──────────────────────────────────────
-  heading('Smart Suggestions');
-  if (result.improvements.length === 0) {
-    paragraph('No suggestions were identified.');
+      const lines = doc.splitTextToSize(strength, CONTENT_WIDTH - 20);
+      ensureSpace(lines.length * 13 + 4);
+
+      doc.setFillColor(...COLOR.emerald);
+      doc.circle(MARGIN + 4, y - 3, 2.5, 'F');
+
+      doc.text(lines, MARGIN + 16, y);
+      y += lines.length * 13 + 4;
+    });
+  }
+  y += 10;
+
+  // ── 5. Smart Suggestions ──────────────────────────────
+  renderSectionHeader('Smart Suggestions');
+  if (!result.improvements || result.improvements.length === 0) {
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(9.5);
+    doc.setTextColor(...COLOR.slate500);
+    doc.text('No critical improvements needed.', MARGIN, y);
+    y += 16;
   } else {
-    result.improvements.forEach((s) => bullet(s, COLOR.amber));
+    result.improvements.forEach((item) => {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9.5);
+      doc.setTextColor(...COLOR.slate700);
+
+      const lines = doc.splitTextToSize(item, CONTENT_WIDTH - 20);
+      ensureSpace(lines.length * 13 + 4);
+
+      doc.setFillColor(...COLOR.amber);
+      doc.circle(MARGIN + 4, y - 3, 2.5, 'F');
+
+      doc.text(lines, MARGIN + 16, y);
+      y += lines.length * 13 + 4;
+    });
   }
-  y += 4;
-  divider();
+  y += 10;
 
-  // ── Skill gaps ────────────────────────────────────────
-  heading('Keyword & Skill Optimization');
-  result.skill_gaps.forEach((g) => {
-    const status = g.missing ? 'Optional' : 'Required — Met';
-    paragraph(`${g.skill}  (${status})`, 10, COLOR.gray900);
-    paragraph(g.recommendation, 9, COLOR.gray500);
-  });
-  y += 4;
-  divider();
+  // ── 6. Skill & Keyword Gaps ───────────────────────────
+  if (result.skill_gaps && result.skill_gaps.length > 0) {
+    renderSectionHeader('Skill & Keyword Gap Analysis');
 
-  // ── Grammar / formatting ──────────────────────────────
-  heading('Formatting & Readability');
-  result.grammar_issues.forEach((g) => {
-    paragraph(`[${g.type}]  ${g.text}`, 10, COLOR.gray900);
-  });
-  y += 4;
+    result.skill_gaps.forEach((gap) => {
+      const isMissing = gap.missing;
+      const statusLabel = isMissing ? 'OPTIONAL / MISSING' : 'REQUIRED — MET';
+      const badgeBg = isMissing ? COLOR.amber : COLOR.emerald;
 
-  // ── Company matches ───────────────────────────────────
-  if (result.companies.length > 0) {
-    divider();
-    heading('Top Company Matches');
-    result.companies.slice(0, 10).forEach((c) => {
-      paragraph(
-        `${c.company} — ${c.match}% match — ${c.location} — ${c.jobType}`,
-        10,
-        COLOR.gray900
-      );
+      const recLines = doc.splitTextToSize(gap.recommendation, CONTENT_WIDTH - 12);
+      ensureSpace(recLines.length * 12 + 22);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(...COLOR.slate900);
+      doc.text(gap.skill, MARGIN, y);
+
+      const skillNameWidth = doc.getTextWidth(gap.skill);
+      doc.setFillColor(...badgeBg);
+      doc.roundedRect(MARGIN + skillNameWidth + 8, y - 8, 80, 11, 2, 2, 'F');
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6.5);
+      doc.setTextColor(...COLOR.white);
+      doc.text(statusLabel, MARGIN + skillNameWidth + 48, y - 1, { align: 'center' });
+
+      y += 13;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(...COLOR.slate500);
+      doc.text(recLines, MARGIN, y);
+      y += recLines.length * 12 + 6;
+    });
+    y += 10;
+  }
+
+  // ── 7. Top Job Matches ────────────────────────────────
+  if (result.top_jobs && result.top_jobs.length > 0) {
+    renderSectionHeader('Top Matched Opportunities');
+
+    result.top_jobs.slice(0, 5).forEach((job) => {
+      ensureSpace(28);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.5);
+      doc.setTextColor(...COLOR.slate900);
+      doc.text(job.title, MARGIN, y);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(...COLOR.primary);
+      doc.text(`${job.total_score}% Match`, PAGE_WIDTH - MARGIN, y, { align: 'right' });
+
+      y += 11;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(...COLOR.slate500);
+      doc.text(`${job.company} • ${job.location}`, MARGIN, y);
+
+      y += 16;
     });
   }
 
-  // ── Top jobs ──────────────────────────────────────────
-  if (result.top_jobs.length > 0) {
-    divider();
-    heading('Top Job Matches');
-    result.top_jobs.slice(0, 15).forEach((j) => {
-      paragraph(
-        `${j.title} — ${j.company} (${j.location}) — Score: ${j.total_score}`,
-        10,
-        COLOR.gray900
-      );
+  // ── 8. Global Dynamic Header & Footer Pass ────────────
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+
+    doc.setDrawColor(...COLOR.slate200);
+    doc.setLineWidth(0.5);
+    doc.line(MARGIN, PAGE_HEIGHT - 35, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - 35);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...COLOR.slate500);
+    doc.text('Aura AI Resume Analyzer — Confidential Report', MARGIN, PAGE_HEIGHT - 22);
+    doc.text(`Page ${i} of ${totalPages}`, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - 22, {
+      align: 'right',
     });
   }
 

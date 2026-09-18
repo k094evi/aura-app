@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, Download, Share2, Loader2, Check } from 'lucide-react';
 
 import type { AnalysisResult } from '@/types/analysis';
+import { getStoredUser } from '@/lib/auth';
 import { generateReportPDF } from '@/lib/exportReport';
 import { shareResults } from '@/lib/shareResults';
 
@@ -21,7 +22,7 @@ export default function DashboardHeader({ result }: DashboardHeaderProps) {
     if (isExporting) return;
     setIsExporting(true);
     try {
-      generateReportPDF(result);
+      generateReportPDF(result, getStoredUser());
     } catch (err) {
       console.error('Failed to generate report PDF:', err);
     } finally {

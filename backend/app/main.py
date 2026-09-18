@@ -155,3 +155,7 @@ def health():
     balancers, or Docker/orchestration health checks to confirm the
     server process is up and responding."""
     return {"status": "ok"}
+
+from app.api.routes.jobs import router as jobs_router
+
+app.include_router(jobs_router, prefix="/api")
