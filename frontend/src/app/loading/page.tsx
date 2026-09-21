@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import DocumentScanner from '@/components/DocumentScanner';
-import AnalysisProgressBar from '@/components/AnalysisProgressBar';
-import AnalysisSteps from '@/components/AnalysisSteps';
+import { DocumentScanner, AnalysisProgressBar, AnalysisSteps } from '@/features/dashboard/components';
 
 export default function LoadingPage() {
   const [progress, setProgress] = useState(0);

@@ -5,15 +5,26 @@
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 
+// `value` is null until a resume has been analyzed.
 interface SectionData {
   name: string;
-  value: number;
+  value: number | null;
 }
 
 interface AssessmentSidebarProps {
-  score: number;
-  sections: SectionData[];
+  // null = no resume analyzed yet -> the card shows its empty state
+  score: number | null;
+  sections?: SectionData[];
 }
+
+// Dimensions listed (with "-" values) before any resume has been analyzed.
+const EMPTY_SECTIONS: SectionData[] = [
+  'Formatting',
+  'Keywords',
+  'Quantification',
+  'Impact',
+  'Readability',
+].map((name) => ({ name, value: null }));
 
 // Weight (in %) each dimension contributes to the ATS score, as shown in the
 // "How Your ATS Score is Calculated" modal in the Figma design. Matched by
@@ -69,9 +80,19 @@ function InfoButton({ onClick, label }: { onClick: () => void; label: string }) 
   );
 }
 
-// Circular progress ring showing the overall score percentage
-function ScoreChart({ score, label = 'ATS Score' }: { score: number; label?: string }) {
+// Circular progress ring showing the overall score percentage.
+// With no score yet it shows a dash and "No score yet" instead of the ring.
+function ScoreChart({ score, label = 'ATS Score' }: { score: number | null; label?: string }) {
   const gradientId = `score-ring-${useId().replace(/:/g, '')}`;
+
+  if (score === null) {
+    return (
+      <div className="flex h-[160px] w-full flex-col items-center justify-center gap-1">
+        <span className="text-[28px] font-bold leading-none text-[#9ca3af]">-</span>
+        <span className="text-[10px] font-bold uppercase text-[#4b5563]">No score yet</span>
+      </div>
+    );
+  }
 
   const size = 130;
   const stroke = 12;
@@ -128,8 +149,18 @@ function ScoreChart({ score, label = 'ATS Score' }: { score: number; label?: str
   );
 }
 
-// One "Formatting ▬▬▬▬ 90%" row in the Dimension Analysis card
-function DimensionRow({ name, value }: { name: string; value: number }) {
+// One "Formatting ▬▬▬▬ 90%" row in the Dimension Analysis card.
+// With no value yet it shows just the name and a dash.
+function DimensionRow({ name, value }: { name: string; value: number | null }) {
+  if (value === null) {
+    return (
+      <div className="flex h-8 items-center justify-between gap-3">
+        <p className="text-[14px] font-semibold text-[#111827]">{name}</p>
+        <p className="w-[38px] shrink-0 text-right text-[13px] font-bold text-[#9ca3af]">-</p>
+      </div>
+    );
+  }
+
   const pct = clampPercent(value);
 
   return (
@@ -215,28 +246,31 @@ function AtsScoreModal({
   sections,
   onClose,
 }: {
-  score: number;
+  score: number | null;
   sections: SectionData[];
   onClose: () => void;
 }) {
   const rows = sections.map((section) => {
     const weight = getWeight(section.name);
-    const pct = clampPercent(section.value);
+    const pct = section.value === null ? null : clampPercent(section.value);
     return {
       name: section.name,
       pct,
       weight,
-      points: weight === undefined ? undefined : (pct * weight) / 100,
+      points:
+        weight === undefined || pct === null ? undefined : (pct * weight) / 100,
     };
   });
 
-  // Only sum the dimensions when every one of them has a known weight.
-  const allWeighted = rows.length > 0 && rows.every((row) => row.weight !== undefined);
+  // Only sum the dimensions when every one of them has a score and a known weight.
+  const allWeighted = rows.length > 0 && rows.every((row) => row.points !== undefined);
   const total = allWeighted ? rows.reduce((sum, row) => sum + (row.points ?? 0), 0) : null;
 
   const totalText =
     total === null
-      ? `${score}%`
+      ? score === null
+        ? '—'
+        : `${score}%`
       : Number.isInteger(total)
         ? `${total}%`
         : `${formatPoints(total)}% ≈ ${Math.round(total)}% (rounded)`;
@@ -254,7 +288,7 @@ function AtsScoreModal({
               {row.name}
             </p>
             <p className="w-[40px] shrink-0 text-right text-[12px] font-bold text-[#111827]">
-              {Math.round(row.pct)}%
+              {row.pct === null ? '—' : `${Math.round(row.pct)}%`}
             </p>
             <p className="w-[48px] shrink-0 text-right text-[12px] font-semibold text-[#4b5563]">
               {row.weight === undefined ? '—' : `× ${row.weight}%`}
@@ -306,9 +340,11 @@ function DimensionGuideModal({
                 <p className="min-w-0 truncate text-[13px] font-bold text-[#111827]">
                   {section.name}
                 </p>
-                <p className="shrink-0 text-[11px] font-bold text-[#7c3aed]">
-                  {Math.round(clampPercent(section.value))}%
-                </p>
+                {section.value !== null && (
+                  <p className="shrink-0 text-[11px] font-bold text-[#7c3aed]">
+                    {Math.round(clampPercent(section.value))}%
+                  </p>
+                )}
               </div>
               {description && (
                 <p className="text-[11px] leading-[1.3] text-[#4b5563]">{description}</p>
@@ -333,6 +369,10 @@ export default function AssessmentSidebar({ score, sections }: AssessmentSidebar
   const [openModal, setOpenModal] = useState<'score' | 'dimensions' | null>(null);
   const closeModal = () => setOpenModal(null);
 
+  const hasResult = score !== null;
+  // Before analysis, list the standard dimensions with "-" values
+  const rows = hasResult && sections && sections.length > 0 ? sections : EMPTY_SECTIONS;
+
   return (
     <div className="flex flex-col gap-6">
       {/* Overall Assessment card with score chart */}
@@ -347,10 +387,12 @@ export default function AssessmentSidebar({ score, sections }: AssessmentSidebar
 
         <ScoreChart score={score} />
 
-        {/* Summary note about resume complexity */}
+        {/* Summary note */}
         <div className="rounded-[12px] border border-[#7c3aed]/20 bg-[#7c3aed]/[0.07] p-3">
           <p className="text-[13px] font-medium leading-[1.4] text-[#7c3aed]">
-            Resume complexity is Optimal for Executive-level parsing.
+            {hasResult
+              ? 'Resume complexity is Optimal for Executive-level parsing.'
+              : 'Your ATS score appears here after a resume is uploaded and analyzed.'}
           </p>
         </div>
       </div>
@@ -366,17 +408,17 @@ export default function AssessmentSidebar({ score, sections }: AssessmentSidebar
         </div>
 
         <div className="flex flex-col gap-4">
-          {sections.map((section) => (
+          {rows.map((section) => (
             <DimensionRow key={section.name} name={section.name} value={section.value} />
           ))}
         </div>
       </div>
 
       {openModal === 'score' && (
-        <AtsScoreModal score={score} sections={sections} onClose={closeModal} />
+        <AtsScoreModal score={score} sections={rows} onClose={closeModal} />
       )}
       {openModal === 'dimensions' && (
-        <DimensionGuideModal sections={sections} onClose={closeModal} />
+        <DimensionGuideModal sections={rows} onClose={closeModal} />
       )}
     </div>
   );

@@ -5,6 +5,8 @@
 import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
 import { FileText, Loader2, UploadCloud, X } from 'lucide-react';
 
+import CompanySelector from './CompanySelector';
+
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB, as shown in the Figma copy
 const ALLOWED_EXT = /\.(pdf|docx)$/i;
 
@@ -28,7 +30,7 @@ function formatSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// Shared style for the two text inputs (default / focus states from Figma).
+// Shared style for the text input (default / focus states from Figma).
 const inputClass =
   'w-full rounded-[10px] border border-[#e5e7eb] bg-white px-[14px] py-[12px] text-[14px] text-[#111827] shadow-[0_1px_1.5px_rgba(17,24,39,0.04)] outline-none transition placeholder:text-[#9ca3af] focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/15';
 
@@ -36,7 +38,7 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [jobTitle, setJobTitle] = useState('');
-  const [companies, setCompanies] = useState('');
+  const [companies, setCompanies] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
 
@@ -87,7 +89,8 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
       setFileError('Please choose a resume to upload.');
       return;
     }
-    onAnalyze({ file, jobTitle: jobTitle.trim(), companies: companies.trim() });
+    // The API expects a comma-separated string
+    onAnalyze({ file, jobTitle: jobTitle.trim(), companies: companies.join(', ') });
   };
 
   const shownError = fileError ?? error;
@@ -98,8 +101,8 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
       <div className="flex flex-col gap-1">
         <h2 className="text-[20px] font-extrabold leading-tight text-[#111827]">Upload Resume</h2>
         <p className="text-[14px] text-[#4b5563]">
-          Instantly optimize your resume against Applicant Tracking Systems (ATS) and target
-          benchmarks.
+          Upload your resume to generate ATS scoring, keyword recommendations, company matches, and
+          formatting insights.
         </p>
       </div>
 
@@ -168,12 +171,12 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
                 <UploadCloud className="size-6 text-[#7c3aed]" />
               </span>
               <div className="flex flex-col items-center gap-1">
-                <p className="text-[14px] font-semibold text-[#111827]">Drag and drop your resume here</p>
+                <p className="text-[14px] font-semibold text-[#111827]">Upload your resume to begin analysis</p>
                 <p className="text-[13px] text-[#4b5563]">
                   or <span className="font-semibold text-[#7c3aed]">click to browse</span>
                 </p>
               </div>
-              <p className="text-[11px] text-[#9ca3af]">PDF, DOCX up to 10MB</p>
+              <p className="text-[11px] text-[#9ca3af]">PDF or DOCX files up to 10MB</p>
             </>
           )}
         </div>
@@ -187,7 +190,7 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
 
       {/* Inputs + CTA */}
       <div className="flex flex-col gap-5">
-        <div className="flex flex-col gap-4 sm:flex-row">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
           <div className="flex min-w-0 flex-1 flex-col gap-[6px]">
             <label htmlFor="target-job-title" className="text-[13px] font-semibold text-[#4b5563]">
               Target Job Title
@@ -203,20 +206,11 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
             />
           </div>
 
-          <div className="flex min-w-0 flex-1 flex-col gap-[6px]">
-            <label htmlFor="target-companies" className="text-[13px] font-semibold text-[#4b5563]">
-              Target Companies
-            </label>
-            <input
-              id="target-companies"
-              type="text"
-              value={companies}
-              onChange={(e) => setCompanies(e.target.value)}
-              placeholder="e.g. Google, Apple, Meta"
-              disabled={isAnalyzing}
-              className={inputClass}
-            />
-          </div>
+          <CompanySelector
+            selectedCompanies={companies}
+            onSelectionChange={setCompanies}
+            disabled={isAnalyzing}
+          />
         </div>
 
         <button
@@ -231,7 +225,7 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
               Analyzing...
             </>
           ) : (
-            'Upload & Analyze'
+            'Upload Resume'
           )}
         </button>
       </div>

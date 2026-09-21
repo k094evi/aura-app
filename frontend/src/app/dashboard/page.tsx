@@ -1,95 +1,103 @@
+// src/app/dashboard/page.tsx
+
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Briefcase, Lightbulb, TrendingUp, type LucideIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { motion } from 'motion/react';
+import { Info, TrendingUp } from 'lucide-react';
 
-import DashboardHeader from '@/components/DashboardHeader';
-import Upload from '@/features/dashboard/components/upload';
-import AssessmentSidebar from '@/features/dashboard/components/AssessmentSidebar';
-import CompanyMatchCarousel from '@/features/dashboard/components/CompanyMatchCarousel';
-import KeyStrengths from '@/features/dashboard/components/KeyStrengths';
-import SmartSuggestions from '@/features/dashboard/components/SmartSuggestions';
-import KeywordSkillOptimization from '@/features/dashboard/components/KeywordSkillOptimization';
-import CertificationRecommendations, {
-  type Certification,
-} from '@/features/dashboard/components/CertificationRecommendations';
-import FormattingReadability from '@/features/dashboard/components/FormattingReadability';
-import type { AnalysisResult } from '@/types/analysis';
+import type { AnalysisResult, TopJob } from '@/types/analysis';
+import {
+  AnalysisLoadingOverlay,
+  AssessmentSidebar,
+  CertificationRecommendations,
+  CompanyMatchCarousel,
+  DashboardHeader,
+  FormattingReadability,
+  JobListings,
+  KeyStrengths,
+  KeywordSkillOptimization,
+  SmartSuggestions,
+  Upload,
+  type UploadPayload,
+} from '@/features/dashboard/components';
 
-const VIOLET_TONE = 'border-[#8b5cf6]/20 bg-[#8b5cf6]/10 text-[#8b5cf6]';
-const AMBER_TONE = 'border-[#f59e0b]/20 bg-[#f59e0b]/10 text-[#f59e0b]';
+// Keeps the last analysis across a page refresh (cleared when the tab closes).
+// Bumped to v2: the stored value is now the API shape (AnalysisResult), not the old card props.
+const STORAGE_KEY = 'aura:last-analysis:v2';
 
-// Shared decorative background (orbs, dot grid, accent line, rings) from the Figma frame.
-function Background() {
-  return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div className="absolute -left-[220px] -top-[220px] size-[940px] rounded-full bg-[radial-gradient(circle,rgba(167,139,250,0.38)_0%,rgba(167,139,250,0.16)_38%,rgba(167,139,250,0)_70%)]" />
-      <div className="absolute -right-[220px] top-[120px] size-[800px] rounded-full bg-[radial-gradient(circle,rgba(34,211,238,0.30)_0%,rgba(34,211,238,0.12)_40%,rgba(34,211,238,0)_70%)]" />
-      <div className="absolute left-[calc(50%-250px)] top-[700px] size-[620px] rounded-full bg-[radial-gradient(circle,rgba(251,113,133,0.18)_0%,rgba(251,113,133,0.06)_40%,rgba(251,113,133,0)_70%)]" />
+const normalizeName = (s: string) => s.trim().toLowerCase();
 
-      {/* Dot grid */}
-      <div className="absolute left-0 top-0 h-[960px] w-full opacity-[0.06] [background-image:radial-gradient(circle,#7c3aed_1px,transparent_1px)] [background-size:24px_24px]" />
+// Only http(s) links are kept (URLs come from an external API and end up in href)
+const safeUrl = (url: unknown): string | undefined =>
+  typeof url === 'string' && /^https?:\/\//i.test(url) ? url : undefined;
 
-      {/* Top accent line */}
-      <div className="absolute left-0 top-0 h-[3px] w-full bg-[linear-gradient(90deg,#8b5cf6_0%,#06b6d4_50%,rgba(139,92,246,0)_100%)]" />
+// The best-scoring job at a company, used when the API doesn't send `top_job_url` itself
+function findTopJobUrl(company: string, jobs: TopJob[]): string | undefined {
+  const name = normalizeName(company);
+  if (!name) return undefined;
 
-      {/* Decorative rings, top right */}
-      <div className="absolute -right-[120px] -top-[120px] size-[340px] rounded-full border border-[#8b5cf6]/20" />
-      <div className="absolute -right-[80px] -top-[80px] size-[260px] rounded-full border border-[#8b5cf6]/20" />
-    </div>
-  );
+  const best = jobs
+    .filter((job) => safeUrl(job.url) && normalizeName(job.company ?? '').includes(name))
+    .sort((a, b) => (b.total_score ?? 0) - (a.total_score ?? 0))[0];
+
+  return best?.url;
 }
 
-function SectionHeader({
-  icon: Icon,
-  tone,
-  title,
-  subtitle,
-}: {
-  icon: LucideIcon;
-  tone: string;
-  title: string;
-  subtitle: string;
-}) {
-  return (
-    <div className="flex items-center gap-[14px]">
-      <div className={`flex shrink-0 items-center justify-center rounded-[12px] border p-[10px] ${tone}`}>
-        <Icon className="size-5" />
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <h2 className="text-[18px] font-bold leading-tight text-[#111827]">{title}</h2>
-        <p className="text-[13px] text-[#4b5563]">{subtitle}</p>
-      </div>
-    </div>
-  );
+// Maps the backend response to AnalysisResult (the shape DashboardHeader / Export PDF also use).
+// Accepts the alternative key names the page used before, so an older cached result still loads.
+// Adjust the keys here if your FastAPI response names them differently.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toResult(raw: Record<string, any>): AnalysisResult {
+  const topJobs: TopJob[] = raw.top_jobs ?? [];
+
+  return {
+    keywords: raw.keywords ?? [],
+    total_jobs: raw.total_jobs ?? topJobs.length,
+    top_jobs: topJobs,
+    // Each company gets its job link: from the API if present, otherwise from top_jobs
+    companies: (raw.companies ?? []).map((c: AnalysisResult['companies'][number]) => ({
+      ...c,
+      top_job_url: safeUrl(c.top_job_url) ?? findTopJobUrl(c.company, topJobs),
+    })),
+    ats_score: Math.round(raw.ats_score ?? raw.score ?? 0),
+    sections: raw.sections ?? raw.dimensions ?? [],
+    strengths: raw.strengths ?? [],
+    improvements: raw.improvements ?? raw.suggestions ?? [],
+    skill_gaps: raw.skill_gaps ?? raw.skillGaps ?? [],
+    grammar_issues: raw.grammar_issues ?? raw.grammarIssues ?? [],
+    certifications: raw.certifications ?? [],
+  };
 }
 
-// Stat card from the Figma stats row: label, big value, and an optional
-// green trend badge (icon + short text) aligned to the right of the value.
-function StatCard({
-  label,
-  value,
-  badge,
-}: {
-  label: string;
-  value: string | number;
-  badge?: string;
-}) {
+async function analyzeResume({ file, jobTitle, companies }: UploadPayload): Promise<AnalysisResult> {
+  const body = new FormData();
+  body.append('file', file);
+  body.append('job_title', jobTitle);
+  body.append('target_companies', companies);
+
+  // Use the same field names and Authorization header as the fetch in your current
+  // loading page — this goes through the Next.js proxy at app/api/analyze/route.ts.
+  const res = await fetch('/api/analyze', { method: 'POST', body });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new Error(err?.detail ?? "We couldn't analyze that resume. Please try again.");
+  }
+  return toResult(await res.json());
+}
+
+// One summary tile in the stats row ("Resumes Uploaded", "Jobs Targeted", "Match Score")
+function StatCard({ label, value, hint }: { label: string; value: string | number; hint: string }) {
   return (
-    <div className="flex flex-col gap-3 rounded-[20px] border-[1.5px] border-white bg-white/[0.72] p-6 shadow-[0_10px_30px_rgba(17,24,39,0.03)] backdrop-blur-[12px]">
-      <p className="text-[14px] font-semibold text-[#4b5563]">{label}</p>
-
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="text-[36px] font-extrabold leading-none text-[#111827]">{value}</p>
-
-        {badge && (
-          <span className="flex shrink-0 items-center gap-1 rounded-full bg-[#ecfdf5] px-2 py-1">
-            <TrendingUp className="size-3 text-[#10b981]" strokeWidth={2.5} />
-            <span className="whitespace-nowrap text-[12px] font-bold text-[#10b981]">{badge}</span>
-          </span>
-        )}
+    <div className="flex flex-col gap-3 rounded-[20px] border-[1.5px] border-white bg-white/[0.72] p-5 shadow-[0_10px_30px_rgba(17,24,39,0.03)] backdrop-blur-[12px]">
+      <p className="text-[13px] font-medium text-[#4b5563]">{label}</p>
+      <div className="flex items-end justify-between gap-3">
+        <p className="text-[32px] font-extrabold leading-none text-[#111827]">{value}</p>
+        <span className="flex items-center gap-1 rounded-full bg-[#10b981]/10 px-2 py-1 text-[10px] font-bold text-[#10b981]">
+          <TrendingUp className="size-3" />
+          {hint}
+        </span>
       </div>
     </div>
   );
@@ -97,215 +105,121 @@ function StatCard({
 
 export default function DashboardPage() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [notFound, setNotFound] = useState(false);
-  const loaded = useRef(false);
-  const router = useRouter();
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Called by the Upload Resume card when a valid file is chosen and the user
-  // presses "Upload & Analyze". For now this hands off to the existing /upload
-  // flow (the same behavior the old card had). This is the single place to
-  // replace with the real analysis request once it's wired here.
-  const handleAnalyze = () => {
-    router.push('/upload');
-  };
-
+  // Restore the last analysis after a refresh
   useEffect(() => {
-    // Guard against React Strict Mode double-invocation.
-    if (loaded.current) return;
-    loaded.current = true;
-
-    const raw = sessionStorage.getItem('aura_result');
-    if (!raw) {
-      setNotFound(true);
-      return;
-    }
-
     try {
-      const parsed = JSON.parse(raw) as AnalysisResult;
-      setResult(parsed);
-
-      // Keep src 1 behavior: consume the one-time analysis result only
-      // after a successful parse.
-      sessionStorage.removeItem('aura_result');
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      if (saved) setResult(toResult(JSON.parse(saved)));
     } catch {
-      setNotFound(true);
+      // Storage unavailable or corrupted: start from the empty state.
     }
   }, []);
 
-  if (notFound) {
-    return (
-      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f0eeff] px-4">
-        <Background />
-        <div className="relative z-10 w-full max-w-md rounded-[24px] border-[1.5px] border-white bg-white/[0.72] p-8 text-center shadow-[0_10px_30px_rgba(17,24,39,0.03)] backdrop-blur-[12px]">
-          <p className="mb-5 text-lg font-semibold text-[#4b5563]">No analysis found.</p>
-          <Link
-            href="/upload"
-            className="inline-flex rounded-full bg-gradient-to-r from-[#7c3aed] via-[#a78bfa] via-[60%] to-[#06b6d4] px-8 py-[14px] text-[15px] font-bold text-white shadow-[0_8px_12px_rgba(124,58,237,0.2)] transition-opacity hover:opacity-90"
-          >
-            Upload a Resume
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  const handleAnalyze = async (payload: UploadPayload) => {
+    setIsAnalyzing(true);
+    setError(null);
+    try {
+      const next = await analyzeResume(payload);
+      setResult(next);
+      try {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // Not being able to persist is fine; the results still show.
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong. Please try again.');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
-  if (!result) {
-    return (
-      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f0eeff]">
-        <Background />
-        <p className="relative z-10 text-sm font-medium text-[#9ca3af]">Loading analysis…</p>
-      </div>
-    );
-  }
-
-  // Certification recommendations. `certifications` isn't part of the
-  // AnalysisResult type yet, so it's read defensively: until the analysis
-  // response includes it, the card just shows its empty state.
-  const certifications =
-    (result as AnalysisResult & { certifications?: Certification[] }).certifications ?? [];
-
-  // ── Stats row values ──
-  // Resumes Uploaded: needs the user's upload history, which this page doesn't
-  // have yet (it only receives the one-time analysis result). Shows "—" until
-  // it's wired to the history data.
-  const resumesUploaded: number | null = null;
-
-  // Match Score: average score of the top job matches.
-  const jobScores = result.top_jobs
-    .map((job) => Number(job.total_score))
-    .filter((n) => Number.isFinite(n));
-  const matchScore =
-    jobScores.length > 0
-      ? `${Math.round(jobScores.reduce((sum, n) => sum + n, 0) / jobScores.length)}%`
-      : '—';
+  const hasResult = result !== null;
+  const topMatch =
+    result && result.companies.length > 0
+      ? Math.max(...result.companies.map((c) => c.match))
+      : null;
 
   return (
-    <div className="relative min-h-screen w-full overflow-x-clip bg-[#f0eeff]">
-      <Background />
+    // A <div>, not <main>: ConditionalLayout already wraps every page in <main>
+    <div className="relative min-h-screen w-full overflow-hidden bg-[#f4f2fb]">
+      {/* Ambient background orbs */}
+      <div className="pointer-events-none absolute -left-24 top-10 size-[480px] rounded-full bg-violet-300/40 blur-[110px]" />
+      <div className="pointer-events-none absolute -right-24 top-40 size-[420px] rounded-full bg-cyan-200/50 blur-[110px]" />
+      <div className="pointer-events-none absolute left-1/3 top-[520px] size-[400px] rounded-full bg-pink-200/40 blur-[110px]" />
 
-      {/* Top padding leaves room for the fixed site navbar (rendered by the layout) */}
-      <div className="relative z-10 mx-auto flex w-full max-w-[1440px] flex-col gap-8 px-6 pb-16 pt-[120px] sm:px-10 lg:px-20">
-        {/* ───────────── Welcome row + keyword chips ───────────── */}
-        <div className="flex flex-col gap-4">
-          <DashboardHeader result={result} />
+      {/* Top padding leaves room for the fixed Navbar */}
+      <div className="relative z-10 mx-auto flex w-full max-w-[1200px] flex-col gap-6 px-4 pb-16 pt-28 sm:px-6">
+        {/* Header: greeting from the stored user + working Export PDF */}
+        <DashboardHeader result={result} />
 
-          {result.keywords.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              {result.keywords.map((kw) => (
-                <span
-                  key={kw}
-                  className="rounded-full border border-[#7c3aed]/20 bg-[#7c3aed]/[0.08] px-3 py-1 text-xs font-bold text-[#7c3aed]"
-                >
-                  {kw}
-                </span>
-              ))}
-            </div>
-          )}
+        {/* Upload card + assessment sidebar */}
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
+          <Upload onAnalyze={handleAnalyze} isAnalyzing={isAnalyzing} error={error} />
+          <AssessmentSidebar score={result?.ats_score ?? null} sections={result?.sections} />
         </div>
 
-        {/* ───────────── Upload card + assessment sidebar ───────────── */}
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_420px]">
-          <Upload onAnalyze={handleAnalyze} />
-
-          <div className="w-full min-w-0">
-            <AssessmentSidebar score={result.ats_score} sections={result.sections} />
-          </div>
-        </div>
-
-        {/* ───────────── Stats row ───────────── */}
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          <StatCard label="Resumes Uploaded" value={resumesUploaded ?? '—'} />
+        {/* Summary stats */}
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard
+            label="Resumes Uploaded"
+            value={hasResult ? 1 : 0}
+            hint={hasResult ? 'Analyzed' : 'Upload to begin'}
+          />
           <StatCard
             label="Jobs Targeted"
-            value={result.total_jobs}
-            badge={`${result.top_jobs.length} top matches`}
+            value={result ? result.companies.length : 0}
+            hint={result && result.companies.length > 0 ? 'Companies matched' : 'No targets yet'}
           />
-          <StatCard label="Match Score" value={matchScore} />
+          <StatCard
+            label="Match Score"
+            value={topMatch !== null ? `${topMatch}%` : '-'}
+            hint={topMatch !== null ? 'Top company fit' : 'No score yet'}
+          />
         </div>
 
-        {/* ───────────── Analysis results ───────────── */}
-        <div className="flex flex-col gap-6">
-          <KeywordSkillOptimization skillGaps={result.skill_gaps} />
-
-          <CertificationRecommendations certifications={certifications} />
-
-          <CompanyMatchCarousel companies={result.companies} />
-
-          <FormattingReadability grammarIssues={result.grammar_issues} />
-
-          {/* Insights & Recommendations */}
-          <section className="flex flex-col gap-6 rounded-[24px] border-[1.5px] border-white bg-white/[0.72] p-8 shadow-[0_10px_30px_rgba(17,24,39,0.03)] backdrop-blur-[12px]">
-            <SectionHeader
-              icon={Lightbulb}
-              tone={AMBER_TONE}
-              title="Insights & Recommendations"
-              subtitle="AI-powered analysis of your resume strengths and areas for improvement"
-            />
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        {/* Results appear only after a resume has been analyzed */}
+        {result ? (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="flex flex-col gap-6"
+          >
+            <div className="grid gap-6 md:grid-cols-2">
               <KeyStrengths strengths={result.strengths} />
               <SmartSuggestions improvements={result.improvements} />
             </div>
-          </section>
-
-          {/* Top Job Matches: real job data, styled like the other Figma cards */}
-          <section className="flex flex-col gap-6 rounded-[24px] border-[1.5px] border-white bg-white/[0.72] p-8 shadow-[0_10px_30px_rgba(17,24,39,0.03)] backdrop-blur-[12px]">
-            <SectionHeader
-              icon={Briefcase}
-              tone={VIOLET_TONE}
-              title="Top Job Matches"
-              subtitle="Roles with the strongest match to your resume"
+            <KeywordSkillOptimization skillGaps={result.skill_gaps} />
+            <CertificationRecommendations certifications={result.certifications ?? []} />
+            <FormattingReadability grammarIssues={result.grammar_issues} />
+            <CompanyMatchCarousel companies={result.companies} />
+            <JobListings
+              jobs={result.top_jobs}
+              totalJobs={result.total_jobs}
+              keywords={result.keywords}
             />
-
-            <div className="flex flex-col gap-3">
-              {result.top_jobs.map((job, i) => (
-                <a
-                  key={`${job.title}-${job.company}-${i}`}
-                  href={job.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group block rounded-[16px] border-[1.5px] border-white bg-white/[0.72] p-4 shadow-[0_10px_30px_rgba(17,24,39,0.03)] transition-all hover:border-[#8b5cf6]/30 hover:bg-white"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[15px] font-bold text-[#111827] group-hover:text-[#7c3aed]">
-                        {job.title}
-                      </p>
-                      <p className="mt-1 text-[13px] text-[#4b5563]">
-                        {job.company} · {job.location}
-                      </p>
-                      <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-[#9ca3af]">
-                        {job.description}
-                      </p>
-
-                      {job.matched_skills.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {job.matched_skills.slice(0, 4).map((skill, skillIndex) => (
-                            <span
-                              key={`${skill}-${skillIndex}`}
-                              className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600"
-                            >
-                              {skill}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="shrink-0 text-right">
-                      <span className="bg-gradient-to-r from-[#8b5cf6] to-[#06b6d4] bg-clip-text text-lg font-black text-transparent">
-                        {job.total_score}
-                      </span>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-[#9ca3af]">
-                        Score
-                      </p>
-                    </div>
-                  </div>
-                </a>
-              ))}
+          </motion.div>
+        ) : (
+          <div className="flex items-start gap-3 rounded-[16px] border-[1.5px] border-white bg-white/[0.72] px-5 py-4 backdrop-blur-[12px]">
+            <span className="mt-[1px] flex size-6 shrink-0 items-center justify-center rounded-full bg-[#7c3aed]/[0.08]">
+              <Info className="size-3.5 text-[#9ca3af]" />
+            </span>
+            <div className="flex flex-col gap-[2px]">
+              <p className="text-[13px] font-bold text-[#111827]">No data available yet</p>
+              <p className="text-[12px] text-[#9ca3af]">
+                Upload your first resume to generate scores, insights, and personalized
+                recommendations.
+              </p>
             </div>
-          </section>
-        </div>
+          </div>
+        )}
       </div>
+
+      {/* Full-screen loading state while the request is running */}
+      {isAnalyzing && <AnalysisLoadingOverlay />}
     </div>
   );
 }

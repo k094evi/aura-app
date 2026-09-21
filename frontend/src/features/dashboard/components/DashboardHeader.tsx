@@ -1,4 +1,4 @@
-// components/DashboardHeader.tsx
+// src/features/dashboard/components/DashboardHeader.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -9,7 +9,8 @@ import { getStoredUser } from '@/lib/auth';
 import { generateReportPDF } from '@/lib/exportReport';
 
 interface DashboardHeaderProps {
-  result: AnalysisResult;
+  // null until a resume has been analyzed: the Export button stays disabled
+  result: AnalysisResult | null;
 }
 
 // Welcome row for the dashboard page: greeting on the left, Export PDF on the right
@@ -25,10 +26,10 @@ export default function DashboardHeader({ result }: DashboardHeaderProps) {
   }, []);
 
   const handleExport = async () => {
-    if (isExporting) return;
+    if (!result || isExporting) return;
     setIsExporting(true);
     try {
-      generateReportPDF(result, getStoredUser());
+      await generateReportPDF(result, getStoredUser());
     } catch (err) {
       console.error('Failed to generate report PDF:', err);
     } finally {
@@ -44,15 +45,18 @@ export default function DashboardHeader({ result }: DashboardHeaderProps) {
           Welcome back{firstName ? `, ${firstName}` : ''}
         </h1>
         <p className="text-sm text-[#4b5563]">
-          Here is your latest resume optimization progress dashboard.
+          {result
+            ? 'Here is how your resume performs and where to improve it.'
+            : 'No resume has been uploaded yet – upload one to unlock your optimization dashboard.'}
         </p>
       </div>
 
       {/* Export PDF button */}
       <button
+        type="button"
         onClick={handleExport}
-        disabled={isExporting}
-        className="flex items-center gap-2 self-start rounded-[12px] border-[1.5px] border-[#e3e5eb] bg-white/72 backdrop-blur-[12px] px-5 py-3 text-sm font-medium text-[#454a54] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.05)] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={!result || isExporting}
+        className="flex items-center gap-2 self-start rounded-[12px] border-[1.5px] border-[#e3e5eb] bg-white/[0.72] px-5 py-3 text-sm font-medium text-[#454a54] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.05)] backdrop-blur-[12px] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-white/[0.72]"
       >
         {isExporting ? (
           <Loader2 className="size-[18px] animate-spin" />

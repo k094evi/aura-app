@@ -10,8 +10,6 @@ import { getStoredUser } from '@/lib/auth';
 
 const AUTH_NAV_LINKS = [
   { label: 'Dashboard', href: '/dashboard' },
-  // TEMPORARY: old upload page. Remove this line once the backend is fixed.
-  { label: 'Upload', href: '/upload' },
   { label: 'History', href: '/analysis-history' },
   { label: 'AI Mode', href: '/ai-mode' },
   { label: 'Settings', href: '/settings' },
