@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Navbar } from "@/components/NavBar";
-import { Footer } from "@/components/Footer";
+import { Navbar } from '@/components/NavBar';
+import { Footer } from '@/components/Footer';
 import { isAuthenticated as checkIsAuthenticated, clearSession } from '@/lib/auth';
 
 // Routes that use the authenticated (logged-in) Navbar
@@ -13,6 +13,8 @@ const AUTHENTICATED_FROM_VALUES = ['dashboard', 'profile', 'analysis-history', '
 // Legal pages that have no fixed auth state of their own and instead
 // borrow it from the "from" query param.
 const LEGAL_ROUTES = ['/privacy', '/terms-of-service'];
+// Legal pages opened from these pages keep the Navbar hidden (they have none)
+const NO_NAVBAR_FROM_VALUES = ['signup', 'signin'];
 
 // Layout wrapper that conditionally shows/hides the Navbar and Footer
 // based on the current route, and drives the Navbar's authenticated
@@ -39,12 +41,18 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   // where the user came from (carried via the "from" query param).
   const isLegalRoute = LEGAL_ROUTES.includes(pathname);
   const isLegalFromAuth = isLegalRoute && !!from && AUTHENTICATED_FROM_VALUES.includes(from);
-  const hideNavOnly = isLegalRoute && !isLegalFromAuth && !authed;
+
+  // Only hide the Navbar on legal pages when the user came from signup/signin
+  // (those pages have no Navbar). From the upload page or a direct visit,
+  // signed-out users get the public Navbar.
+  const hideNavOnly = isLegalRoute && !!from && NO_NAVBAR_FROM_VALUES.includes(from);
 
   // Authenticated if the real session says so, or if it's a legal page
   // reached from an authenticated route.
   const isAuthenticated =
-    authed || (AUTHENTICATED_ROUTES.some((route) => pathname.startsWith(route))) || isLegalFromAuth;
+    authed ||
+    AUTHENTICATED_ROUTES.some((route) => pathname.startsWith(route)) ||
+    isLegalFromAuth;
 
   const handleLogout = () => {
     clearSession();
@@ -58,9 +66,7 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
       {!hideNavFooter && !hideNavOnly && (
         <Navbar isAuthenticated={isAuthenticated} onLogout={handleLogout} />
       )}
-      <main className="min-h-screen">
-        {children}
-      </main>
+      <main className="min-h-screen">{children}</main>
       {/* Show Footer unless on a hidden route */}
       {!hideNavFooter && <Footer />}
     </>

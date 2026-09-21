@@ -1,5 +1,7 @@
-import UploadPage from "./upload/page";
+// src/app/page.tsx
 
-export default function HomePage() {
-  return <UploadPage />;
+import HomePage from './home/page';
+
+export default function Page() {
+  return <HomePage />;
 }
