@@ -1,149 +1,109 @@
-'use client';
-
-import { useState } from 'react';
-import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
-
 import AnalysisRecordCard, { type AnalysisRecord } from '@/features/analysis-history/components/AnalysisRecordCard';
 import {
-  AnalysisSummaryStats,
-  AnalysisScoreTrendChart,
+  AnalysisHistoryBackground,
+  AnalysisHistoryEmptyRings,
+  AnalysisHistoryHeader,
+  AnalysisHistoryPagination,
   AnalysisHistoryEmptyState,
-  DeleteAnalysisModal,
 } from '@/features/analysis-history/components/AnalysisHistoryParts';
 
-// Placeholder data until this is wired up to a real API. Swap this for a
-// fetch (e.g. GET /api/analysis-history) and drive `records` from server
-// data instead — everything below is derived from `records`, so the rest
-// of the page updates automatically once real data flows in.
-const initialRecords: AnalysisRecord[] = [
+// Hardcoded to match the Figma "Resume History" frame exactly. Swap for a
+// fetch (e.g. GET /api/analysis-history) once the backend exists.
+//
+// To preview the Figma empty-state frame, set this to `[]`.
+const records: AnalysisRecord[] = [
   {
     id: '1',
-    filename: 'Resume_v3_Final.pdf',
-    date: 'June 14, 2025',
-    atsScore: 82,
-    jobMatch: 78,
-    skillGaps: 3,
-    grammarIssues: 0,
-    role: 'Software Developer',
-    location: 'Metro Manila',
-    company: 'Accenture',
-    contract: 'Full-time',
+    filename: 'Senior_PM_Resume_v3.pdf',
+    date: 'Oct 15, 2026',
+    role: 'Senior Product Manager',
+    companies: ['Google', 'Meta'],
+    moreCompanies: 3,
+    atsScore: 92,
+    status: 'Optimized',
   },
   {
     id: '2',
-    filename: 'Resume_v2.pdf',
-    date: 'June 10, 2025',
-    atsScore: 74,
-    jobMatch: 65,
-    skillGaps: 6,
-    grammarIssues: 2,
-    role: 'Software Developer',
-    location: 'Metro Manila',
-    company: 'Globe Telecom',
-    contract: 'Full-time',
+    filename: 'UX_Designer_Resume.pdf',
+    date: 'Oct 12, 2026',
+    role: 'UX Designer',
+    companies: ['Google'],
+    moreCompanies: 0,
+    atsScore: 85,
+    status: 'Optimized',
   },
   {
     id: '3',
-    filename: 'Resume_v1.pdf',
-    date: 'June 5, 2025',
-    atsScore: 61,
-    jobMatch: 48,
-    skillGaps: 11,
-    grammarIssues: 5,
-    role: 'Software Developer',
-    location: 'Metro Manila',
-    company: 'Concentrix',
-    contract: 'Full-time',
+    filename: 'Frontend_Dev_CV.pdf',
+    date: 'Oct 8, 2026',
+    role: 'Frontend Developer',
+    companies: ['Spotify', 'Stripe'],
+    moreCompanies: 2,
+    atsScore: 74,
+    status: 'Needs Review',
+  },
+  {
+    id: '4',
+    filename: 'Data_Analyst_Resume.pdf',
+    date: 'Oct 3, 2026',
+    role: 'Data Analyst',
+    companies: ['Meta', 'Netflix'],
+    moreCompanies: 4,
+    atsScore: 68,
+    status: 'Needs Review',
+  },
+  {
+    id: '5',
+    filename: 'Marketing_Manager.docx',
+    date: 'Sep 28, 2026',
+    role: 'Marketing Manager',
+    companies: ['Apple', 'Nike'],
+    moreCompanies: 1,
+    atsScore: 45,
+    status: 'Draft',
+  },
+  {
+    id: '6',
+    filename: 'Backend_Engineer_v2.pdf',
+    date: 'Sep 22, 2026',
+    role: 'Backend Engineer',
+    companies: ['Amazon', 'Microsoft'],
+    moreCompanies: 5,
+    atsScore: 88,
+    status: 'Optimized',
   },
 ];
 
-export default function AnalysisHistoryPage() {
-  const [records, setRecords] = useState<AnalysisRecord[]>(initialRecords);
-  // ID of the record pending delete confirmation; null when the modal is closed
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+// Total shown in "Showing 1-6 of 24 resumes" (hardcoded until real pagination exists)
+const TOTAL_RESUMES = 24;
 
+export default function AnalysisHistoryPage() {
   const hasRecords = records.length > 0;
 
-  // Summary stats for the top card grid — derived from `records`, so they
-  // stay in sync automatically as records are added or removed.
-  const best = hasRecords ? Math.max(...records.map((r) => r.atsScore)) : 0;
-  const latest = hasRecords ? records[0].atsScore : 0;
-  const improvement = hasRecords ? latest - records[records.length - 1].atsScore : 0;
-
-  // Reverse so the trend chart reads oldest -> newest, left to right.
-  const chartData = records
-    .slice()
-    .reverse()
-    .map((r) => ({ name: r.filename.replace('.pdf', ''), score: r.atsScore }));
-
-  const recordPendingDelete = records.find((r) => r.id === pendingDeleteId) ?? null;
-
-  // Removes the record locally. Replace with a DELETE call to the backend
-  // once available, and only update state after a successful response.
-  const confirmDelete = () => {
-    if (!pendingDeleteId) return;
-    setRecords((prev) => prev.filter((r) => r.id !== pendingDeleteId));
-    setPendingDeleteId(null);
-  };
-
   return (
-    <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#0c0a14] pt-20">
-      {/* Ambient background orbs, spaced down the full page so a long
-          list of analysis records doesn't run out into a flat,
-          orb-less section near the bottom. */}
-      <div className="pointer-events-none absolute -left-[150px] top-[120px] size-[600px] rounded-full bg-fuchsia-600/30 blur-[120px]" />
-      <div className="pointer-events-none absolute -right-[200px] top-[80px] size-[650px] rounded-full bg-violet-600/25 blur-[130px]" />
-      <div className="pointer-events-none absolute left-[35%] top-[850px] size-[550px] rounded-full bg-cyan-500/20 blur-[120px]" />
-      <div className="pointer-events-none absolute -right-[150px] top-[1500px] size-[550px] rounded-full bg-fuchsia-600/20 blur-[125px]" />
-      <div className="pointer-events-none absolute -left-[150px] top-[2150px] size-[520px] rounded-full bg-violet-600/20 blur-[120px]" />
+    // DM Sans is the Figma typeface; make sure it's loaded (weights 400-800)
+    // e.g. via next/font/google in the root layout.
+    <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#f0eeff] pt-20 font-['DM_Sans',sans-serif]">
+      <AnalysisHistoryBackground />
+      {!hasRecords && <AnalysisHistoryEmptyRings />}
 
-      {/* Sub-header / back link */}
-      <div className="relative z-10 flex w-full shrink-0 items-center px-8 pb-8 pt-5 md:px-16">
-        <Link
-          href="/dashboard"
-          className="flex items-center gap-2 text-sm font-semibold text-fuchsia-500 transition-colors hover:text-fuchsia-400"
-        >
-          <ArrowLeft className="size-4" />
-          Back to Dashboard
-        </Link>
-      </div>
+      <main className="relative z-10 flex w-full flex-1 flex-col gap-8 px-6 py-[60px] md:px-20">
+        <AnalysisHistoryHeader disabled={!hasRecords} />
 
-      {/* Workspace */}
-      <div className="relative z-10 flex w-full flex-col gap-8 px-8 pb-16 md:px-16">
-        <div className="flex flex-col gap-2.5">
-          <h1 className="text-[32px] font-extrabold leading-normal text-white">My Analysis History</h1>
-          <p className="text-base font-normal text-white/60">Track how your resume has improved over time.</p>
-        </div>
-
-        {!hasRecords ? (
-          <AnalysisHistoryEmptyState />
-        ) : (
+        {hasRecords ? (
           <>
-            <AnalysisSummaryStats total={records.length} best={best} latest={latest} improvement={improvement} />
-
-            <AnalysisScoreTrendChart data={chartData} />
-
-            {/* One card per past analysis, newest first (records[0] is treated as "latest" above) */}
-            <div className="flex flex-col gap-5">
+            <div className="flex w-full flex-col gap-4">
               {records.map((record) => (
-                <AnalysisRecordCard key={record.id} record={record} onDelete={setPendingDeleteId} />
+                <AnalysisRecordCard key={record.id} record={record} />
               ))}
             </div>
 
-            <p className="pt-3 text-center text-[13px] text-white/40">
-              Analysis records are automatically deleted after 90 days.
-            </p>
+            <AnalysisHistoryPagination shown={records.length} total={TOTAL_RESUMES} />
           </>
+        ) : (
+          <AnalysisHistoryEmptyState />
         )}
-      </div>
-
-      {/* Rendered once at page level; opens whenever pendingDeleteId is set */}
-      <DeleteAnalysisModal
-        record={recordPendingDelete}
-        onClose={() => setPendingDeleteId(null)}
-        onConfirm={confirmDelete}
-      />
+      </main>
     </div>
   );
 }
