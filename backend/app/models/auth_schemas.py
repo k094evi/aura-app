@@ -100,3 +100,26 @@ class MessageResponse(BaseModel):
     
 class OAuthUrlResponse(BaseModel):
     url: str
+    
+# POST /auth/verify-signup-otp
+class VerifySignupOtpRequest(BaseModel):
+    email: EmailStr
+    token: str = Field(min_length=6, max_length=6)
+
+
+# POST /auth/resend-signup-otp
+class ResendSignupOtpRequest(BaseModel):
+    email: EmailStr
+
+
+# POST /auth/verify-reset-otp
+class VerifyResetOtpRequest(BaseModel):
+    email: EmailStr
+    token: str = Field(min_length=6, max_length=6)
+
+
+# Returned after a recovery OTP is verified. These feed the existing
+# /auth/reset-password step, so that contract is unchanged.
+class ResetTokensResponse(BaseModel):
+    access_token: str
+    refresh_token: str

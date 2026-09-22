@@ -109,3 +109,44 @@ def reset_password(access_token: str, refresh_token: str, new_password: str) -> 
         raise ValueError(
             "This reset link is invalid or has expired. Please request a new one."
         ) from exc
+        
+_INVALID_CODE = "Invalid or expired code. Please try again."
+
+
+def verify_signup_otp(email: str, token: str) -> AuthResponse:
+    try:
+        result = supabase.auth.verify_otp({"email": email, "token": token, "type": "signup"})
+    except Exception as exc:
+        logger.warning("Signup OTP verify failed for %s: %s", email, exc)
+        raise ValueError(_INVALID_CODE) from exc
+
+    if not result.user or not result.session:
+        raise ValueError(_INVALID_CODE)
+
+    return AuthResponse(
+        user=_extract_user(result.user),
+        access_token=result.session.access_token,
+        refresh_token=result.session.refresh_token,
+        email_confirmation_required=False,
+    )
+
+
+def resend_signup_otp(email: str) -> None:
+    try:
+        supabase.auth.resend({"type": "signup", "email": email})
+    except Exception as exc:
+        logger.warning("Signup OTP resend failed for %s: %s", email, exc)
+        raise ValueError("Could not resend the code. Please try again shortly.") from exc
+
+
+def verify_reset_otp(email: str, token: str) -> tuple[str, str]:
+    try:
+        result = supabase.auth.verify_otp({"email": email, "token": token, "type": "recovery"})
+    except Exception as exc:
+        logger.warning("Recovery OTP verify failed for %s: %s", email, exc)
+        raise ValueError(_INVALID_CODE) from exc
+
+    if not result.session:
+        raise ValueError(_INVALID_CODE)
+
+    return result.session.access_token, result.session.refresh_token

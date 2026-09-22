@@ -3,11 +3,11 @@
 # ============================================================================
 # PURPOSE:
 #   Defines all authentication-related HTTP endpoints for the API:
-#   sign up, sign in, forgot password, reset password, and "get current
-#   user". These endpoints are thin wrappers — they validate the incoming
-#   request (via Pydantic schemas), delegate the real work to
-#   `app.services.auth_service`, and translate any errors into proper
-#   HTTP responses.
+#   sign up, sign in, forgot password, reset password, OTP verification,
+#   and "get current user". These endpoints are thin wrappers — they
+#   validate the incoming request (via Pydantic schemas), delegate the
+#   real work to `app.services.auth_service`, and translate any errors
+#   into proper HTTP responses.
 #
 # HOW IT FITS INTO THE PROGRAM:
 #   - This router is mounted under the `/auth` prefix (see `router = APIRouter(prefix="/auth", ...)`
@@ -36,6 +36,10 @@ from app.models.auth_schemas import (
     AuthUser,
     MessageResponse,
     OAuthUrlResponse,
+    VerifySignupOtpRequest,
+    ResendSignupOtpRequest,
+    VerifyResetOtpRequest,
+    ResetTokensResponse,
 )
 from app.services import auth_service
 from app.dependencies.auth import get_current_user
@@ -117,8 +121,8 @@ def forgot_password(payload: ForgotPasswordRequest):
 # ----------------------------------------------------------------------------
 # POST /auth/reset-password
 # Completes the "forgot password" flow. The frontend calls this after the
-# user follows the emailed reset link and picks a new password; it passes
-# back the access_token/refresh_token Supabase embedded in that link.
+# user has verified the reset OTP (see /auth/verify-reset-otp below),
+# using the access_token/refresh_token that step returns.
 # Body: ResetPasswordRequest (access_token, refresh_token, new_password)
 # Errors: 400 if the tokens are invalid/expired (ValueError from service)
 # ----------------------------------------------------------------------------
@@ -133,6 +137,46 @@ def reset_password(payload: ResetPasswordRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return MessageResponse(message="Your password has been updated. You can now sign in.")
+
+
+# ----------------------------------------------------------------------------
+# POST /auth/verify-signup-otp
+# Verifies the 6-digit code sent to the user's email after /auth/signup.
+# On success, returns a full session (same shape as signin/signup).
+# ----------------------------------------------------------------------------
+@router.post("/verify-signup-otp", response_model=AuthResponse)
+def verify_signup_otp(payload: VerifySignupOtpRequest):
+    try:
+        return auth_service.verify_signup_otp(payload.email, payload.token)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ----------------------------------------------------------------------------
+# POST /auth/resend-signup-otp
+# Re-sends the signup confirmation code.
+# ----------------------------------------------------------------------------
+@router.post("/resend-signup-otp", response_model=MessageResponse)
+def resend_signup_otp(payload: ResendSignupOtpRequest):
+    try:
+        auth_service.resend_signup_otp(payload.email)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return MessageResponse(message="A new code has been sent.")
+
+
+# ----------------------------------------------------------------------------
+# POST /auth/verify-reset-otp
+# Verifies the 6-digit password-reset code. Returns short-lived tokens
+# that the frontend immediately forwards to /auth/reset-password.
+# ----------------------------------------------------------------------------
+@router.post("/verify-reset-otp", response_model=ResetTokensResponse)
+def verify_reset_otp(payload: VerifyResetOtpRequest):
+    try:
+        access_token, refresh_token = auth_service.verify_reset_otp(payload.email, payload.token)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return ResetTokensResponse(access_token=access_token, refresh_token=refresh_token)
 
 
 # ----------------------------------------------------------------------------
