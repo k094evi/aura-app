@@ -22,9 +22,16 @@ JSEARCH_BASE_URL = "https://jsearch.p.rapidapi.com/search-v2"
 DEFAULT_RESULTS  = 10
 MAX_KEYWORDS     = 5
 
-# Location terms appended to every query to bias results
-# toward Philippines and nearby remote-friendly markets
-LOCATION_TERMS = ["Philippines", "Remote Philippines"]
+# search-v2's `country` param defaults to "us" server-side whenever it's
+# omitted (per JSearch docs: "this parameter must be set in order to get
+# jobs in a specific country"). Previously this client never sent it and
+# instead appended "Philippines"/"Remote Philippines" as plain text onto
+# the query string, hoping Google-for-Jobs' free-text parser would infer
+# location from that. It doesn't override the server-side country filter
+# — every request was silently being scoped to US jobs regardless of the
+# text hint, which is why match quality/coverage looked bad. `country`
+# below is sent as an explicit request param instead (ISO 3166-1 alpha-2).
+COUNTRY_CODE = "ph"
 
 # Keys under which the actual job array might be nested if
 # JSearch returns "data" as an object instead of a bare list.
@@ -80,11 +87,13 @@ class JSearchClient:
                 time.sleep(wait)
             cls._last_request_time = time.monotonic()
 
-    def _get(self, query: str) -> list:
+    def _get(self, query: str, work_from_home: bool = False) -> list:
         params = urllib.parse.urlencode({
-            "query":       query,
-            "num_pages":   "1",
-            "date_posted": "all",
+            "query":          query,
+            "num_pages":      "1",
+            "date_posted":    "all",
+            "country":        COUNTRY_CODE,
+            "work_from_home": "true" if work_from_home else "false",
         })
         url = f"{JSEARCH_BASE_URL}?{params}"
         logger.debug("GET %s", url)
@@ -199,9 +208,14 @@ class JSearchClient:
         max_keywords:        int = MAX_KEYWORDS,
     ) -> List[JobListing]:
         """
-        Queries JSearch for each keyword paired with a location term.
-        Rotates through LOCATION_TERMS so we get Philippines, Manila,
-        and Remote results across queries.
+        Queries JSearch for each keyword, scoped to COUNTRY_CODE via the
+        API's own `country` param (see the note on COUNTRY_CODE above —
+        this used to be attempted via a text suffix on the query, which
+        didn't actually filter anything). Alternates each keyword between
+        an on-site/hybrid search and a `work_from_home=true` search so we
+        get both local and remote-eligible results per keyword, instead
+        of burning a second full query slot per keyword the way the old
+        text-suffix rotation did.
         """
         seen: dict[str, JobListing] = {}
         top_kw = keywords[:max_keywords]
@@ -214,14 +228,14 @@ class JSearchClient:
         # waiting on this loop to finish. Firing all requests at once via
         # a thread pool collapses that to roughly the slowest single call.
         queries = [
-            (kw, f"{kw} {LOCATION_TERMS[i % len(LOCATION_TERMS)]}")
+            (kw, kw, i % 2 == 1)  # alternate: on-site, remote, on-site, remote...
             for i, kw in enumerate(top_kw)
         ]
 
         with ThreadPoolExecutor(max_workers=max(1, len(queries))) as pool:
             future_to_kw = {
-                pool.submit(self._get, query): kw
-                for kw, query in queries
+                pool.submit(self._get, query, wfh): kw
+                for kw, query, wfh in queries
             }
 
             for future in as_completed(future_to_kw):

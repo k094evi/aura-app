@@ -26,6 +26,7 @@ from app.data.job_requirements import (
 )
 
 from app.models.schemas import ParsedResume
+from app.services.skill_matcher import skills_present
 
 
 # ============================================================
@@ -236,10 +237,10 @@ def calculate_target_job_gap(
     # Build searchable resume text.
     # --------------------------------------------------------
 
-    haystack = _build_resume_haystack(
-        getattr(resume, "skills_block", None),
-        getattr(resume, "raw_text", None),
-    )
+    resume_skills_block = getattr(resume, "skills_block", None)
+    resume_raw_text = getattr(resume, "raw_text", None)
+
+    haystack = _build_resume_haystack(resume_skills_block, resume_raw_text)
 
     # --------------------------------------------------------
     # Get requirements.
@@ -252,13 +253,33 @@ def calculate_target_job_gap(
     optional_certifications = job["optional_certifications"]
 
     # --------------------------------------------------------
+    # Check every required/optional skill and certification against
+    # the resume ONCE, via skill_matcher. Each term first gets the
+    # same free substring check as before (haystack is unchanged); a
+    # term only reaches the semantic fallback — catching e.g. "React
+    # framework" on the resume for a required skill of "React.js" — if
+    # substring matching missed it. See skill_matcher.py for details.
+    # --------------------------------------------------------
+
+    all_terms = list(dict.fromkeys(
+        required_skills + optional_skills
+        + required_certifications + optional_certifications
+    ))
+    matches = skills_present(
+        all_terms,
+        haystack,
+        skills_block=resume_skills_block,
+        raw_text=resume_raw_text,
+    )
+
+    # --------------------------------------------------------
     # Find matched skills.
     # --------------------------------------------------------
 
     matched_skills = [
         skill
         for skill in required_skills + optional_skills
-        if skill.lower() in haystack
+        if matches[skill].present
     ]
 
     # --------------------------------------------------------
@@ -268,7 +289,7 @@ def calculate_target_job_gap(
     missing_required_skills = [
         skill
         for skill in required_skills
-        if skill.lower() not in haystack
+        if not matches[skill].present
     ]
 
     # --------------------------------------------------------
@@ -278,7 +299,7 @@ def calculate_target_job_gap(
     missing_optional_skills = [
         skill
         for skill in optional_skills
-        if skill.lower() not in haystack
+        if not matches[skill].present
     ]
 
     # --------------------------------------------------------
@@ -288,7 +309,7 @@ def calculate_target_job_gap(
     missing_certifications = [
         certification
         for certification in required_certifications
-        if certification.lower() not in haystack
+        if not matches[certification].present
     ]
 
     # --------------------------------------------------------
@@ -300,7 +321,7 @@ def calculate_target_job_gap(
         for certification in (
             required_certifications + optional_certifications
         )
-        if certification.lower() in haystack
+        if matches[certification].present
     ]
 
     # --------------------------------------------------------
@@ -310,7 +331,7 @@ def calculate_target_job_gap(
     missing_optional_certifications = [
         certification
         for certification in optional_certifications
-        if certification.lower() not in haystack
+        if not matches[certification].present
     ]
 
     # --------------------------------------------------------
@@ -398,13 +419,30 @@ def calculate_target_job_gap_from_row(
     optional_certifications = job["optional_certifications"]
 
     # --------------------------------------------------------
+    # Check every required/optional skill and certification against
+    # the resume ONCE, via skill_matcher — same substring-first,
+    # semantic-fallback behavior as calculate_target_job_gap() above.
+    # --------------------------------------------------------
+
+    all_terms = list(dict.fromkeys(
+        required_skills + optional_skills
+        + required_certifications + optional_certifications
+    ))
+    matches = skills_present(
+        all_terms,
+        haystack,
+        skills_block=skills_block,
+        raw_text=raw_text,
+    )
+
+    # --------------------------------------------------------
     # Match skills.
     # --------------------------------------------------------
 
     matched_skills = [
         skill
         for skill in required_skills + optional_skills
-        if skill.lower() in haystack
+        if matches[skill].present
     ]
 
     # --------------------------------------------------------
@@ -414,7 +452,7 @@ def calculate_target_job_gap_from_row(
     missing_required_skills = [
         skill
         for skill in required_skills
-        if skill.lower() not in haystack
+        if not matches[skill].present
     ]
 
     # --------------------------------------------------------
@@ -424,7 +462,7 @@ def calculate_target_job_gap_from_row(
     missing_optional_skills = [
         skill
         for skill in optional_skills
-        if skill.lower() not in haystack
+        if not matches[skill].present
     ]
 
     # --------------------------------------------------------
@@ -436,7 +474,7 @@ def calculate_target_job_gap_from_row(
         for certification in (
             required_certifications + optional_certifications
         )
-        if certification.lower() in haystack
+        if matches[certification].present
     ]
 
     # --------------------------------------------------------
@@ -446,7 +484,7 @@ def calculate_target_job_gap_from_row(
     missing_certifications = [
         certification
         for certification in required_certifications
-        if certification.lower() not in haystack
+        if not matches[certification].present
     ]
 
     # --------------------------------------------------------
@@ -456,7 +494,7 @@ def calculate_target_job_gap_from_row(
     missing_optional_certifications = [
         certification
         for certification in optional_certifications
-        if certification.lower() not in haystack
+        if not matches[certification].present
     ]
 
     # --------------------------------------------------------

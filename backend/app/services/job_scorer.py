@@ -19,15 +19,43 @@ Scoring breakdown (totals 100 pts):
   ┌──────────────────────────────────────┬────────┐
   │ Component                            │ Weight │
   ├──────────────────────────────────────┼────────┤
-  │ Keyword overlap (resume → job desc)  │  40 %  │
-  │ Skills match (skills_block → title   │  35 %  │
+  │ Keyword overlap (resume → job desc)  │  30 %  │
+  │ Skills match (skills_block → title   │  30 %  │
   │   + description)                     │        │
-  │ Keywords matched across API queries  │  15 %  │
+  │ Semantic similarity (embedding-based)│  20 %  │
+  │ Keywords matched across API queries  │  10 %  │
   │ Title relevance (summary keywords)   │  10 %  │
   └──────────────────────────────────────┴────────┘
 
-No BERT needed at this phase — pure TF-IDF + set intersection.
-BERT similarity will replace/supplement this in the next phase.
+HYBRID SCORING (added this revision)
+--------------------------------------
+The first 4 components are unchanged from before: pure TF-IDF-style
+token/set intersection — deterministic, explainable, zero external
+dependency. That's still true, and still the majority (80%) of the
+total score.
+
+The new "Semantic similarity" component is the one exception: it uses
+a local embedding model (app/services/embedding_service.py — BERT-
+family, no external API call) to compare the resume/target-JD text
+against the job's text as WHOLE PIECES OF MEANING rather than token
+sets. This is what the previous rule-based-only design structurally
+couldn't do — a job that says "containerization pipeline experience"
+and a resume that says "built and deployed Docker/Kubernetes
+services" share almost no literal tokens, but mean nearly the same
+thing.
+
+It's deliberately kept as its OWN separate, clearly-labeled component
+rather than blended invisibly into the other 4 — same reasoning as
+embedding_service.py's module docstring: a rule-based score you can
+point to specific matched words for stays auditable; folding a cosine
+number into it silently would not. `ScoredJob.semantic_similarity`
+also exposes the raw 0–1 similarity (not just its point contribution)
+for that same transparency.
+
+It fails soft: if the local embedding model isn't available on this
+machine, `_semantic_score` returns 0 points and the other 4 components
+(80% of the weight) are completely unaffected — job ranking still
+works, just without that one signal.
 
 HOW IT FITS INTO THE PROGRAM
 -----------------------------
@@ -45,24 +73,30 @@ HOW IT FITS INTO THE PROGRAM
 
 SCORING METHOD (in plain terms)
 ---------------------------------
-This is intentionally simple, keyword/set-based matching (not a
-machine-learning similarity model) — see the "No BERT needed" note
-above. Each of the 4 components independently produces a 0-to-max
-score, and they're summed for a 0-100 total:
-  1. Keyword overlap  (0-40) — raw text-vs-text token overlap.
-  2. Skills match      (0-35) — explicit skills list vs job text.
-  3. API match          (0-15) — how many of the search keywords used
+4 of the 5 components are intentionally simple, keyword/set-based
+matching (not a machine-learning similarity model); the 5th
+(semantic similarity) is. Each component independently produces a
+0-to-max score, and they're summed for a 0-100 total:
+  1. Keyword overlap  (0-30) — raw text-vs-text token overlap.
+  2. Skills match      (0-30) — explicit skills list vs job text.
+  3. Semantic similarity (0-20) — embedding cosine similarity between
+                                  resume/target-JD and job text.
+  4. API match          (0-10) — how many of the search keywords used
                                   to originally find this job actually
                                   matched it.
-  4. Title relevance    (0-10) — resume summary/skills vs job title.
+  5. Title relevance    (0-10) — resume summary/skills vs job title.
 """
 
+import logging
 import re
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
 
 from app.models.schemas import ParsedResume
 from app.services.jsearch_client import JobListing
+from app.services import embedding_service
+
+logger = logging.getLogger("aura")
 
 
 # ─────────────────────────────────────────────
@@ -74,12 +108,19 @@ class ScoredJob:
     """A single job listing plus its computed score breakdown."""
     job:              JobListing
     total_score:      float          # 0–100
-    keyword_score:    float          # 0–40
-    skills_score:     float          # 0–35
-    api_match_score:  float          # 0–15
+    keyword_score:    float          # 0–30
+    skills_score:     float          # 0–30
+    semantic_score:   float          # 0–20
+    api_match_score:  float          # 0–10
     title_score:      float          # 0–10
     matched_skills:   List[str] = field(default_factory=list)
     matched_keywords: List[str] = field(default_factory=list)
+    # Raw embedding cosine similarity in [0, 1], BEFORE scaling to the
+    # 0-20 point range — kept alongside semantic_score for transparency
+    # ("this job is 78% semantically similar" reads better in a UI
+    # tooltip than "15.6 points"). 0.0 whenever the embedding model
+    # wasn't available for this job (see _semantic_score).
+    semantic_similarity: float = 0.0
 
 
 @dataclass
@@ -155,20 +196,92 @@ class JobScorer:
         self.target_description = target_description or ""
         self.target_tokens = _normalize(self.target_description)
 
+        # ── Semantic scoring setup ──────────────────────────────────
+        # Same "what does the user actually want" priority as the
+        # keyword blend above: prefer the target description as the
+        # comparison text when given, otherwise fall back to the full
+        # resume text.
+        self._semantic_compare_text = self.target_description or (resume.raw_text or "")
+
+        # Embed the comparison text ONCE per JobScorer instance (i.e.
+        # once per resume analysis), not once per job — score_all()
+        # below may score dozens of jobs, and re-embedding the SAME
+        # resume/target text for every single one would be pure waste.
+        # None if embeddings aren't available or the text is empty;
+        # every semantic call checks for that and degrades to 0 points.
+        self._semantic_compare_embedding: Optional[List[float]] = None
+        if self._semantic_compare_text.strip() and embedding_service.is_available():
+            try:
+                self._semantic_compare_embedding = embedding_service.embed_one(
+                    self._semantic_compare_text
+                )
+            except Exception as exc:
+                logger.warning("Could not embed resume/target text for semantic scoring: %s", exc)
+
+        # Populated by _precompute_job_embeddings() (called from
+        # score_all) with one embedding per job, keyed by job_id — lets
+        # _semantic_score() do a plain dict lookup per job instead of
+        # triggering N separate embedding calls. Falls back to an
+        # on-the-fly single embedding inside _semantic_score() for
+        # callers that use score_job() directly without going through
+        # score_all() first.
+        self._job_embeddings: Dict[str, List[float]] = {}
+
+    # ── Batch embedding precompute ───────────────────────────────────
+
+    def _precompute_job_embeddings(self, jobs: List[JobListing]) -> None:
+        """
+        Embeds every job's title+description in ONE batched call to the
+        embedding model, instead of one call per job. Batching is
+        significantly faster than the equivalent loop of individual
+        calls — the model amortizes overhead across the batch — so this
+        matters when score_all() is scoring dozens of jobs at once
+        (the common case; job_matcher.py routinely fetches 20-100+ jobs
+        per analysis).
+
+        No-ops (leaves self._job_embeddings empty) if the semantic
+        comparison embedding itself couldn't be computed, or if the
+        embedding model isn't available — _semantic_score() checks for
+        both and degrades to 0 points either way, so skipping this is
+        always safe, just less complete.
+        """
+        if self._semantic_compare_embedding is None:
+            return
+
+        texts, job_ids = [], []
+        for job in jobs:
+            job_text = (job.title + " " + job.description).strip()
+            if job_text:
+                texts.append(job_text)
+                job_ids.append(job.job_id)
+
+        if not texts:
+            return
+
+        try:
+            vectors = embedding_service.embed(texts)
+        except Exception as exc:
+            logger.warning("Batch job embedding failed, semantic scores will be skipped: %s", exc)
+            return
+
+        self._job_embeddings = dict(zip(job_ids, vectors))
+
     # ── Component scores ─────────────────────
 
     def _keyword_score(self, job: JobListing) -> tuple[float, List[str]]:
         """
-        40 pts — how many resume (and, if given, target-JD) tokens appear
+        30 pts — how many resume (and, if given, target-JD) tokens appear
         in the job description.
 
-        Without a target job description: 100% of this component (40 pts)
+        Without a target job description: 100% of this component (30 pts)
         comes from resume-vs-job overlap, same as before.
 
-        With a target job description: split 25 pts resume-overlap /
-        15 pts target-JD-overlap, so a listing that matches the role the
-        user is actually going after outweighs one that only echoes
-        their resume's general vocabulary.
+        With a target job description: split ~18.75 pts resume-overlap /
+        ~11.25 pts target-JD-overlap (same 60/40-ish ratio as before this
+        revision, just rescaled from a 40-pt budget to a 30-pt one — see
+        the module docstring's weight table), so a listing that matches
+        the role the user is actually going after outweighs one that
+        only echoes their resume's general vocabulary.
         """
         job_tokens = _normalize(job.description + " " + job.title)
         if not job_tokens:
@@ -178,14 +291,14 @@ class JobScorer:
         resume_ratio = len(resume_matched) / max(len(self.resume_tokens), 1)
 
         if not self.target_tokens:
-            score = min(resume_ratio * 200, 40.0)
+            score = min(resume_ratio * 150, 30.0)
             return round(score, 2), sorted(resume_matched)[:10]
 
         target_matched = self.target_tokens & job_tokens
         target_ratio = len(target_matched) / max(len(self.target_tokens), 1)
 
-        resume_score = min(resume_ratio * 125, 25.0)   # ~20% overlap = full 25
-        target_score = min(target_ratio * 100, 15.0)   # ~15% overlap = full 15
+        resume_score = min(resume_ratio * 93.75, 18.75)  # ~20% overlap = full 18.75
+        target_score = min(target_ratio * 75, 11.25)     # ~15% overlap = full 11.25
         score = round(resume_score + target_score, 2)
 
         matched = sorted(resume_matched | target_matched)[:10]
@@ -193,8 +306,8 @@ class JobScorer:
 
     def _skills_score(self, job: JobListing) -> tuple[float, List[str]]:
         """
-        35 pts — explicit skills from skills_block found in job title + description.
-        Each matched skill = 35 / total_skills pts, capped at 35.
+        30 pts — explicit skills from skills_block found in job title + description.
+        Each matched skill = 30 / total_skills pts, capped at 30.
         """
         if not self.skills_list:
             return 0.0, []
@@ -204,12 +317,59 @@ class JobScorer:
         # in the combined title+description text?
         matched = [s for s in self.skills_list if s in job_text]
         ratio = len(matched) / max(len(self.skills_list), 1)
-        score = min(ratio * 35, 35.0)
+        score = min(ratio * 30, 30.0)
         return round(score, 2), matched
+
+    def _semantic_score(self, job: JobListing) -> tuple[float, float]:
+        """
+        20 pts — embedding-based semantic similarity between the resume
+        (or target job description, when given) and this job's title +
+        description, as whole pieces of meaning rather than token sets.
+
+        This is the one component that catches matches the other 4
+        structurally cannot: e.g. a job describing "containerization
+        pipeline experience" against a resume describing "built and
+        deployed Docker/Kubernetes services" — almost no shared tokens,
+        but the same underlying skill.
+
+        Returns (points_0_to_20, raw_similarity_0_to_1). The raw
+        similarity is also what gets stored on ScoredJob.semantic_similarity
+        for transparency, separate from the scaled point value.
+
+        Fails soft to (0.0, 0.0) — a missing/unavailable embedding
+        model, an empty comparison text, or any embedding error all
+        degrade to "no semantic signal for this job" rather than
+        raising, so this can never break score_job()/score_all().
+        """
+        if self._semantic_compare_embedding is None:
+            return 0.0, 0.0
+
+        job_text = (job.title + " " + job.description).strip()
+        if not job_text:
+            return 0.0, 0.0
+
+        # Prefer the batch-precomputed embedding (see
+        # _precompute_job_embeddings, called by score_all before
+        # scoring starts) — falls back to embedding this one job on
+        # the fly for callers using score_job() standalone.
+        job_vector = self._job_embeddings.get(job.job_id)
+        if job_vector is None:
+            try:
+                job_vector = embedding_service.embed_one(job_text)
+            except Exception as exc:
+                logger.warning("Semantic scoring failed for job '%s': %s", job.title, exc)
+                return 0.0, 0.0
+
+        similarity = embedding_service.cosine_similarity(self._semantic_compare_embedding, job_vector)
+        # Clamp defensively — cosine similarity should land in [0, 1]
+        # for this model/domain in practice, but never let a stray
+        # value outside that range produce an out-of-range score.
+        similarity = max(0.0, min(1.0, similarity))
+        return round(similarity * 20, 2), round(similarity, 4)
 
     def _api_match_score(self, job: JobListing) -> float:
         """
-        15 pts — how many of the queried keywords matched this job via jsearch.
+        10 pts — how many of the queried keywords matched this job via jsearch.
         (keywords_matched is populated by the jsearch during dedup.)
         """
         if not self.keywords:
@@ -217,7 +377,7 @@ class JobScorer:
         # Denominator is capped at the first 5 keywords, so searches
         # with many keywords don't unfairly dilute this component.
         ratio = len(job.keywords_matched) / max(len(self.keywords[:5]), 1)
-        return round(min(ratio * 15, 15.0), 2)
+        return round(min(ratio * 10, 10.0), 2)
 
     def _title_score(self, job: JobListing) -> float:
         """
@@ -234,29 +394,36 @@ class JobScorer:
     # ── Score a single job ───────────────────
 
     def score_job(self, job: JobListing) -> ScoredJob:
-        """Runs all 4 scoring components for one job and sums them into a total."""
-        kw_score,  matched_kw     = self._keyword_score(job)
-        sk_score,  matched_skills = self._skills_score(job)
-        api_score                 = self._api_match_score(job)
-        ti_score                  = self._title_score(job)
+        """Runs all 5 scoring components for one job and sums them into a total."""
+        kw_score,   matched_kw     = self._keyword_score(job)
+        sk_score,   matched_skills = self._skills_score(job)
+        sem_score,  similarity     = self._semantic_score(job)
+        api_score                  = self._api_match_score(job)
+        ti_score                   = self._title_score(job)
 
-        total = round(kw_score + sk_score + api_score + ti_score, 2)
+        total = round(kw_score + sk_score + sem_score + api_score + ti_score, 2)
 
         return ScoredJob(
-            job             = job,
-            total_score     = total,
-            keyword_score   = kw_score,
-            skills_score    = sk_score,
-            api_match_score = api_score,
-            title_score     = ti_score,
-            matched_skills  = matched_skills,
-            matched_keywords= matched_kw,
+            job                  = job,
+            total_score          = total,
+            keyword_score        = kw_score,
+            skills_score         = sk_score,
+            semantic_score       = sem_score,
+            api_match_score      = api_score,
+            title_score          = ti_score,
+            matched_skills       = matched_skills,
+            matched_keywords     = matched_kw,
+            semantic_similarity  = similarity,
         )
 
     # ── Score all jobs ───────────────────────
 
     def score_all(self, jobs: List[JobListing]) -> List[ScoredJob]:
         """Scores every job in the list and returns them sorted best-first."""
+        # Batch-embed every job up front so _semantic_score() below does
+        # plain dict lookups instead of N individual embedding calls —
+        # see _precompute_job_embeddings' docstring.
+        self._precompute_job_embeddings(jobs)
         scored = [self.score_job(j) for j in jobs]
         return sorted(scored, key=lambda s: s.total_score, reverse=True)
 

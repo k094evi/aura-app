@@ -11,13 +11,23 @@
 #   Pipeline position:
 #       resume_parser.py  -->  keyword_extractor.py (THIS FILE)  -->  jsearch_client.py  -->  resume_enricher.py
 #       (raw resume text      (turn resume into                    (fetch real job          (score resume vs.
-#        -> structured           ranked keywords)                    listings using            those jobs)
-#        sections)                                                    those keywords)
+#        -> structured           ranked keywords)                    listings)                those jobs)
+#        sections)
 #
-# WHY NO EXTERNAL AI/ML LIBRARY:
-#   Everything here is deterministic, local, and dependency-light (plain
-#   `re` + `math` + `collections.Counter` — no NLTK, no spaCy, no API
-#   calls). This keeps keyword extraction fast, free, and offline-capable.
+# WHY MOSTLY NO EXTERNAL AI/ML LIBRARY:
+#   Everything here is still primarily deterministic, local, and
+#   dependency-light (plain `re` + `math` + `collections.Counter` — no
+#   NLTK, no spaCy, no live API calls). This keeps keyword extraction fast,
+#   free, and mostly offline-capable.
+#
+#   ONE exception, added deliberately: `extract_skill_terms_from_posting()`
+#   (the user-facing "required skills for this role" extractor) now has an
+#   optional semantic-similarity tier on top of the rule-based ones, via
+#   `app/services/embedding_service.py` (a local BERT-family embedding
+#   model, no external API call). It's additive and fails soft — see the
+#   "Tier 1.5" section inside that function and the module docstring of
+#   embedding_service.py for the full rationale. Every OTHER function in
+#   this file is unchanged and remains pure rule-based.
 #
 # STRATEGY (see also the module docstring below):
 #   1. Explicit skills listed in the resume's "Skills" section are the
@@ -40,10 +50,14 @@ Strategy (no external AI needed at this phase):
 
 import re
 import math
+import logging
 from collections import Counter
-from typing import List, Set
+from typing import List, Optional, Set
 
 from app.models.schemas import ParsedResume
+from app.services import embedding_service
+
+logger = logging.getLogger("aura")
 
 
 # ─────────────────────────────────────────────
@@ -281,10 +295,7 @@ JD_NOISE_WORDS = {
 # This is a starting vocabulary, not an exhaustive one — it will always
 # lag behind niche/emerging tools. Treat additions here the same as
 # adding a new supported category: cheap, low-risk, and the fastest way
-# to fix "why didn't it catch X" bug reports as they come in. The longer
-# -term fix for full generality is swapping this allowlist match for an
-# embedding-similarity check (you already have sentence-transformers in
-# requirements.txt) — see the note at the bottom of this file.
+# to fix "why didn't it catch X" bug reports as they come in.
 KNOWN_SKILL_TERMS = {
     # networking / IT infrastructure
     "tcp/ip", "dns", "dhcp", "vpn", "lan", "wan", "vlan", "bgp", "ospf",
@@ -319,6 +330,64 @@ KNOWN_SKILL_TERMS = {
     "aws certified", "microsoft certified", "itil",
 }
 
+_KNOWN_SKILL_TERMS_SORTED = sorted(KNOWN_SKILL_TERMS)
+
+# Minimum cosine similarity for a TF-IDF candidate term to be credited as
+# matching a KNOWN_SKILL_TERMS entry. Tuned conservatively (high) on
+# purpose — this feeds a user-facing "your required skills" list, where
+# a false positive is a visible, confusing product bug (same precision
+# concern the module docstring of extract_skill_terms_from_posting
+# already describes for its other tiers). 0.62 was chosen to comfortably
+# catch true synonyms/rewordings ("containerization" vs. "docker",
+# "React framework" vs. "react") while rejecting merely-related-topic
+# terms ("networking" vs. "firewall") — re-tune here if you see it
+# over- or under-matching in practice.
+SEMANTIC_SKILL_MATCH_THRESHOLD = 0.62
+
+# How many of the posting's own TF-IDF-ranked candidate terms get
+# checked against KNOWN_SKILL_TERMS per call. Keeps the semantic pass
+# bounded — this is NOT the same as top_n (the function's overall
+# output cap); it's just the candidate pool the semantic tier searches
+# within before that cap is applied.
+SEMANTIC_CANDIDATE_POOL_SIZE = 40
+
+
+def _closest_known_skill(candidate: str) -> Optional[str]:
+    """
+    Returns the KNOWN_SKILL_TERMS entry `candidate` is semantically
+    closest to, if that similarity clears SEMANTIC_SKILL_MATCH_THRESHOLD
+    — otherwise None.
+
+    This is the embedding-similarity upgrade this file's KNOWN_SKILL_TERMS
+    vocabulary always needed: instead of ONLY ever growing by hand, a
+    candidate term that means the same thing as an existing entry (e.g.
+    "containerization" vs. "docker"/"kubernetes", "React framework" vs.
+    "react", "IaC" vs. "terraform") gets credited too, without needing to
+    list every synonym/rewording by hand.
+
+    Uses embedding_service.cached_semantic_similarity(), which caches
+    each individual term's embedding — so across many postings analyzed
+    in the same running process, the ~150 KNOWN_SKILL_TERMS embeddings
+    are each computed once (the first time they're compared against
+    anything) and reused after that; only the small number of NEW
+    candidate terms per posting cost a fresh embedding call.
+
+    Fails soft: any error talking to the embedding model (not installed,
+    model failed to load, etc.) is logged and treated as "no semantic
+    match" — callers always still get the exact-match/statistical tiers
+    they'd have gotten before this function existed.
+    """
+    best_term, best_score = None, 0.0
+    for known in _KNOWN_SKILL_TERMS_SORTED:
+        try:
+            score = embedding_service.cached_semantic_similarity(candidate, known)
+        except Exception as exc:
+            logger.warning("Semantic skill match failed for '%s': %s", candidate, exc)
+            return None
+        if score > best_score:
+            best_term, best_score = known, score
+    return best_term if best_score >= SEMANTIC_SKILL_MATCH_THRESHOLD else None
+
 
 def extract_skill_terms_from_posting(
     text: str,
@@ -349,6 +418,13 @@ def extract_skill_terms_from_posting(
          statistics involved. This is what plain TF-IDF/rarity-based
          extraction structurally cannot do: it has no notion of "this
          IS a skill," only "this word is uncommon in this document."
+      1.5. Semantic vocabulary match — same idea as step 1, but catches
+         candidate terms that MEAN the same thing as a KNOWN_SKILL_TERMS
+         entry without being the same string (see _closest_known_skill).
+         Optional/best-effort: no-ops cleanly if the local embedding
+         model isn't available on this machine (see
+         embedding_service.is_available()), so this tier never turns a
+         missing dependency into a broken /api/analyze call.
       2. Bullet/comma-separated short phrases (JD requirement lists read
          a lot like resume skills blocks), filtered through JD_NOISE_WORDS
          and exclude_terms.
@@ -473,6 +549,35 @@ def extract_skill_terms_from_posting(
             _mark_seen(term)
             results.append(term)
 
+    # ── 1.5. Semantic vocabulary pass — catches synonyms/rewordings the
+    #          literal Tier-1 string match misses ("containerization" ~
+    #          docker/kubernetes, "React framework" ~ react, "IaC" ~
+    #          terraform). Runs over the posting's OWN TF-IDF-ranked
+    #          candidate terms (not the full KNOWN_SKILL_TERMS list —
+    #          Tier 1 already covers exact matches, so this only adds
+    #          NEW signal on top). Applies the same exclude/noise
+    #          filtering as tiers 2/3, since this is a softer
+    #          (approximate) signal than an exact vocabulary hit, unlike
+    #          tier 1 above.
+    #
+    #          Cleanly skipped (falls straight through to tier 2) if the
+    #          local embedding model isn't available on this machine —
+    #          see embedding_service.is_available(). The first posting
+    #          analyzed after a fresh process start will be a bit slower
+    #          here (each of the ~150 KNOWN_SKILL_TERMS gets embedded
+    #          and cached the first time it's compared against
+    #          anything); every posting after that reuses those cached
+    #          embeddings and only pays for its own new candidate terms.
+    if embedding_service.is_available():
+        for term in _tfidf_keywords(text, top_n=SEMANTIC_CANDIDATE_POOL_SIZE):
+            key = term.lower()
+            if not _eligible(key):
+                continue
+            matched_known_term = _closest_known_skill(key)
+            if matched_known_term:
+                _mark_seen(key)
+                results.append(term)
+
     # ── 2. Bullet/comma-separated short phrases ─────────────────────────
     for item in _parse_skills_block(text):
         if not (1 < len(item) <= 40):
@@ -505,21 +610,18 @@ def extract_skill_terms_from_posting(
     return [t.title() if t.islower() else t for t in results[:top_n]]
 
 
-# NOTE on further generalizing KNOWN_SKILL_TERMS:
+# NOTE on KNOWN_SKILL_TERMS coverage:
 # A hardcoded vocabulary will always lag behind niche tools/industries
 # not covered above (e.g. specialized medical, legal, or trades
-# terminology). Since this project already depends on
-# sentence-transformers (see requirements.txt), the natural next
-# iteration — once this allowlist approach proves out — is to replace
-# the vocabulary *match* with a vocabulary *similarity* check: embed
-# each TF-IDF candidate term and compare it against embeddings of a
-# small set of "this is a skill" example phrases, keeping candidates
-# above a similarity threshold instead of requiring an exact string
-# match. That generalizes across industries without hand-listing every
-# term, at the cost of needing the model loaded (see BERT/NLP layer
-# discussion in the project's backend architecture notes). Don't reach
-# for that yet — validate the simpler allowlist fixes the reported bug
-# first, then decide if coverage gaps justify the added complexity.
+# terminology) — the Tier 1.5 semantic pass above narrows that gap by
+# catching terms that MEAN the same thing as an existing entry, but it
+# still can't invent a category that has zero related entries in
+# KNOWN_SKILL_TERMS to begin with (there's nothing for "specialized
+# legal terminology" to be semantically close TO yet). If a whole new
+# domain needs supporting, the fastest fix is still the cheap one: add
+# a handful of representative terms for that domain to KNOWN_SKILL_TERMS
+# — the semantic tier then automatically picks up that domain's
+# synonyms/rewordings too, without listing every one of them by hand.
 
 def _single_doc_keyword_rank(text: str, top_n: int = 30) -> List[str]:
     """

@@ -27,6 +27,11 @@
 #   data available on the matched/raw job objects.
 #
 # THIS REVISION:
+#   _shape_top_jobs() now also copies matched_keywords, semantic_similarity,
+#   and a score_breakdown (keyword/skills/semantic/api_match/title) onto
+#   each shaped job. These were already computed on ScoredJob (job_scorer.py's
+#   hybrid semantic scoring) but were previously dropped at this dict-shaping
+#   boundary — only total_score and matched_skills made it to the frontend.
 #   Added job-posting-text selection for skill-gap comparison, per the
 #   original spec ("AURA should analyze the actual job posting... Matched
 #   / Missing"), with a clear priority order:
@@ -543,6 +548,38 @@ def _shape_top_jobs(top_jobs: list) -> list[dict]:
                     )
                     or []
                 ),
+
+                "matched_keywords": list(
+                    getattr(
+                        scored_job,
+                        "matched_keywords",
+                        [],
+                    )
+                    or []
+                ),
+
+                # Raw 0-1 embedding cosine similarity (see
+                # ScoredJob.semantic_similarity) — kept alongside the
+                # weighted score_breakdown below so the frontend can show
+                # "X% semantically similar" without having to reverse the
+                # 0-20 point scale back into a percentage.
+                "semantic_similarity": round(
+                    getattr(scored_job, "semantic_similarity", 0.0) or 0.0,
+                    3,
+                ),
+
+                # Per-component point breakdown behind total_score, for the
+                # same "how was this calculated" transparency treatment the
+                # ATS score modal already gives dimension scores
+                # (AssessmentSidebar.tsx). Weights: keyword 30 / skills 30 /
+                # semantic 20 / api_match 10 / title 10, out of 100.
+                "score_breakdown": {
+                    "keyword_score": getattr(scored_job, "keyword_score", 0) or 0,
+                    "skills_score": getattr(scored_job, "skills_score", 0) or 0,
+                    "semantic_score": getattr(scored_job, "semantic_score", 0) or 0,
+                    "api_match_score": getattr(scored_job, "api_match_score", 0) or 0,
+                    "title_score": getattr(scored_job, "title_score", 0) or 0,
+                },
 
                 # --------------------------------------------------------------
                 # Description

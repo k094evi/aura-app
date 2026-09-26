@@ -113,6 +113,7 @@ from typing import Optional
 
 from app.models.schemas import ParsedResume
 from app.services.keyword_extractor import extract_keywords_from_text, extract_skill_terms_from_posting
+from app.services.skill_matcher import skills_present
 
 # pyspellchecker is an optional dependency for the spelling check below
 # (add "pyspellchecker" to requirements.txt). If it isn't installed, the
@@ -408,10 +409,21 @@ def _score_skills(resume: ParsedResume) -> float:
     skill_items = [p.strip() for p in parts if p.strip() and len(p.strip()) > 1]
     count_score = min(len(skill_items) / 12, 1.0) * 80
 
-    # Breadth: how many taxonomy categories appear
+    # Breadth: how many taxonomy categories appear. Substring-first
+    # (unchanged), with a semantic fallback per category so a
+    # differently-worded skill still counts — e.g. a skills_block
+    # listing "React framework" now still hits "Web Development" even
+    # though none of that category's literal terms appear verbatim.
+    all_taxonomy_terms = [t for terms in SKILL_TAXONOMY.values() for t in terms]
+    taxonomy_matches = skills_present(
+        all_taxonomy_terms,
+        skills_text,
+        skills_block=resume.skills_block,
+        raw_text=resume.raw_text,
+    )
     categories_hit = 0
     for category, terms in SKILL_TAXONOMY.items():
-        if any(term in skills_text for term in terms):
+        if any(taxonomy_matches[term].present for term in terms):
             categories_hit += 1
     breadth_score = min(categories_hit / 4, 1.0) * 20  # 4 categories = full breadth score
 
@@ -821,22 +833,41 @@ def _detect_skill_gaps_from_posting(
 
     resume_text = (resume.raw_text or "").lower()
 
+    # Substring-first (unchanged), semantic fallback per term — this is
+    # the highest-value spot for semantic matching in the whole file:
+    # posting_terms come from a REAL job posting's actual wording, so
+    # phrasing mismatches against the resume ("React.js" in the
+    # posting vs "ReactJS" on the resume) are common and exactly what
+    # substring matching alone misses. See skill_matcher.py.
+    matches = skills_present(
+        posting_terms,
+        resume_text,
+        skills_block=resume.skills_block,
+        raw_text=resume.raw_text,
+    )
+
     results: list[dict] = []
     for term in posting_terms:
-        present = term.lower() in resume_text
+        match = matches[term]
+        present = match.present
         # Title-case short/lowercase tokens for display (e.g. "python" ->
         # "Python"); leave anything already mixed-case (e.g. "PostgreSQL",
         # "CI/CD") exactly as extracted, since forcing .title() on those
         # would mangle them (e.g. "Ci/Cd").
         display_skill = term.title() if term.islower() else term
+        if present and match.matched_via == "semantic":
+            found_note = f"Found in your resume as \u201c{match.matched_phrase}\u201d — matches {source_label}."
+        elif present:
+            found_note = f"Found in your resume — matches {source_label}."
+        else:
+            found_note = (
+                f"Listed in {source_label} but not found in your resume — "
+                "add it if it truthfully applies to your experience."
+            )
         results.append({
             "skill": display_skill,
             "missing": not present,
-            "recommendation": (
-                f"Found in your resume — matches {source_label}."
-                if present else
-                f"Listed in {source_label} but not found in your resume — add it if it truthfully applies to your experience."
-            ),
+            "recommendation": found_note,
         })
 
     # Matched skills first (what you already have), then gaps — mirrors
@@ -913,23 +944,53 @@ def _detect_skill_gaps(
     # Sort by frequency — most common across top jobs first
     top_job_skills = sorted(job_skill_counts, key=lambda s: job_skill_counts[s], reverse=True)
 
+    # Substring-first (unchanged), semantic fallback per skill — a job's
+    # matched_skills are drawn from real listings, so surface-form
+    # mismatches against the resume are as likely here as in the
+    # posting-based path above.
+    top_job_skill_matches = skills_present(
+        top_job_skills[:6],
+        resume_text,
+        skills_block=resume.skills_block,
+        raw_text=resume.raw_text,
+    )
+
     for skill in top_job_skills[:6]:
         if skill in seen:
             continue
         seen.add(skill)
-        present = skill in resume_text
+        match = top_job_skill_matches[skill]
+        present = match.present
+        if present and match.matched_via == "semantic":
+            note = f"Detected in your resume as \u201c{match.matched_phrase}\u201d."
+        elif present:
+            note = "Already detected in your resume."
+        else:
+            note = (
+                f"Appears in {job_skill_counts[skill]} of your top job matches — "
+                f"add it if applicable to your experience."
+            )
         results.append({
             "skill": skill.title(),
             "missing": not present,
-            "recommendation": (
-                f"Already detected in your resume."
-                if present else
-                f"Appears in {job_skill_counts[skill]} of your top job matches — "
-                f"add it if applicable to your experience."
-            ),
+            "recommendation": note,
         })
 
     # ── Step 2: taxonomy categories to fill up to 6 items ──
+    # Substring-first per category (unchanged: any literal term hit),
+    # semantic fallback only for categories with no literal hit at all
+    # — this is what lets e.g. a skills_block listing "React framework"
+    # register under "Web Development" even though none of that
+    # category's literal terms ("react", "vue", ...) appear verbatim.
+    remaining_categories = [c for c in SKILL_TAXONOMY if c not in seen]
+    remaining_terms = [t for c in remaining_categories for t in SKILL_TAXONOMY[c]]
+    taxonomy_matches = skills_present(
+        remaining_terms,
+        resume_text,
+        skills_block=resume.skills_block,
+        raw_text=resume.raw_text,
+    ) if remaining_terms else {}
+
     for category, terms in SKILL_TAXONOMY.items():
         if len(results) >= 6:
             break
@@ -939,6 +1000,7 @@ def _detect_skill_gaps(
         # Check if any term from this category appears in skills_block or resume
         present_in_skills = any(t in skills_text for t in terms)
         present_in_resume = any(t in resume_text for t in terms)
+        present_in_resume_semantic = any(taxonomy_matches[t].present for t in terms)
 
         # Only surface gaps (not present at all) or strengths (in skills block)
         if present_in_skills:
@@ -947,6 +1009,13 @@ def _detect_skill_gaps(
                 "skill": category,
                 "missing": False,
                 "recommendation": f"Evident in your skills section — good coverage.",
+            })
+        elif present_in_resume_semantic and not present_in_resume:
+            seen.add(category)
+            results.append({
+                "skill": category,
+                "missing": False,
+                "recommendation": "Evident in your resume, under different wording than the standard term.",
             })
         elif not present_in_resume:
             seen.add(category)

@@ -62,15 +62,13 @@ NOTES / THINGS WORTH DOUBLE-CHECKING
   headers this API actually needs, rather than wildcarding methods
   and headers — see the inline note above the middleware for the
   reasoning.
-- `logging.basicConfig(...)` here sets up a *second*, separate logging
-  configuration from the shared `logger` object in
-  `app/utils/logger.py`. This module's `logger = logging.getLogger(__name__)`
-  is NOT the same "aura" logger used elsewhere in the codebase — worth
-  being aware of if you're trying to control log format/level in one
-  place, since right now there are two independent logging setups.
+- Logging: this module imports the shared `logger` from
+  `app/utils/logger.py` — the same "aura" logger used by
+  `analyze_controller.py` and the other service modules — rather than
+  configuring its own separate `logging.basicConfig(...)`, so log
+  format/level is controlled in one place for the whole app.
 """
 
-import logging
 from fastapi import FastAPI, UploadFile, File, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -88,15 +86,27 @@ from app.controllers.analyze_controller import handle_analyze
 from app.dependencies.auth import get_current_user
 from app.models.auth_schemas import AuthUser
 
-# NOTE: this configures Python's root/module logger, separate from the
-# shared "aura" logger defined in app/utils/logger.py. See NOTES above.
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Use the same shared "aura" logger every other service module uses
+# (analyze_controller.py, resume_parser.py, etc. all import this exact
+# object via `from app.utils.logger import logger`). main.py previously
+# ran its own logging.basicConfig(...) + logging.getLogger(__name__),
+# which meant anything logged from this file didn't share format/level
+# with the rest of the app, and any handler/level change made in one
+# setup silently didn't apply to the other.
+from app.utils.logger import logger
 
 # The FastAPI app instance — this is what uvicorn actually runs
 # (referenced as "app.main:app" in the run command above).
 app = FastAPI(title="Aura Resume Analyzer", version="1.0.0")
 
+
+
+import threading
+from app.services.embedding_service import is_available as _warm_embeddings
+
+@app.on_event("startup")
+def _warm_up_embedding_model():
+    threading.Thread(target=_warm_embeddings, daemon=True).start()
 # Reads from settings.ALLOWED_ORIGINS (app/config.py) instead of a
 # hardcoded list, so prod/dev can differ via .env without touching code.
 # Methods/headers are scoped to what this API actually uses — "*" here
@@ -108,6 +118,7 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
 
 # Mount the auth routes (login/signup/etc.), resume-parsing routes,
 # and the two migrated-from-backend_2 routers (jobs, resumes) — all
@@ -155,7 +166,3 @@ def health():
     balancers, or Docker/orchestration health checks to confirm the
     server process is up and responding."""
     return {"status": "ok"}
-
-from app.api.routes.jobs import router as jobs_router
-
-app.include_router(jobs_router, prefix="/api")
