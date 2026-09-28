@@ -18,6 +18,7 @@ export { default as JobListings } from './JobListings';
 export { default as Upload } from './upload';
 export type { UploadPayload } from './upload';
 export { default as CompanySelector } from './CompanySelector';
+export { default as JobTitleSelector } from './JobTitleSelector';
 export { default as AnalysisLoadingOverlay } from './AnalysisLoadingOverlay';
 export { default as DocumentScanner } from './DocumentScanner';
 export { default as AnalysisProgressBar } from './AnalysisProgressBar';

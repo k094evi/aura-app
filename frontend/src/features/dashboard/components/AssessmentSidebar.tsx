@@ -18,36 +18,45 @@ interface AssessmentSidebarProps {
 }
 
 // Dimensions listed (with "-" values) before any resume has been analyzed.
+// NOTE: names must match what the backend actually returns in
+// `sections` (resume_enricher.py's enrich_resume_local) — Keywords,
+// Format, Skills, Impact, Length — not the earlier Figma copy
+// (Formatting/Quantification/Readability), or lookups below silently
+// fail for 3 of the 5 dimensions.
 const EMPTY_SECTIONS: SectionData[] = [
-  'Formatting',
   'Keywords',
-  'Quantification',
+  'Format',
+  'Skills',
   'Impact',
-  'Readability',
+  'Length',
 ].map((name) => ({ name, value: null }));
 
-// Weight (in %) each dimension contributes to the ATS score, as shown in the
-// "How Your ATS Score is Calculated" modal in the Figma design. Matched by
-// dimension name (case-insensitive); any other name shows "—" in the modal.
+// Weight (in %) each dimension contributes to the ATS score. Must mirror
+// resume_enricher.py's enrich_resume_local() weighting exactly:
+//   Keywords 25% / Format 20% / Skills 25% / Impact 20% / Length 10%
+// Matched by dimension name (case-insensitive); any other name shows "—"
+// in the modal.
 const DIMENSION_WEIGHTS: Record<string, number> = {
-  formatting: 20,
   keywords: 25,
-  quantification: 15,
-  impact: 25,
-  readability: 15,
+  format: 20,
+  skills: 25,
+  impact: 20,
+  length: 10,
 };
 
-// Copy for the "How Dimensions Are Measured" modal (from the Figma design).
+// Copy for the "How Dimensions Are Measured" modal.
 // Matched by dimension name (case-insensitive); unknown names show no description.
 const DIMENSION_DESCRIPTIONS: Record<string, string> = {
-  formatting:
-    'Measures resume structure, section organization, bullet consistency, and ATS-parseable formatting.',
   keywords:
-    'Evaluates relevance and density of industry-specific terms, skills, and job-title matches.',
-  quantification:
-    'Checks for measurable achievements, metrics, percentages, and data-driven results.',
-  impact: 'Assesses action verbs, accomplishment framing, and value-driven language.',
-  readability: 'Analyzes sentence length, clarity, jargon balance, and overall scannability.',
+    'Evaluates relevance and density of industry-specific terms, skills, and job-title matches against your matched job postings.',
+  format:
+    'Measures resume structure, section organization, bullet consistency, and ATS-parseable formatting.',
+  skills:
+    'Checks how many recognized skills appear in your Skills section, and how well they cover common recruiter/ATS skill categories.',
+  impact:
+    'Assesses action verbs, accomplishment framing, and quantified, value-driven language.',
+  length:
+    'Checks whether your total word count falls in the optimal 400–800 word range for readability and ATS parsing.',
 };
 
 const normalize = (name: string) => name.trim().toLowerCase();
@@ -60,6 +69,17 @@ const clampPercent = (n: number) => Math.min(100, Math.max(0, Number.isFinite(n)
 function formatPoints(n: number) {
   const s = n.toFixed(2).replace(/0+$/, '');
   return s.endsWith('.') ? `${s}0` : s;
+}
+
+// Score-dependent summary line for the Overall Assessment card.
+// Previously this was a single hardcoded string regardless of score
+// ("Resume complexity is Optimal for Executive-level parsing.") — now
+// it actually reflects the number in the ring.
+function getScoreSummary(score: number): string {
+  if (score >= 85) return 'Excellent — this resume is well optimized for ATS and recruiter screening.';
+  if (score >= 70) return 'Strong — a few targeted improvements would push this into top-tier range.';
+  if (score >= 50) return 'Needs work — several dimensions below are holding this score back.';
+  return 'Needs significant improvement across most dimensions below.';
 }
 
 // Shared frosted card shell used by both sidebar cards.
@@ -391,7 +411,7 @@ export default function AssessmentSidebar({ score, sections }: AssessmentSidebar
         <div className="rounded-[12px] border border-[#7c3aed]/20 bg-[#7c3aed]/[0.07] p-3">
           <p className="text-[13px] font-medium leading-[1.4] text-[#7c3aed]">
             {hasResult
-              ? 'Resume complexity is Optimal for Executive-level parsing.'
+              ? getScoreSummary(score)
               : 'Your ATS score appears here after a resume is uploaded and analyzed.'}
           </p>
         </div>

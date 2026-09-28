@@ -49,6 +49,12 @@
 #   source on its own.
 #   See resume_enricher.py's enrich_resume_local() / _detect_skill_gaps_from_posting()
 #   docstrings for the comparison logic itself.
+#
+#   Also: certification_engine.recommend_certifications() was implemented but
+#   never called from here — `certifications` was permanently absent from the
+#   API response. _shape_certifications() (STEP 8.5) now calls it against the
+#   missing skills from enrichment["skill_gaps"] and adds the result to the
+#   final response.
 # ==============================================================================
 
 """
@@ -65,8 +71,15 @@ from fastapi import HTTPException, UploadFile
 from app.extensions.supabase_client import supabase_admin
 from app.services.resume_parser import parse_resume
 from app.services.job_matcher import JobMatcher
+# Reused here (not just in jsearch_client.py's own parsing step) so a raw
+# JSearch dict reaching this controller directly — the "company not in
+# top_jobs_shaped, fall back to raw_jobs" branch below — gets the exact
+# same job_required_experience interpretation + title-guess fallback,
+# instead of a second, weaker copy of that logic.
+from app.services.jsearch_client import _infer_experience_level
 from app.services.resume_enricher import enrich_resume_local
 from app.services.target_job_matcher import calculate_target_job_gap
+from app.services.certification_engine import recommend_certifications
 from app.utils.logger import logger
 
 
@@ -259,6 +272,14 @@ def _get_job_type(job: Any) -> str:
         "employment_type",
         "employmentType",
         "jobType",
+        # "category" is where jsearch_client.py's JobListing dataclass
+        # actually stores this (JobListing has no field literally named
+        # any of the JSearch-style names above) — without checking it,
+        # every job reaching this function as a structured JobListing
+        # object (rather than a raw API dict) fell straight through to
+        # the "not disclosed" default, even though jsearch_client.py had
+        # already captured the real value from job_employment_type.
+        "category",
         "type",
         default=None,
     )
@@ -276,6 +297,14 @@ def _get_job_type(job: Any) -> str:
 def _get_experience_level(job: Any) -> str:
     """
     Retrieves the experience/seniority level supplied by the API.
+
+    NOTE: this only finds anything now that jsearch_client.py's
+    JobListing dataclass actually carries an `experience_level` field
+    (populated by _infer_experience_level(), which reads JSearch's
+    structured job_required_experience data and falls back to a
+    title-based guess). Before that field existed, `job` — a JobListing
+    instance, not a raw API dict — had no attribute under any of the
+    names below, so this always fell through to the default.
     """
 
     value = _get_attr(
@@ -289,6 +318,35 @@ def _get_experience_level(job: Any) -> str:
         "seniority",
         default=None,
     )
+
+    # JSearch's own `job_required_experience` field, when a raw API dict
+    # reaches this function directly (the raw_jobs fallback branch below,
+    # for a company that didn't show up in top_jobs_shaped), is a nested
+    # object — e.g. {"required_experience_in_months": 24,
+    # "no_experience_required": false, ...} — not a plain string. The
+    # generic dict handling in _clean_string() only recognizes
+    # "name"/"level"/"value"/"title"/"label" keys, none of which JSearch
+    # actually uses here, so it was silently falling straight to the
+    # "not disclosed" default. Recognize that specific shape and
+    # interpret it the same way jsearch_client.py does when building a
+    # JobListing, instead of duplicating weaker logic here.
+    if isinstance(value, dict) and (
+        "required_experience_in_months" in value
+        or "no_experience_required" in value
+        or "experience_mentioned" in value
+    ):
+        title = _clean_string(_get_attr(job, "title", "job_title"))
+        inferred = _infer_experience_level({"job_required_experience": value}, title)
+        value = inferred  # may still be None -> falls through to the title-only guess below
+
+    if value is None:
+        # Nothing structured at all (older cached payloads, or a raw
+        # dict/object with no experience-shaped field whatsoever) — same
+        # title-based guess jsearch_client.py applies when building
+        # JobListing objects, applied here too so this function behaves
+        # consistently regardless of which shape of job reaches it.
+        title = _clean_string(_get_attr(job, "title", "job_title"))
+        value = _infer_experience_level({}, title)
 
     return _clean_string(
         value,
@@ -1246,6 +1304,65 @@ def _select_job_posting_text(
 
 
 # ==============================================================================
+# SHAPE CERTIFICATIONS
+# ==============================================================================
+#
+# certification_engine.recommend_certifications() existed in the codebase but
+# was never actually called anywhere in this controller — `certifications`
+# was always missing from the API response, so CertificationRecommendations.tsx
+# on the frontend permanently rendered its "No certification recommendations
+# yet." empty state regardless of the resume. This wires it in using the
+# missing skills already computed by enrich_resume_local()'s skill_gaps.
+#
+# certification_engine returns one entry per missing skill:
+#   {"skill": ..., "missing": True, "recommendation": ..., "certifications": [names]}
+# The frontend's Certification type is one row PER CERTIFICATION NAME, not
+# per skill, so this flattens that structure. Skills with no matching rows
+# in the Supabase "certifications" table simply contribute nothing — we
+# don't fabricate a certification name that doesn't exist.
+# ==============================================================================
+
+def _shape_certifications(skill_gaps: list[dict]) -> list[dict]:
+    missing_skills = [
+        g.get("skill") for g in (skill_gaps or [])
+        if g.get("missing") and g.get("skill")
+    ]
+
+    if not missing_skills:
+        return []
+
+    try:
+        recs = recommend_certifications(missing_skills)
+    except Exception:
+        logger.exception("Certification lookup failed — omitting certifications from response")
+        return []
+
+    shaped: list[dict] = []
+    seen_names: set[str] = set()
+
+    for rec in recs:
+        skill = rec.get("skill", "")
+        for cert_name in rec.get("certifications", []) or []:
+            if not cert_name or cert_name in seen_names:
+                continue
+            seen_names.add(cert_name)
+            shaped.append({
+                "name": cert_name,
+                # The certifications table only stores a name per skill —
+                # no provider/vendor column exists yet, so this is left
+                # blank rather than guessed.
+                "provider": "",
+                "reason": f"Recommended to help close your {skill} skill gap.",
+                # Every entry here came from a MISSING skill by construction
+                # (see missing_skills above), so all are "required" — there's
+                # no "optional, nice-to-have" tier in this data source yet.
+                "relevance": "required",
+            })
+
+    return shaped
+
+
+# ==============================================================================
 # HANDLE ANALYZE
 # ==============================================================================
 
@@ -1505,6 +1622,12 @@ async def handle_analyze(
     )
 
     # ==========================================================================
+    # STEP 8.5: CERTIFICATION RECOMMENDATIONS
+    # ==========================================================================
+
+    certifications_shaped = _shape_certifications(enrichment["skill_gaps"])
+
+    # ==========================================================================
     # STEP 9: PERSIST RESUME
     # ==========================================================================
 
@@ -1566,4 +1689,6 @@ async def handle_analyze(
         "skill_gap_source": enrichment["skill_gap_source"],
 
         "grammar_issues": enrichment["grammar_issues"],
+
+        "certifications": certifications_shaped,
     }

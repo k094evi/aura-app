@@ -29,6 +29,16 @@ const toPercent = (score: number) => {
 // Only http(s) links are rendered as links (the URL comes from an external API).
 const isHttpUrl = (url: string | undefined): url is string => !!url && /^https?:\/\//i.test(url);
 
+// semantic_similarity is a raw 0-1 cosine similarity from embedding_service.py
+// (see job_scorer.py's _semantic_score) — separate from total_score, which
+// already folds a scaled version of it in as one of five weighted components.
+// Shown only when present so older cached results (from before this field
+// existed) don't render a stray "0% semantic match".
+const toSemanticPercent = (similarity: number | undefined) => {
+  if (typeof similarity !== 'number' || !Number.isFinite(similarity)) return null;
+  return Math.round(Math.min(1, Math.max(0, similarity)) * 100);
+};
+
 // Card displaying a paginated list of the jobs found by the API
 export default function JobListings({ jobs, totalJobs, keywords = [] }: JobListingsProps) {
   const [page, setPage] = useState(0);
@@ -84,6 +94,7 @@ export default function JobListings({ jobs, totalJobs, keywords = [] }: JobListi
         <div className="flex flex-col gap-4">
           {visible.map((job, i) => {
             const skills = job.matched_skills ?? [];
+            const semanticPercent = toSemanticPercent(job.semantic_similarity);
 
             return (
               <article
@@ -107,9 +118,19 @@ export default function JobListings({ jobs, totalJobs, keywords = [] }: JobListi
                     </p>
                   </div>
 
-                  <span className="shrink-0 rounded-[8px] border border-[#8b5cf6]/20 bg-[#8b5cf6]/10 px-[10px] py-[6px] text-[12px] font-extrabold leading-none text-[#8b5cf6]">
-                    {toPercent(job.total_score)}% match
-                  </span>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="rounded-[8px] border border-[#8b5cf6]/20 bg-[#8b5cf6]/10 px-[10px] py-[6px] text-[12px] font-extrabold leading-none text-[#8b5cf6]">
+                      {toPercent(job.total_score)}% match
+                    </span>
+                    {semanticPercent !== null && (
+                      <span
+                        title="Embedding-based semantic similarity between your resume and this job's text — one of five components folded into the match score above."
+                        className="rounded-[6px] bg-[#06b6d4]/10 px-2 py-[3px] text-[10px] font-bold leading-none text-[#0891b2]"
+                      >
+                        {semanticPercent}% semantic
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {job.description && (

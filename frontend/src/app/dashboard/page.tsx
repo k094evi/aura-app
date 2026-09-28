@@ -26,6 +26,12 @@ import {
 // Bumped to v2: the stored value is now the API shape (AnalysisResult), not the old card props.
 const STORAGE_KEY = 'aura:last-analysis:v2';
 
+// How many resumes have been analyzed THIS session — a real running count,
+// not just "is there a result right now" (which could only ever show 0 or 1
+// and would never move again after the first upload). Persisted alongside
+// the last result so it survives a refresh, cleared when the tab closes.
+const STATS_KEY = 'aura:dashboard-stats:v1';
+
 const normalizeName = (s: string) => s.trim().toLowerCase();
 
 // Only http(s) links are kept (URLs come from an external API and end up in href)
@@ -87,6 +93,26 @@ async function analyzeResume({ file, jobTitle, companies }: UploadPayload): Prom
   return toResult(await res.json());
 }
 
+function loadResumesAnalyzed(): number {
+  try {
+    const raw = sessionStorage.getItem(STATS_KEY);
+    if (!raw) return 0;
+    const parsed = JSON.parse(raw);
+    const n = Number(parsed?.resumesAnalyzed);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveResumesAnalyzed(count: number) {
+  try {
+    sessionStorage.setItem(STATS_KEY, JSON.stringify({ resumesAnalyzed: count }));
+  } catch {
+    // Not being able to persist is fine; the in-memory count still shows.
+  }
+}
+
 // One summary tile in the stats row ("Resumes Uploaded", "Jobs Targeted", "Match Score")
 function StatCard({ label, value, hint }: { label: string; value: string | number; hint: string }) {
   return (
@@ -107,8 +133,12 @@ export default function DashboardPage() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Real running count of analyses this session (see loadResumesAnalyzed above) —
+  // not derived from `result`, since `result` only ever holds the LATEST analysis
+  // and would make this number regress if the user re-analyzed an older resume.
+  const [resumesAnalyzed, setResumesAnalyzed] = useState(0);
 
-  // Restore the last analysis after a refresh
+  // Restore the last analysis and the session's resume count after a refresh
   useEffect(() => {
     try {
       const saved = sessionStorage.getItem(STORAGE_KEY);
@@ -116,6 +146,7 @@ export default function DashboardPage() {
     } catch {
       // Storage unavailable or corrupted: start from the empty state.
     }
+    setResumesAnalyzed(loadResumesAnalyzed());
   }, []);
 
   const handleAnalyze = async (payload: UploadPayload) => {
@@ -129,6 +160,11 @@ export default function DashboardPage() {
       } catch {
         // Not being able to persist is fine; the results still show.
       }
+      setResumesAnalyzed((prev) => {
+        const updated = prev + 1;
+        saveResumesAnalyzed(updated);
+        return updated;
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong. Please try again.');
     } finally {
@@ -137,10 +173,23 @@ export default function DashboardPage() {
   };
 
   const hasResult = result !== null;
-  const topMatch =
+
+  // Highest individual company match %, when there are company matches to
+  // compare. Falls back to the resume's own overall ATS score so the tile
+  // never shows a bare "-" just because this particular analysis returned
+  // no company matches (e.g. a very niche target job/company list).
+  const topCompanyMatch =
     result && result.companies.length > 0
       ? Math.max(...result.companies.map((c) => c.match))
       : null;
+  const matchScoreValue = topCompanyMatch ?? (result ? result.ats_score : null);
+  const matchScoreHint = topCompanyMatch !== null ? 'Top company fit' : 'Overall ATS score';
+
+  // Total job openings actually found for the latest analysis (the same
+  // number JobListings' own header shows) — NOT the number of companies
+  // matched, which is what this tile used to show under the "Jobs Targeted"
+  // label.
+  const jobsTargeted = result ? result.total_jobs : 0;
 
   return (
     // A <div>, not <main>: ConditionalLayout already wraps every page in <main>
@@ -165,18 +214,22 @@ export default function DashboardPage() {
         <div className="grid gap-4 sm:grid-cols-3">
           <StatCard
             label="Resumes Uploaded"
-            value={hasResult ? 1 : 0}
-            hint={hasResult ? 'Analyzed' : 'Upload to begin'}
+            value={resumesAnalyzed}
+            hint={resumesAnalyzed > 0 ? 'This session' : 'Upload to begin'}
           />
           <StatCard
             label="Jobs Targeted"
-            value={result ? result.companies.length : 0}
-            hint={result && result.companies.length > 0 ? 'Companies matched' : 'No targets yet'}
+            value={jobsTargeted}
+            hint={
+              result && result.companies.length > 0
+                ? `${result.companies.length} ${result.companies.length === 1 ? 'company' : 'companies'} matched`
+                : 'No targets yet'
+            }
           />
           <StatCard
             label="Match Score"
-            value={topMatch !== null ? `${topMatch}%` : '-'}
-            hint={topMatch !== null ? 'Top company fit' : 'No score yet'}
+            value={matchScoreValue !== null ? `${matchScoreValue}%` : '-'}
+            hint={matchScoreValue !== null ? matchScoreHint : 'No score yet'}
           />
         </div>
 
