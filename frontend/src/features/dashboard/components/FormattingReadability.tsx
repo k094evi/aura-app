@@ -22,11 +22,37 @@ const PAGE_SIZE = 4;
 // Matched by category name, case-insensitively; any other category uses the neutral style.
 type IssueStyle = { badge: string; dot: string };
 
+// NOTE: these keys must match the actual `type` strings resume_enricher.py's
+// _check_grammar() produces (see its GRAMMAR_CHECKS list and the individual
+// _check_* helpers) — not a generic guess. The real set is: Passive, Tense,
+// Clarity, Brevity, Content, Formatting, Consistency, Readability,
+// Sentence Length, Contact, Section Order, Bullet Count, Impact,
+// Tense Consistency, Variety, Spelling, Style. Previously this map only
+// covered formatting/structure/readability/consistency, so ~12 of the 17
+// real categories silently fell through to the neutral grey style.
 const ISSUE_STYLES: Record<string, IssueStyle> = {
+  // Structural / visual-layout issues (blue badge, red dot)
   formatting: { badge: 'bg-[#dbeafe] text-[#2563eb]', dot: 'bg-[#dc2626]' },
-  structure: { badge: 'bg-[#dbeafe] text-[#2563eb]', dot: 'bg-[#dc2626]' },
-  readability: { badge: 'bg-[#ede9fe] text-[#7c3aed]', dot: 'bg-[#eab30a]' },
+  content: { badge: 'bg-[#dbeafe] text-[#2563eb]', dot: 'bg-[#dc2626]' },
+  contact: { badge: 'bg-[#dbeafe] text-[#2563eb]', dot: 'bg-[#dc2626]' },
+  'section order': { badge: 'bg-[#dbeafe] text-[#2563eb]', dot: 'bg-[#dc2626]' },
+  'bullet count': { badge: 'bg-[#dbeafe] text-[#2563eb]', dot: 'bg-[#dc2626]' },
+
+  // Consistency issues (yellow badge + dot)
   consistency: { badge: 'bg-[#fef9c3] text-[#a16207]', dot: 'bg-[#eab30a]' },
+  'tense consistency': { badge: 'bg-[#fef9c3] text-[#a16207]', dot: 'bg-[#eab30a]' },
+
+  // Linguistic clarity / readability issues (purple badge, yellow dot)
+  readability: { badge: 'bg-[#ede9fe] text-[#7c3aed]', dot: 'bg-[#eab30a]' },
+  clarity: { badge: 'bg-[#ede9fe] text-[#7c3aed]', dot: 'bg-[#eab30a]' },
+  brevity: { badge: 'bg-[#ede9fe] text-[#7c3aed]', dot: 'bg-[#eab30a]' },
+  passive: { badge: 'bg-[#ede9fe] text-[#7c3aed]', dot: 'bg-[#eab30a]' },
+  tense: { badge: 'bg-[#ede9fe] text-[#7c3aed]', dot: 'bg-[#eab30a]' },
+  'sentence length': { badge: 'bg-[#ede9fe] text-[#7c3aed]', dot: 'bg-[#eab30a]' },
+  variety: { badge: 'bg-[#ede9fe] text-[#7c3aed]', dot: 'bg-[#eab30a]' },
+  spelling: { badge: 'bg-[#ede9fe] text-[#7c3aed]', dot: 'bg-[#eab30a]' },
+  impact: { badge: 'bg-[#ede9fe] text-[#7c3aed]', dot: 'bg-[#eab30a]' },
+  style: { badge: 'bg-[#ede9fe] text-[#7c3aed]', dot: 'bg-[#eab30a]' },
 };
 
 const NEUTRAL_STYLE: IssueStyle = { badge: 'bg-[#f3f4f6] text-[#4b5563]', dot: 'bg-[#9ca3af]' };

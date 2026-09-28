@@ -39,6 +39,68 @@ COUNTRY_CODE = "ph"
 # some queries/plans, unlike the plain /search endpoint.)
 _NESTED_LIST_KEYS = ("jobs", "results", "data", "items")
 
+# Title keywords used to guess a seniority level when JSearch's own
+# `job_required_experience` field is missing or uninformative — which is
+# common in practice, since that field depends on the employer having
+# filled it in on the original posting rather than on anything this
+# client controls. Checked as substrings against the lowercased title.
+_SENIOR_TITLE_HINTS = (
+    "senior", "sr.", "sr ", "lead ", " lead", "principal", "staff",
+    "head of", "manager", "director", "architect", "chief",
+)
+_ENTRY_TITLE_HINTS = (
+    "junior", "jr.", "jr ", "entry level", "entry-level", "intern",
+    "internship", "trainee", "fresh graduate", "fresher", "associate",
+)
+
+
+def _experience_level_from_months(months) -> Optional[str]:
+    """Buckets a required-experience figure (in months) into a display level."""
+    if not isinstance(months, (int, float)):
+        return None
+    if months <= 12:
+        return "Entry Level"
+    if months <= 60:
+        return "Mid Level"
+    return "Senior Level"
+
+
+def _experience_level_from_title(title: str) -> Optional[str]:
+    """Last-resort guess from the job title itself — titles almost always
+    say something ("Senior Backend Engineer", "Marketing Intern") even
+    when the structured experience field on the listing doesn't."""
+    t = (title or "").lower()
+    if any(hint in t for hint in _SENIOR_TITLE_HINTS):
+        return "Senior Level"
+    if any(hint in t for hint in _ENTRY_TITLE_HINTS):
+        return "Entry Level"
+    return None
+
+
+def _infer_experience_level(raw: dict, title: str) -> Optional[str]:
+    """
+    JSearch's `job_required_experience` field, when present, looks like:
+        {"no_experience_required": false, "required_experience_in_months": 24,
+         "experience_mentioned": true, "experience_preferred": false}
+    In practice a large share of real listings leave this null/empty —
+    that's a gap in what employers filled in on the original posting,
+    not something fixable by querying JSearch differently. Falls back
+    through, in order:
+      1. the structured months figure, when JSearch provided one
+      2. "Entry Level" when JSearch explicitly flags no experience required
+      3. a seniority guess from the job title (see _experience_level_from_title)
+    Returns None only if none of the above yield anything usable.
+    """
+    req = raw.get("job_required_experience")
+    if isinstance(req, dict):
+        if req.get("no_experience_required"):
+            return "Entry Level"
+        level = _experience_level_from_months(req.get("required_experience_in_months"))
+        if level:
+            return level
+
+    return _experience_level_from_title(title)
+
 
 @dataclass
 class JobListing:
@@ -52,6 +114,15 @@ class JobListing:
     url:              str
     category:         str
     keywords_matched: List[str] = field(default_factory=list)
+    # Seniority/experience level for this listing (e.g. "Entry Level",
+    # "Mid Level", "Senior Level"), or None if nothing could be
+    # determined at all. See _infer_experience_level() below for how
+    # this gets filled in — it did NOT exist as a field on this
+    # dataclass before, which is the actual reason experience level
+    # always showed up as "not disclosed" downstream: there was no
+    # attribute for analyze_controller.py's _get_experience_level() to
+    # find on a JobListing object, regardless of what JSearch returned.
+    experience_level: Optional[str] = None
 
 
 class JSearchClient:
@@ -187,10 +258,11 @@ class JSearchClient:
         salary_min = raw.get("job_min_salary")
         salary_max = raw.get("job_max_salary")
         url = raw.get("job_apply_link") or raw.get("job_google_link") or ""
+        title = raw.get("job_title", "").strip()
 
         return JobListing(
             job_id      = raw.get("job_id", ""),
-            title       = raw.get("job_title", "").strip(),
+            title       = title,
             company     = raw.get("employer_name", "Unknown").strip(),
             location    = location,
             description = (raw.get("job_description") or "")[:500].strip(),
@@ -198,7 +270,8 @@ class JSearchClient:
             salary_max  = float(salary_max) if salary_max else None,
             url         = url,
             category    = raw.get("job_employment_type") or "Full-time",
-            keywords_matched = [keyword],
+            keywords_matched  = [keyword],
+            experience_level  = _infer_experience_level(raw, title),
         )
 
     def fetch_jobs(

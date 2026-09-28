@@ -6,6 +6,7 @@ import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
 import { FileText, Loader2, UploadCloud, X } from 'lucide-react';
 
 import CompanySelector from './CompanySelector';
+import JobTitleSelector from './JobTitleSelector';
 
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB, as shown in the Figma copy
 const ALLOWED_EXT = /\.(pdf|docx)$/i;
@@ -29,10 +30,6 @@ function formatSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
-
-// Shared style for the text input (default / focus states from Figma).
-const inputClass =
-  'w-full rounded-[10px] border border-[#e5e7eb] bg-white px-[14px] py-[12px] text-[14px] text-[#111827] shadow-[0_1px_1.5px_rgba(17,24,39,0.04)] outline-none transition placeholder:text-[#9ca3af] focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/15';
 
 export default function Upload({ onAnalyze, isAnalyzing = false, error = null }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -191,20 +188,11 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
       {/* Inputs + CTA */}
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-          <div className="flex min-w-0 flex-1 flex-col gap-[6px]">
-            <label htmlFor="target-job-title" className="text-[13px] font-semibold text-[#4b5563]">
-              Target Job Title
-            </label>
-            <input
-              id="target-job-title"
-              type="text"
-              value={jobTitle}
-              onChange={(e) => setJobTitle(e.target.value)}
-              placeholder="e.g. Senior Product Designer"
-              disabled={isAnalyzing}
-              className={inputClass}
-            />
-          </div>
+          <JobTitleSelector
+            value={jobTitle}
+            onChange={setJobTitle}
+            disabled={isAnalyzing}
+          />
 
           <CompanySelector
             selectedCompanies={companies}

@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { motion } from 'motion/react';
 
 import {
@@ -33,6 +33,32 @@ export interface CompanyMatch {
 interface CompanyMatchCarouselProps {
   companies: CompanyMatch[];
 }
+
+// Major Philippine cities / business districts a job posting's location
+// string is likely to mention (jsearch_client.py builds `location` from
+// job_city, job_state, job_country — e.g. "Makati, Metro Manila,
+// Philippines" — so a plain substring match against these names works).
+const PH_LOCATIONS = [
+  'Metro Manila',
+  'Manila',
+  'Quezon City',
+  'Makati',
+  'Taguig',
+  'BGC',
+  'Pasig',
+  'Mandaluyong',
+  'Pasay',
+  'Parañaque',
+  'Muntinlupa',
+  'San Juan',
+  'Cebu City',
+  'Davao City',
+  'Iloilo City',
+  'Bacolod City',
+  'Cagayan de Oro',
+  'Baguio City',
+  'Remote',
+];
 
 // Labelled dropdown from the Figma filter row (native <select> with a custom chevron)
 function FilterSelect({
@@ -79,6 +105,21 @@ function DetailPill({ icon: Icon, text }: { icon: LucideIcon; text: string }) {
   );
 }
 
+// Builds a deduped, alphabetized list of the actual values present in the
+// analyzed jobs for one field (jobType / experienceLevel). Filter options
+// are shown only for values that can actually match something — a fixed
+// guess list (e.g. "Full-time"/"Part-time"/"Contract") silently filters
+// everything to empty the moment the backend's real strings don't match
+// it exactly.
+function distinctValues(companies: CompanyMatch[], pick: (c: CompanyMatch) => string): string[] {
+  const values = new Set<string>();
+  for (const c of companies) {
+    const v = pick(c).trim();
+    if (v) values.add(v);
+  }
+  return Array.from(values).sort((a, b) => a.localeCompare(b));
+}
+
 export default function CompanyMatchCarousel({ companies }: CompanyMatchCarouselProps) {
   // Filter state for location, job type, and experience level
   const [locationFilter, setLocationFilter] = useState('All');
@@ -88,6 +129,29 @@ export default function CompanyMatchCarousel({ companies }: CompanyMatchCarousel
   // Index of the company currently shown in the carousel
   const [currentIndex, setCurrentIndex] = useState(0);
 
+  // Job Type and Experience Level options come straight from this
+  // result's own data (ultimately sourced from the matched jobs'
+  // descriptions/listings), instead of a hardcoded guess list — so the
+  // dropdown always reflects values that can actually match a company.
+  const jobTypeOptions = useMemo(
+    () => distinctValues(companies, (c) => c.jobType),
+    [companies]
+  );
+  const experienceLevelOptions = useMemo(
+    () => distinctValues(companies, (c) => c.experienceLevel),
+    [companies]
+  );
+
+  // A fresh analysis result means the previous filter selections may no
+  // longer correspond to anything in the new data — reset to "All"
+  // rather than silently showing an empty carousel.
+  useEffect(() => {
+    setLocationFilter('All');
+    setJobTypeFilter('All');
+    setExperienceLevelFilter('All');
+    setCurrentIndex(0);
+  }, [companies]);
+
   // Apply all active filters to the company list
   const filteredCompanies = useMemo(() => {
     return companies.filter((company) => {
@@ -95,10 +159,7 @@ export default function CompanyMatchCarousel({ companies }: CompanyMatchCarousel
 
       if (jobTypeFilter !== 'All' && company.jobType !== jobTypeFilter) return false;
 
-      if (
-        experienceLevelFilter !== 'All' &&
-        !company.experienceLevel.includes(experienceLevelFilter)
-      )
+      if (experienceLevelFilter !== 'All' && company.experienceLevel !== experienceLevelFilter)
         return false;
 
       return true;
@@ -161,9 +222,11 @@ export default function CompanyMatchCarousel({ companies }: CompanyMatchCarousel
           onChange={applyFilter(setLocationFilter)}
         >
           <option value="All">All Locations</option>
-          <option value="CA">California</option>
-          <option value="WA">Washington</option>
-          <option value="NY">New York</option>
+          {PH_LOCATIONS.map((city) => (
+            <option key={city} value={city}>
+              {city}
+            </option>
+          ))}
         </FilterSelect>
 
         <FilterSelect
@@ -173,9 +236,11 @@ export default function CompanyMatchCarousel({ companies }: CompanyMatchCarousel
           onChange={applyFilter(setJobTypeFilter)}
         >
           <option value="All">All Job Types</option>
-          <option value="Full-time">Full-time</option>
-          <option value="Part-time">Part-time</option>
-          <option value="Contract">Contract</option>
+          {jobTypeOptions.map((type) => (
+            <option key={type} value={type}>
+              {type}
+            </option>
+          ))}
         </FilterSelect>
 
         <FilterSelect
@@ -185,9 +250,11 @@ export default function CompanyMatchCarousel({ companies }: CompanyMatchCarousel
           onChange={applyFilter(setExperienceLevelFilter)}
         >
           <option value="All">All Experience</option>
-          <option value="Mid">Mid-Level</option>
-          <option value="Senior">Senior</option>
-          <option value="Lead">Lead</option>
+          {experienceLevelOptions.map((level) => (
+            <option key={level} value={level}>
+              {level}
+            </option>
+          ))}
         </FilterSelect>
       </div>
 
