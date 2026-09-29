@@ -4,7 +4,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Briefcase, Check } from 'lucide-react';
+import { Briefcase, Check, ChevronDown } from 'lucide-react';
 
 // Common job titles offered as suggestions. The field stays fully free-text —
 // picking one just fills the input, and anything the user types that isn't
@@ -54,28 +54,36 @@ export default function JobTitleSelector({
 }: JobTitleSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [menuRect, setMenuRect] = useState<MenuRect | null>(null);
+  // True when the list was opened with the arrow: show every title instead of
+  // filtering by whatever is already in the box. Reset as soon as the user types.
+  const [showAll, setShowAll] = useState(false);
   // Portals need `document`, which doesn't exist during SSR.
   const [mounted, setMounted] = useState(false);
 
-  // fieldRef: the actual <input>. menuRef: the portaled suggestions list
-  // (lives under <body>, not nested under the input in the DOM).
+  // wrapperRef: the input + arrow together (used for outside-click detection
+  // and for positioning the menu). fieldRef: the actual <input>.
+  // menuRef: the portaled suggestions list (lives under <body>).
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const fieldRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setMounted(true), []);
 
   const query = value.trim().toLowerCase();
-  const suggestions = query
-    ? JOB_TITLES.filter((t) => t.toLowerCase().includes(query))
-    : JOB_TITLES;
-  // Cap the visible list so a blank/short query doesn't dump 70+ rows at once.
-  const visibleSuggestions = suggestions.slice(0, 8);
+  const suggestions =
+    query && !showAll ? JOB_TITLES.filter((t) => t.toLowerCase().includes(query)) : JOB_TITLES;
+  // Cap the list while typing so a short query doesn't dump 70+ rows at once.
+  // When opened with the arrow, show everything (the menu scrolls).
+  const visibleSuggestions = showAll ? suggestions : suggestions.slice(0, 8);
   const exactMatch = JOB_TITLES.some((t) => t.toLowerCase() === query);
 
-  const close = () => setIsOpen(false);
+  const close = () => {
+    setIsOpen(false);
+    setShowAll(false);
+  };
 
   // Recomputes where the dropdown should be drawn, anchored just below the
-  // input. Re-runs on scroll/resize while open so it tracks the field.
+  // field. Re-runs on scroll/resize while open so it tracks the field.
   //
   // Rendered through a portal into <body> for the same reason
   // CompanySelector's dropdown is: the Upload card uses `backdrop-blur`,
@@ -84,7 +92,7 @@ export default function JobTitleSelector({
   // (Jobs Targeted, Key Strengths, Smart Suggestions) no matter what
   // z-index it's given. Escaping to <body> sidesteps that entirely.
   const updateMenuRect = () => {
-    const el = fieldRef.current;
+    const el = wrapperRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
     setMenuRect({ top: rect.bottom + 8, left: rect.left, width: rect.width });
@@ -107,6 +115,18 @@ export default function JobTitleSelector({
     close();
   };
 
+  // The arrow toggles the list. Typing in the box still works as before.
+  const toggleFromArrow = () => {
+    if (disabled) return;
+    if (isOpen) {
+      close();
+    } else {
+      setShowAll(true);
+      setIsOpen(true);
+      fieldRef.current?.focus();
+    }
+  };
+
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape') {
       close();
@@ -118,13 +138,14 @@ export default function JobTitleSelector({
     }
   };
 
-  // Close on a click outside either the input or the (portaled) menu.
+  // Close on a click outside the input/arrow or the (portaled) menu.
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (fieldRef.current?.contains(target)) return;
+      if (wrapperRef.current?.contains(target)) return;
       if (menuRef.current?.contains(target)) return;
       setIsOpen(false);
+      setShowAll(false);
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -132,7 +153,7 @@ export default function JobTitleSelector({
   }, []);
 
   useEffect(() => {
-    if (disabled) setIsOpen(false);
+    if (disabled) close();
   }, [disabled]);
 
   return (
@@ -141,7 +162,7 @@ export default function JobTitleSelector({
         {label}
       </label>
 
-      <div className="relative">
+      <div ref={wrapperRef} className="relative">
         <input
           ref={fieldRef}
           id={id}
@@ -151,8 +172,12 @@ export default function JobTitleSelector({
           autoComplete="off"
           name={`${id}-field`}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            setShowAll(false);
+            onChange(e.target.value);
+          }}
           onFocus={() => !disabled && setIsOpen(true)}
+          onClick={() => !disabled && setIsOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
@@ -160,8 +185,25 @@ export default function JobTitleSelector({
           aria-expanded={isOpen}
           aria-autocomplete="list"
           aria-controls={`${id}-listbox`}
-          className="w-full rounded-[10px] border border-[#e5e7eb] bg-white px-[14px] py-[12px] text-[14px] text-[#111827] shadow-[0_1px_1.5px_rgba(17,24,39,0.04)] outline-none transition placeholder:text-[#9ca3af] focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/15 disabled:cursor-not-allowed disabled:opacity-60"
+          // pr-10 leaves room for the arrow so long titles don't run under it
+          className="w-full rounded-[10px] border border-[#e5e7eb] bg-white py-[12px] pl-[14px] pr-10 text-[14px] text-[#111827] shadow-[0_1px_1.5px_rgba(17,24,39,0.04)] outline-none transition placeholder:text-[#9ca3af] focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/15 disabled:cursor-not-allowed disabled:opacity-60"
         />
+
+        {/* Dropdown arrow, same icon and look as the Target Companies field */}
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label={isOpen ? 'Hide job title suggestions' : 'Show job title suggestions'}
+          disabled={disabled}
+          // Keep focus in the input so clicking the arrow doesn't blur it
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={toggleFromArrow}
+          className="absolute right-[14px] top-1/2 -translate-y-1/2 disabled:cursor-not-allowed"
+        >
+          <ChevronDown
+            className={`size-4 shrink-0 text-[#9ca3af] transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
 
         {mounted &&
           createPortal(

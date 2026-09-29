@@ -14,7 +14,10 @@ const AUTHENTICATED_FROM_VALUES = ['dashboard', 'profile', 'analysis-history', '
 // borrow it from the "from" query param.
 const LEGAL_ROUTES = ['/privacy', '/terms-of-service'];
 // Legal pages opened from these pages keep the Navbar hidden (they have none)
-const NO_NAVBAR_FROM_VALUES = ['signup', 'signin'];
+const NO_NAVBAR_FROM_VALUES = ['signup', 'signin', 'forgot-password'];
+// Auth pages that draw their own full-screen layout (AuthShell / sign-in page),
+// including their own footer, so the site-wide Navbar and Footer are hidden.
+const HIDDEN_ROUTES = ['/signup', '/signin', '/forgot-password', '/reset-password'];
 
 // Layout wrapper that conditionally shows/hides the Navbar and Footer
 // based on the current route, and drives the Navbar's authenticated
@@ -33,8 +36,8 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
     setAuthed(checkIsAuthenticated());
   }, [pathname]);
 
-  // Hide Navbar and Footer entirely on signup and signin pages
-  const hideNavFooter = ['/signup', '/signin'].includes(pathname);
+  // Hide Navbar and Footer entirely on the auth pages
+  const hideNavFooter = HIDDEN_ROUTES.includes(pathname);
 
   // Legal pages (privacy/terms) have no fixed auth state of their own -
   // whether they show the authenticated or logged-out Navbar depends on
@@ -42,7 +45,7 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const isLegalRoute = LEGAL_ROUTES.includes(pathname);
   const isLegalFromAuth = isLegalRoute && !!from && AUTHENTICATED_FROM_VALUES.includes(from);
 
-  // Only hide the Navbar on legal pages when the user came from signup/signin
+  // Only hide the Navbar on legal pages when the user came from an auth page
   // (those pages have no Navbar). From the upload page or a direct visit,
   // signed-out users get the public Navbar.
   const hideNavOnly = isLegalRoute && !!from && NO_NAVBAR_FROM_VALUES.includes(from);

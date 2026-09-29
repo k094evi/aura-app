@@ -3,6 +3,7 @@
 'use client';
 
 import { useEffect, useId, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 // `value` is null until a resume has been analyzed.
@@ -208,6 +209,12 @@ function DimensionRow({ name, value }: { name: string; value: number | null }) {
 
 // Shared modal frame (light scrim, frosted card, title + close button).
 // Closes on the × button, the Escape key, or a click on the scrim.
+//
+// Rendered through a portal into <body>: the dashboard's content wrapper
+// (`relative z-10`) and the frosted cards (`backdrop-blur`) each create their
+// own stacking context, so a modal nested inside them can never paint above
+// the fixed Navbar no matter how high its z-index is. Escaping to <body>
+// fixes that, and the Navbar now dims with the rest of the page.
 function ModalShell({
   title,
   onClose,
@@ -227,9 +234,10 @@ function ModalShell({
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
 
-  return (
+  // Only rendered after a click on an "i" button, so `document` always exists here.
+  return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-[#e9e8f4]/[0.72] p-4 backdrop-blur-[2px]"
+      className="fixed inset-0 z-[1000] flex items-center justify-center bg-[#e9e8f4]/[0.72] p-4 backdrop-blur-[2px]"
       onClick={onClose}
     >
       <div
@@ -256,7 +264,8 @@ function ModalShell({
 
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

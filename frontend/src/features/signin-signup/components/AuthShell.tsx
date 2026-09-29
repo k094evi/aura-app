@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { DM_Sans } from 'next/font/google';
 import { ArrowLeft } from 'lucide-react';
 import { Footer } from '@/components/Footer';
@@ -23,7 +24,28 @@ export default function AuthShell({
 }) {
   return (
     <div className={`${dmSans.className} relative flex min-h-screen w-full flex-col overflow-hidden bg-[#f0eeff]`}>
-      {/* ───── Decorative background (copy your existing block from signup/page.tsx here, unchanged) ───── */}
+      {/* ───────────── Decorative background ───────────── */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+        {/* Soft colour orbs */}
+        <div className="absolute -left-[220px] -top-[220px] size-[940px] rounded-full bg-[radial-gradient(circle,rgba(167,139,250,0.38)_0%,rgba(167,139,250,0.16)_38%,rgba(167,139,250,0)_70%)]" />
+        <div className="absolute -right-[220px] top-[60px] size-[800px] rounded-full bg-[radial-gradient(circle,rgba(34,211,238,0.30)_0%,rgba(34,211,238,0.12)_40%,rgba(34,211,238,0)_70%)]" />
+        <div className="absolute left-[calc(50%-250px)] top-[270px] size-[620px] rounded-full bg-[radial-gradient(circle,rgba(251,113,133,0.10)_0%,rgba(251,113,133,0)_70%)]" />
+        <div className="absolute -bottom-[200px] left-0 size-[500px] rounded-full bg-[radial-gradient(circle,rgba(251,191,36,0.22)_0%,rgba(251,191,36,0.08)_40%,rgba(251,191,36,0)_70%)]" />
+
+        {/* Dot grid, kept faint (6% opacity) */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle,#7c3aed_1px,transparent_1px)] bg-[length:24px_24px] opacity-[0.06]" />
+
+        {/* Top accent line */}
+        <div className="absolute left-0 top-0 h-[3px] w-full bg-[linear-gradient(90deg,#7c3aed_0%,#06b6d4_50%,rgba(139,92,246,0)_100%)]" />
+
+        {/* Decorative rings: top right */}
+        <div className="absolute -right-[120px] -top-[120px] size-[340px] rounded-full border border-[#8b5cf6]/20" />
+        <div className="absolute -right-[80px] -top-[80px] size-[260px] rounded-full border border-[#8b5cf6]/20" />
+
+        {/* Decorative rings: bottom left */}
+        <div className="absolute -bottom-[60px] left-[60px] size-[180px] rounded-full border border-emerald-400/20" />
+        <div className="absolute -bottom-[20px] left-[100px] size-[100px] rounded-full border border-emerald-400/20" />
+      </div>
 
       <Link
         href="/"
@@ -35,7 +57,11 @@ export default function AuthShell({
 
       <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 pb-12 pt-24">
         <div className={`flex w-full ${maxWidthClass} flex-col items-center gap-5`}>
-          {/* ───── Logo (copy your existing Link + svg block here, unchanged) ───── */}
+          {/* Logo + name */}
+          <Link href="/" className="flex items-center justify-center gap-[10px]">
+            <Image src="/Aura_LogoRaster.png" alt="" width={32} height={32} priority />
+            <span className="text-[24px] font-bold text-[#111827]">Aura</span>
+          </Link>
 
           <div className="flex w-full flex-col gap-5 rounded-[24px] border-[1.5px] border-white bg-white/[0.72] px-6 py-8 shadow-[0_4px_16px_rgba(124,58,237,0.05),0_20px_60px_rgba(17,24,39,0.09)] backdrop-blur-[12px] sm:px-10">
             {children}

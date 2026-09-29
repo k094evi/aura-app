@@ -3,8 +3,9 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Brain, LogOut, ChevronDown } from 'lucide-react';
+import { LogOut, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { getStoredUser } from '@/lib/auth';
 
@@ -163,11 +164,9 @@ export const Navbar = ({
   return (
     <nav className="fixed top-6 inset-x-4 sm:inset-x-8 lg:inset-x-20 z-50 font-['DM_Sans',_sans-serif]">
       <div className="relative flex items-center justify-between gap-4 rounded-full border border-white bg-white/80 backdrop-blur-[10px] pl-6 pr-3.5 py-3.5 shadow-[0px_2px_8px_0px_rgba(31,41,55,0.04),0px_8px_32px_0px_rgba(31,41,55,0.06)]">
-        {/* Logo / brand link */}
+        {/* Logo / brand link. The logo file lives in /public (Aura_LogoRaster.png). */}
         <Link href="/" className="flex items-center gap-2.5 shrink-0">
-          <div className="w-7 h-7 bg-gradient-to-r from-[#7c3aed] via-[#a78bfa] to-[#06b6d4] rounded-lg flex items-center justify-center">
-            <Brain className="text-white w-4 h-4" />
-          </div>
+          <Image src="/Aura_LogoRaster.png" alt="" width={28} height={28} priority />
           <span className="text-[22px] font-bold tracking-tight text-[#111827]">Aura</span>
         </Link>
 

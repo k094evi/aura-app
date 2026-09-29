@@ -6,6 +6,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { DM_Sans } from 'next/font/google';
 import { ArrowLeft, Check, Eye, EyeOff, Loader2 } from 'lucide-react';
@@ -174,18 +175,9 @@ export default function LoginPage() {
       {/* ───────────── Main content ───────────── */}
       <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 pb-16 pt-24 sm:pt-16">
         <div className="flex w-full max-w-[480px] flex-col items-center gap-5">
-          {/* Logo */}
+          {/* Logo. Same file the Navbar uses (lives in /public). */}
           <Link href="/" className="flex items-center justify-center gap-[10px]">
-            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden>
-              <defs>
-                <linearGradient id="aura-logo-grad" x1="4" y1="2" x2="28" y2="30" gradientUnits="userSpaceOnUse">
-                  <stop stopColor="#8b5cf6" />
-                  <stop offset="1" stopColor="#7c3aed" />
-                </linearGradient>
-              </defs>
-              <circle cx="16" cy="16" r="16" fill="url(#aura-logo-grad)" />
-              <circle cx="16" cy="16" r="7" fill="#c4b5fd" fillOpacity="0.85" />
-            </svg>
+            <Image src="/Aura_LogoRaster.png" alt="" width={32} height={32} priority />
             <span className="text-[24px] font-bold text-[#111827]">Aura</span>
           </Link>
 

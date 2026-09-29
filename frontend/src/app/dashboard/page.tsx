@@ -21,6 +21,7 @@ import {
   Upload,
   type UploadPayload,
 } from '@/features/dashboard/components';
+import { SettingsBackground } from '@/features/settings/components/SettingsUI';
 
 // Keeps the last analysis across a page refresh (cleared when the tab closes).
 // Bumped to v2: the stored value is now the API shape (AnalysisResult), not the old card props.
@@ -193,14 +194,13 @@ export default function DashboardPage() {
 
   return (
     // A <div>, not <main>: ConditionalLayout already wraps every page in <main>
-    <div className="relative min-h-screen w-full overflow-hidden bg-[#f4f2fb]">
-      {/* Ambient background orbs */}
-      <div className="pointer-events-none absolute -left-24 top-10 size-[480px] rounded-full bg-violet-300/40 blur-[110px]" />
-      <div className="pointer-events-none absolute -right-24 top-40 size-[420px] rounded-full bg-cyan-200/50 blur-[110px]" />
-      <div className="pointer-events-none absolute left-1/3 top-[520px] size-[400px] rounded-full bg-pink-200/40 blur-[110px]" />
+    <div className="relative min-h-screen w-full overflow-hidden bg-[#f0eeff]">
+      {/* Ambient background orbs + top accent line (same as Settings) */}
+      <SettingsBackground />
 
-      {/* Top padding leaves room for the fixed Navbar */}
-      <div className="relative z-10 mx-auto flex w-full max-w-[1200px] flex-col gap-6 px-4 pb-16 pt-28 sm:px-6">
+      {/* Top padding leaves room for the fixed Navbar.
+          Full width with the same side padding as the History page (px-6 md:px-20). */}
+      <div className="relative z-10 flex w-full flex-col gap-6 px-6 pb-16 pt-28 md:px-20">
         {/* Header: greeting from the stored user + working Export PDF */}
         <DashboardHeader result={result} />
 
