@@ -6,32 +6,11 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Briefcase, Check, ChevronDown } from 'lucide-react';
 
-// Common job titles offered as suggestions. The field stays fully free-text —
-// picking one just fills the input, and anything the user types that isn't
-// on this list is kept exactly as typed.
-const JOB_TITLES = [
-  'Software Engineer', 'Full Stack Developer', 'Backend Developer', 'Frontend Developer',
-  'Mobile Developer', 'DevOps Engineer', 'Cloud Engineer', 'Site Reliability Engineer',
-  'QA Engineer', 'Software Tester', 'Database Administrator', 'Systems Administrator',
-  'Network Engineer', 'Cybersecurity Analyst', 'Machine Learning Engineer', 'AI Engineer',
-  'Data Scientist', 'Data Analyst', 'Business Analyst', 'Business Intelligence Analyst',
-  'Product Manager', 'Product Designer', 'UX/UI Designer', 'Graphic Designer',
-  'Project Manager', 'Program Manager', 'Scrum Master', 'Operations Manager',
-  'IT Support Specialist', 'Technical Support Representative', 'Customer Service Representative',
-  'Customer Support Specialist', 'Call Center Agent', 'BPO Team Leader', 'Virtual Assistant',
-  'Marketing Manager', 'Digital Marketing Specialist', 'Social Media Manager', 'SEO Specialist',
-  'Content Writer', 'Copywriter', 'Video Editor', 'Photographer',
-  'Sales Executive', 'Sales Representative', 'Business Development Manager', 'Account Manager',
-  'Human Resources Manager', 'Recruiter', 'Talent Acquisition Specialist', 'Training Specialist',
-  'Accountant', 'Bookkeeper', 'Financial Analyst', 'Auditor',
-  'Administrative Assistant', 'Executive Assistant', 'Office Manager',
-  'Supply Chain Manager', 'Logistics Coordinator', 'Warehouse Supervisor',
-  'Retail Store Manager', 'Restaurant Manager', 'Chef',
-  'Civil Engineer', 'Mechanical Engineer', 'Electrical Engineer', 'Industrial Engineer',
-  'Architect', 'Construction Manager',
-  'Registered Nurse', 'Medical Technologist', 'Pharmacist', 'Physical Therapist',
-  'Teacher', 'Research Analyst', 'Legal Assistant', 'Paralegal',
-];
+import { IT_JOB_TITLES, isItJobTitle } from '@/features/dashboard/data/itCatalog';
+
+// The field is free-text: pick a suggestion or type any IT job title
+// (e.g. "Senior React Developer"). Non-IT titles are flagged below the field
+// and blocked when submitting.
 
 interface JobTitleSelectorProps {
   value: string;
@@ -50,7 +29,7 @@ export default function JobTitleSelector({
   disabled = false,
   id = 'target-job-title',
   label = 'Target Job Title',
-  placeholder = 'e.g. Senior Product Designer',
+  placeholder = 'e.g. Backend Developer',
 }: JobTitleSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [menuRect, setMenuRect] = useState<MenuRect | null>(null);
@@ -71,11 +50,13 @@ export default function JobTitleSelector({
 
   const query = value.trim().toLowerCase();
   const suggestions =
-    query && !showAll ? JOB_TITLES.filter((t) => t.toLowerCase().includes(query)) : JOB_TITLES;
+    query && !showAll ? IT_JOB_TITLES.filter((t) => t.toLowerCase().includes(query)) : IT_JOB_TITLES;
   // Cap the list while typing so a short query doesn't dump 70+ rows at once.
   // When opened with the arrow, show everything (the menu scrolls).
   const visibleSuggestions = showAll ? suggestions : suggestions.slice(0, 8);
-  const exactMatch = JOB_TITLES.some((t) => t.toLowerCase() === query);
+  const exactMatch = IT_JOB_TITLES.some((t) => t.toLowerCase() === query);
+  // Text that is not (yet) an IT title, shown once the list is closed
+  const invalid = query.length > 0 && !isItJobTitle(value) && !isOpen;
 
   const close = () => {
     setIsOpen(false);
@@ -130,11 +111,14 @@ export default function JobTitleSelector({
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape') {
       close();
-    } else if (e.key === 'Enter' && isOpen && visibleSuggestions.length > 0 && !exactMatch) {
-      // Only auto-pick on Enter when the current text isn't already an
-      // exact title — otherwise Enter should just confirm what's typed.
+    } else if (e.key === 'Enter' && isOpen) {
       e.preventDefault();
-      selectTitle(visibleSuggestions[0]);
+      if (isItJobTitle(value) || visibleSuggestions.length === 0) {
+        // What's typed is already a valid IT title: keep it exactly as typed.
+        close();
+      } else {
+        selectTitle(visibleSuggestions[0]);
+      }
     }
   };
 
@@ -185,6 +169,7 @@ export default function JobTitleSelector({
           aria-expanded={isOpen}
           aria-autocomplete="list"
           aria-controls={`${id}-listbox`}
+          aria-invalid={invalid}
           // pr-10 leaves room for the arrow so long titles don't run under it
           className="w-full rounded-[10px] border border-[#e5e7eb] bg-white py-[12px] pl-[14px] pr-10 text-[14px] text-[#111827] shadow-[0_1px_1.5px_rgba(17,24,39,0.04)] outline-none transition placeholder:text-[#9ca3af] focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/15 disabled:cursor-not-allowed disabled:opacity-60"
         />
@@ -252,6 +237,12 @@ export default function JobTitleSelector({
             document.body
           )}
       </div>
+
+      {invalid && (
+        <p role="alert" className="text-[12px] font-medium text-[#ef4444]">
+          Enter an IT job title, e.g. Backend Developer.
+        </p>
+      )}
     </div>
   );
 }

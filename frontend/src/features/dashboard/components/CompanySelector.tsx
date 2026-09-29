@@ -4,21 +4,11 @@
 import { useState, useRef, useEffect, useLayoutEffect, useId, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, X, Building2, ChevronDown, Check, Plus } from 'lucide-react';
+import { X, Building2, ChevronDown, Check, Plus } from 'lucide-react';
 
-// List of companies available for selection
-const COMPANIES = [
-  'Google', 'Microsoft', 'Apple', 'Amazon', 'Meta',
-  'Netflix', 'Tesla', 'Nvidia', 'Adobe', 'Salesforce',
-  'Oracle', 'IBM', 'Intel', 'Cisco', 'SAP',
-  'Uber', 'Airbnb', 'Spotify', 'Shopify', 'Stripe',
-  'Dropbox', 'Slack', 'Zoom', 'LinkedIn', 'Twitter',
-  'Reddit', 'Pinterest', 'Snapchat', 'TikTok', 'Discord',
-  'PayPal', 'Square', 'Coinbase', 'Robinhood', 'Figma',
-  'Notion', 'Atlassian', 'GitHub', 'GitLab', 'MongoDB',
-  'Snowflake', 'Databricks', 'Cloudflare', 'Twilio', 'Okta',
-  'ServiceNow', 'Workday', 'HubSpot', 'Zendesk', 'Splunk',
-];
+// IT / tech employers offered as suggestions (reference list). The field is
+// free-text: anything typed that isn't on this list can still be added.
+import { IT_COMPANIES } from '@/features/dashboard/data/itCatalog';
 
 interface CompanySelectorProps {
   selectedCompanies: string[];
@@ -26,56 +16,69 @@ interface CompanySelectorProps {
   // Locks the field while an analysis is running
   disabled?: boolean;
   label?: string;
+  placeholder?: string;
 }
 
-// Where the (portaled) dropdown should sit, computed from the trigger
-// field's own bounding box rather than CSS `absolute` positioning.
+// Where the (portaled) dropdown should sit, computed from the field's own
+// bounding box rather than CSS `absolute` positioning.
 type MenuRect = { top: number; left: number; width: number };
+
+// One row in the dropdown: a company from the reference list, or "add what I typed".
+type Option = { kind: 'company' | 'custom'; name: string };
+
+const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 export default function CompanySelector({
   selectedCompanies,
   onSelectionChange,
   disabled = false,
   label = 'Target Companies',
+  placeholder = 'Type or select target companies',
 }: CompanySelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [query, setQuery] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
   const [menuRect, setMenuRect] = useState<MenuRect | null>(null);
-  // Portals need `document`, which doesn't exist during SSR — only
-  // render the portal once mounted on the client.
+  // Portals need `document`, which doesn't exist during SSR.
   const [mounted, setMounted] = useState(false);
 
-  // fieldRef: the clickable trigger row. menuRef: the portaled dropdown
-  // itself (lives under <body>, NOT under fieldRef in the DOM anymore).
-  // Outside-click detection below checks both.
+  // fieldRef: the chips + input row (positions the menu, outside-click check).
+  // menuRef: the portaled dropdown (lives under <body>).
   const fieldRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const labelId = useId();
+  const listId = useId();
 
   useEffect(() => setMounted(true), []);
 
-  const query = searchQuery.trim();
-  const lowerQuery = query.toLowerCase();
+  const q = query.trim();
+  const lowerQ = q.toLowerCase();
 
-  // Companies matching the current search query
-  const filteredCompanies = COMPANIES.filter((company) =>
-    company.toLowerCase().includes(lowerQuery)
-  );
+  // Reference companies matching what is typed (selected ones stay visible, ticked)
+  const matches = IT_COMPANIES.filter((c) => c.toLowerCase().includes(lowerQ));
 
-  // Offer to add a company that isn't in the list (the old free-text field allowed any name)
-  const alreadyKnown =
-    COMPANIES.some((c) => c.toLowerCase() === lowerQuery) ||
-    selectedCompanies.some((c) => c.toLowerCase() === lowerQuery);
-  const canAddCustom = query.length > 0 && !alreadyKnown;
+  // Offer to add a typed name that is not already in the list or the selection
+  const exists = IT_COMPANIES.some((c) => same(c, q)) || selectedCompanies.some((c) => same(c, q));
+  const canAddCustom = q.length > 0 && !exists;
+
+  const options: Option[] = [
+    ...matches.map((name) => ({ kind: 'company' as const, name })),
+    ...(canAddCustom ? [{ kind: 'custom' as const, name: q }] : []),
+  ];
+  const active = options.length > 0 ? Math.min(activeIndex, options.length - 1) : -1;
+
+  const isSelected = (name: string) => selectedCompanies.some((c) => same(c, name));
 
   const close = () => {
     setIsOpen(false);
-    setSearchQuery('');
+    setQuery('');
+    setActiveIndex(0);
   };
 
-  // Recomputes where the dropdown should be drawn, anchored just below
-  // the trigger field. Re-runs on scroll/resize while open so it tracks
-  // the field instead of drifting once the page scrolls under it.
+  // Anchors the dropdown just below the field; re-runs on scroll/resize while
+  // open. Portaled into <body> because the Upload card's `backdrop-blur`
+  // creates a stacking context that would otherwise hide the menu under later cards.
   const updateMenuRect = () => {
     const el = fieldRef.current;
     if (!el) return;
@@ -93,61 +96,82 @@ export default function CompanySelector({
       window.removeEventListener('resize', updateMenuRect);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, selectedCompanies.length]);
 
-  const toggleOpen = () => {
-    if (disabled) return;
-    if (isOpen) close();
-    else setIsOpen(true);
+  // Keep the keyboard-highlighted row visible in the scrolling list
+  useEffect(() => {
+    if (!isOpen || active < 0) return;
+    document.getElementById(`${listId}-opt-${active}`)?.scrollIntoView({ block: 'nearest' });
+  }, [active, isOpen, listId]);
+
+  const openMenu = () => {
+    if (!disabled) setIsOpen(true);
   };
 
-  // Add or remove a company from the selection
-  const toggleCompany = (company: string) => {
-    if (selectedCompanies.includes(company)) {
-      onSelectionChange(selectedCompanies.filter((c) => c !== company));
-    } else {
-      onSelectionChange([...selectedCompanies, company]);
-    }
+  const removeCompany = (name: string) =>
+    onSelectionChange(selectedCompanies.filter((c) => !same(c, name)));
+
+  // Multi-select: picking a company toggles it; the menu stays open
+  const toggleCompany = (name: string) => {
+    if (isSelected(name)) removeCompany(name);
+    else onSelectionChange([...selectedCompanies, name]);
   };
 
-  const addCustom = () => {
-    onSelectionChange([...selectedCompanies, query]);
-    setSearchQuery('');
+  const addCustom = (name: string) => {
+    const value = name.trim();
+    if (!value || isSelected(value)) return;
+    // Use the list's own spelling when the typed text matches a reference company
+    const canonical = IT_COMPANIES.find((c) => same(c, value)) ?? value;
+    onSelectionChange([...selectedCompanies, canonical]);
   };
 
-  const handleFieldKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    // Ignore keys pressed on the chip remove buttons inside the field
-    if (e.target !== e.currentTarget) return;
-    if (e.key === 'Enter' || e.key === ' ') {
+  const choose = (option: Option) => {
+    if (option.kind === 'custom') addCustom(option.name);
+    else toggleCompany(option.name);
+    setQuery('');
+    setActiveIndex(0);
+    inputRef.current?.focus();
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
       e.preventDefault();
-      toggleOpen();
+      openMenu();
+      if (options.length > 0) setActiveIndex((active + 1) % options.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      openMenu();
+      if (options.length > 0) setActiveIndex((active - 1 + options.length) % options.length);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (isOpen && active >= 0) choose(options[active]);
+    } else if (e.key === ',') {
+      // Comma commits whatever was typed as its own company
+      e.preventDefault();
+      if (q) {
+        const exact = IT_COMPANIES.find((c) => same(c, q));
+        if (exact && !isSelected(exact)) onSelectionChange([...selectedCompanies, exact]);
+        else if (!exact) addCustom(q);
+        setQuery('');
+        setActiveIndex(0);
+      }
+    } else if (e.key === 'Backspace' && query === '' && selectedCompanies.length > 0) {
+      removeCompany(selectedCompanies[selectedCompanies.length - 1]);
     } else if (e.key === 'Escape') {
       close();
     }
   };
 
-  const handleSearchKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Escape') {
-      close();
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      if (canAddCustom && filteredCompanies.length === 0) addCustom();
-      else if (filteredCompanies.length > 0) toggleCompany(filteredCompanies[0]);
-    }
-  };
-
-  // Close the dropdown on a click outside either the trigger field OR
-  // the portaled menu (the menu no longer lives inside the field's DOM
-  // subtree, so both refs need to be checked separately now).
+  // Close on a click outside the field or the (portaled) menu
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
       if (fieldRef.current?.contains(target)) return;
       if (menuRef.current?.contains(target)) return;
       setIsOpen(false);
-      setSearchQuery('');
+      setQuery('');
+      setActiveIndex(0);
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
@@ -156,84 +180,101 @@ export default function CompanySelector({
   useEffect(() => {
     if (disabled) {
       setIsOpen(false);
-      setSearchQuery('');
+      setQuery('');
     }
   }, [disabled]);
 
   return (
     <div className="flex min-w-0 flex-col gap-[6px] sm:w-1/2">
-      <span id={labelId} className="text-left text-[13px] font-semibold text-[#4b5563]">
+      <label id={labelId} className="text-left text-[13px] font-semibold text-[#4b5563]">
         {label}
-      </span>
+      </label>
 
       <div className="relative">
-        {/* Selector field showing selected companies as removable chips */}
+        {/* Field: selected companies as removable chips + an inline text input */}
         <div
           ref={fieldRef}
-          role="button"
-          tabIndex={disabled ? -1 : 0}
-          aria-labelledby={labelId}
-          aria-haspopup="listbox"
-          aria-expanded={isOpen}
-          aria-disabled={disabled}
-          onClick={toggleOpen}
-          onKeyDown={handleFieldKeyDown}
-          className={`flex min-h-[46px] w-full cursor-pointer flex-wrap items-center gap-2 rounded-[10px] border bg-white px-[14px] py-[7px] shadow-[0_1px_1.5px_rgba(17,24,39,0.04)] outline-none transition focus-visible:border-[#7c3aed] focus-visible:ring-2 focus-visible:ring-[#7c3aed]/15 ${
+          onClick={() => {
+            if (disabled) return;
+            inputRef.current?.focus();
+            openMenu();
+          }}
+          className={`flex min-h-[46px] w-full cursor-text flex-wrap items-center gap-2 rounded-[10px] border bg-white px-[14px] py-[7px] shadow-[0_1px_1.5px_rgba(17,24,39,0.04)] transition ${
             isOpen ? 'border-[#7c3aed] ring-2 ring-[#7c3aed]/15' : 'border-[#e5e7eb]'
           } ${disabled ? 'cursor-not-allowed opacity-60' : ''}`}
         >
-          {selectedCompanies.length === 0 ? (
-            <div className="flex flex-1 items-center gap-2 text-[14px] text-[#9ca3af]">
-              <Building2 className="size-4 shrink-0" />
-              <span className="truncate">Select target companies</span>
-            </div>
-          ) : (
-            <div className="flex flex-1 flex-wrap gap-2">
-              {selectedCompanies.map((company) => (
-                <span
-                  key={company}
-                  className="inline-flex items-center gap-1 rounded-lg border border-[#8b5cf6]/20 bg-[#8b5cf6]/10 px-[10px] py-[3px] text-[13px] font-medium text-[#7c3aed]"
-                >
-                  {company}
-
-                  {/* Remove this company from the selection */}
-                  <button
-                    type="button"
-                    aria-label={`Remove ${company}`}
-                    disabled={disabled}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectionChange(selectedCompanies.filter((c) => c !== company));
-                    }}
-                    className="text-[#7c3aed]/60 hover:text-[#7c3aed] disabled:cursor-not-allowed"
-                  >
-                    <X className="size-3.5" />
-                  </button>
-                </span>
-              ))}
-            </div>
+          {selectedCompanies.length === 0 && !isOpen && (
+            <Building2 aria-hidden className="size-4 shrink-0 text-[#9ca3af]" />
           )}
 
-          <ChevronDown
-            className={`size-4 shrink-0 text-[#9ca3af] transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          {selectedCompanies.map((company) => (
+            <span
+              key={company}
+              className="inline-flex items-center gap-1 rounded-lg border border-[#8b5cf6]/20 bg-[#8b5cf6]/10 px-[10px] py-[3px] text-[13px] font-medium text-[#7c3aed]"
+            >
+              {company}
+              <button
+                type="button"
+                aria-label={`Remove ${company}`}
+                disabled={disabled}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeCompany(company);
+                }}
+                className="text-[#7c3aed]/60 hover:text-[#7c3aed] disabled:cursor-not-allowed"
+              >
+                <X className="size-3.5" />
+              </button>
+            </span>
+          ))}
+
+          <input
+            ref={inputRef}
+            type="text"
+            autoComplete="off"
+            name="target-companies-field"
+            value={query}
+            disabled={disabled}
+            placeholder={selectedCompanies.length === 0 ? placeholder : 'Add another…'}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setActiveIndex(0);
+              openMenu();
+            }}
+            onFocus={openMenu}
+            onKeyDown={handleKeyDown}
+            role="combobox"
+            aria-labelledby={labelId}
+            aria-expanded={isOpen}
+            aria-autocomplete="list"
+            aria-controls={listId}
+            aria-activedescendant={isOpen && active >= 0 ? `${listId}-opt-${active}` : undefined}
+            className="min-w-[120px] flex-1 bg-transparent py-[3px] text-[14px] text-[#111827] outline-none placeholder:text-[#9ca3af] disabled:cursor-not-allowed"
           />
+
+          {/* Arrow toggles the full list without typing */}
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label={isOpen ? 'Hide company suggestions' : 'Show company suggestions'}
+            disabled={disabled}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isOpen) close();
+              else {
+                inputRef.current?.focus();
+                openMenu();
+              }
+            }}
+            className="disabled:cursor-not-allowed"
+          >
+            <ChevronDown
+              className={`size-4 shrink-0 text-[#9ca3af] transition-transform ${isOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
         </div>
 
-        {/*
-          Dropdown is rendered through a portal straight into <body>,
-          positioned with `fixed` coordinates from the field's own
-          bounding box (menuRect) instead of `absolute` inside the field.
-
-          WHY: the Upload card (and every other card on this page) uses
-          `backdrop-blur`, which creates its own CSS stacking context.
-          A z-index set on something nested *inside* that card can only
-          ever win against other things inside the SAME stacking context
-          — it can never paint above a sibling card that comes later in
-          the DOM (Jobs Targeted, Key Strengths, Smart Suggestions), no
-          matter how high the z-index number is. That's why the dropdown
-          was rendering underneath those cards. Escaping to <body> via a
-          portal sidesteps the whole problem.
-        */}
         {mounted &&
           createPortal(
             <AnimatePresence>
@@ -252,60 +293,58 @@ export default function CompanySelector({
                   }}
                   className="z-[999] overflow-hidden rounded-[12px] border border-[#e5e7eb] bg-white shadow-[0_16px_32px_rgba(17,24,39,0.12)]"
                 >
-                  <div className="p-3">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#9ca3af]" />
+                  <div
+                    id={listId}
+                    role="listbox"
+                    aria-multiselectable="true"
+                    className="max-h-64 overflow-y-auto py-2"
+                  >
+                    {options.map((option, index) => {
+                      const selected = option.kind === 'company' && isSelected(option.name);
+                      const highlighted = index === active;
 
-                      <input
-                        type="text"
-                        autoFocus
-                        autoComplete="off"
-                        placeholder="Search or type a company..."
-                        aria-label="Search companies"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        onKeyDown={handleSearchKeyDown}
-                        className="w-full rounded-lg border border-[#e5e7eb] bg-white py-2 pl-10 pr-4 text-[14px] text-[#111827] outline-none placeholder:text-[#9ca3af] focus:border-[#7c3aed] focus:ring-2 focus:ring-[#7c3aed]/15"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Scrollable list of filtered company options */}
-                  <div role="listbox" aria-multiselectable="true" className="max-h-64 overflow-y-auto pb-2">
-                    {canAddCustom && (
-                      <button
-                        type="button"
-                        onClick={addCustom}
-                        className="flex w-full items-center gap-2 px-4 py-2 text-left text-[13px] font-semibold text-[#7c3aed] transition-colors hover:bg-[#7c3aed]/[0.05]"
-                      >
-                        <Plus className="size-4" />
-                        Add &ldquo;{query}&rdquo;
-                      </button>
-                    )}
-
-                    {filteredCompanies.map((company) => {
-                      const selected = selectedCompanies.includes(company);
                       return (
                         <button
-                          key={company}
+                          key={`${option.kind}-${option.name}`}
+                          id={`${listId}-opt-${index}`}
                           type="button"
                           role="option"
                           aria-selected={selected}
-                          onClick={() => toggleCompany(company)}
-                          className={`flex w-full items-center justify-between gap-2 px-4 py-2 text-left text-[13px] transition-colors hover:bg-[#7c3aed]/[0.05] ${
-                            selected ? 'font-semibold text-[#7c3aed]' : 'text-[#4b5563]'
+                          // Keep focus in the input while clicking rows
+                          onMouseDown={(e) => e.preventDefault()}
+                          onMouseEnter={() => setActiveIndex(index)}
+                          onClick={() => choose(option)}
+                          className={`flex w-full items-center justify-between gap-2 px-4 py-2 text-left text-[13px] transition-colors ${
+                            highlighted ? 'bg-[#7c3aed]/[0.06]' : ''
+                          } ${
+                            option.kind === 'custom'
+                              ? 'font-semibold text-[#7c3aed]'
+                              : selected
+                                ? 'font-semibold text-[#7c3aed]'
+                                : 'text-[#4b5563]'
                           }`}
                         >
-                          {company}
+                          {option.kind === 'custom' ? (
+                            <span className="flex min-w-0 items-center gap-2">
+                              <Plus className="size-4 shrink-0" />
+                              <span className="truncate">Add &ldquo;{option.name}&rdquo;</span>
+                            </span>
+                          ) : (
+                            <span className="truncate">{option.name}</span>
+                          )}
                           {selected && <Check className="size-4 shrink-0" />}
                         </button>
                       );
                     })}
 
-                    {filteredCompanies.length === 0 && !canAddCustom && (
+                    {options.length === 0 && (
                       <p className="px-4 py-2 text-[13px] text-[#9ca3af]">No companies found</p>
                     )}
                   </div>
+
+                  <p className="border-t border-[#f3f4f6] px-4 py-2 text-[11px] text-[#9ca3af]">
+                    Select several, or type a name and press Enter. Backspace removes the last one.
+                  </p>
                 </motion.div>
               )}
             </AnimatePresence>,

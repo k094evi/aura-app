@@ -27,6 +27,7 @@ from app.data.job_requirements import (
 
 from app.models.schemas import ParsedResume
 from app.services.skill_matcher import skills_present
+from app.data.it_domain import is_it_title
 
 
 # ============================================================
@@ -125,12 +126,14 @@ def _resolve_target_job(target_job: str) -> Optional[str]:
     canonical_job = _NORMALIZED_JOB_LOOKUP.get(normalized)
 
     if canonical_job:
-        return canonical_job
+        # IT-only: a supported job that is not an IT role is not resolved.
+        return canonical_job if is_it_title(canonical_job) else None
 
     # --------------------------------------------------------
     # Then try the aliases.
     # --------------------------------------------------------
-    return _ALIAS_LOOKUP.get(normalized)
+    aliased_job = _ALIAS_LOOKUP.get(normalized)
+    return aliased_job if aliased_job and is_it_title(aliased_job) else None
 
 
 # ============================================================
@@ -139,13 +142,14 @@ def _resolve_target_job(target_job: str) -> Optional[str]:
 
 def get_supported_target_jobs() -> list[str]:
     """
-    Returns the official job titles from JOB_REQUIREMENTS.
+    Returns the official IT job titles from JOB_REQUIREMENTS
+    (non-IT entries are excluded — Aura is IT-only).
 
     This should be used by the frontend dropdown instead of
     maintaining a second hardcoded list.
     """
 
-    return sorted(JOB_REQUIREMENTS.keys())
+    return sorted(job for job in JOB_REQUIREMENTS if is_it_title(job))
 
 
 # ============================================================

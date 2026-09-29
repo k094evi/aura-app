@@ -7,6 +7,7 @@ import { FileText, Loader2, UploadCloud, X } from 'lucide-react';
 
 import CompanySelector from './CompanySelector';
 import JobTitleSelector from './JobTitleSelector';
+import { normalizeItJobTitle } from '@/features/dashboard/data/itCatalog';
 
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB, as shown in the Figma copy
 const ALLOWED_EXT = /\.(pdf|docx)$/i;
@@ -86,8 +87,16 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
       setFileError('Please choose a resume to upload.');
       return;
     }
+    // Job title is optional and free-text, but if given it must be an IT role
+    const typedTitle = jobTitle.trim();
+    const normalizedTitle = normalizeItJobTitle(typedTitle);
+    if (typedTitle && !normalizedTitle) {
+      setFileError('Enter an IT job title, e.g. Backend Developer.');
+      return;
+    }
+
     // The API expects a comma-separated string
-    onAnalyze({ file, jobTitle: jobTitle.trim(), companies: companies.join(', ') });
+    onAnalyze({ file, jobTitle: normalizedTitle, companies: companies.join(', ') });
   };
 
   const shownError = fileError ?? error;
@@ -190,7 +199,10 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
           <JobTitleSelector
             value={jobTitle}
-            onChange={setJobTitle}
+            onChange={(value) => {
+              setJobTitle(value);
+              setFileError(null);
+            }}
             disabled={isAnalyzing}
           />
 

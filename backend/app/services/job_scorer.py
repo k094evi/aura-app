@@ -165,6 +165,22 @@ def _skill_tokens(skills_block: str) -> List[str]:
     return [p.strip().lower() for p in parts if p.strip() and len(p.strip()) > 1]
 
 
+_TITLE_STOPWORDS = {"and", "the", "for", "of", "senior", "junior", "lead", "sr", "jr", "i", "ii", "iii"}
+
+
+def _title_words(title: str) -> set:
+    """
+    Comparable word set for a job TITLE. Unlike `_normalize` it keeps 2-letter
+    words ("qa", "ui", "ux", "ai") and folds spelling variants so that
+    "Front-End Developer" == "Frontend Developer".
+    """
+    t = (title or "").lower()
+    for a, b in (("front-end", "frontend"), ("back-end", "backend"),
+                 ("full-stack", "fullstack"), ("full stack", "fullstack")):
+        t = t.replace(a, b)
+    return {w for w in re.findall(r"[a-z][a-z0-9+#]*", t) if w not in _TITLE_STOPWORDS}
+
+
 # ─────────────────────────────────────────────
 # SCORER
 # ─────────────────────────────────────────────
@@ -177,9 +193,14 @@ class JobScorer:
         resume: ParsedResume,
         keywords: List[str],
         target_description: Optional[str] = None,
+        target_job: str = "",
     ):
         self.resume   = resume
         self.keywords = [kw.lower() for kw in keywords]
+
+        # The (IT) job title the user picked on the upload form. Used by
+        # _title_score so listings whose title matches it rank first.
+        self.target_title_words = _title_words(target_job)
 
         # Pre-compute resume token sets once so each per-job scoring
         # call below doesn't have to redo this work.
@@ -381,7 +402,9 @@ class JobScorer:
 
     def _title_score(self, job: JobListing) -> float:
         """
-        10 pts — how many summary/experience keywords appear in the job title.
+        10 pts — how many summary/experience keywords appear in the job title,
+        or (when a target job title was chosen) how much of that title the
+        listing's title contains — whichever is higher.
         """
         title_tokens = _normalize(job.title)
         # Combines both the resume's summary tokens AND skills tokens
@@ -389,7 +412,15 @@ class JobScorer:
         overlap = (self.summary_tokens | self.skills_tokens) & title_tokens
         ratio = len(overlap) / max(len(title_tokens), 1)
         score = min(ratio * 30, 10.0)
-        return round(score, 2)
+
+        # Target-job boost: if the user picked a target title, a listing
+        # whose title contains that title's words earns up to the full 10 pts
+        # (e.g. target "Backend Developer" vs "Senior Backend Developer" = 10).
+        if self.target_title_words:
+            hit = len(self.target_title_words & _title_words(job.title)) / len(self.target_title_words)
+            score = max(score, hit * 10)
+
+        return round(min(score, 10.0), 2)
 
     # ── Score a single job ───────────────────
 

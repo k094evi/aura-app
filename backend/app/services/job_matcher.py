@@ -64,6 +64,7 @@ from app.models.schemas import ParsedResume
 from app.services.keyword_extractor import extract_keywords, extract_keywords_from_text
 from app.services.jsearch_client import JSearchClient, JobListing
 from app.services.job_scorer import JobScorer, ScoredJob, CompanyMatch
+from app.data.it_domain import is_it_title, looks_like_it_job
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +88,13 @@ class JobMatcher:
         max_keywords_queried: int = 5,
         top_jobs:             int = 20,
         top_companies:        int = 10,
+        it_only:              bool = True,
     ):
+        # it_only: Aura is scoped to the IT field. When True (default),
+        # non-IT target titles are ignored and non-IT job listings are
+        # dropped BEFORE scoring, so job openings, company matches and the
+        # Keywords dimension of the assessment only ever reflect IT roles.
+        self.it_only              = it_only
         self.client               = JSearchClient(api_key=api_key)
         self.top_keywords         = top_keywords
         self.results_per_keyword  = results_per_keyword
@@ -131,6 +138,13 @@ class JobMatcher:
         """
         target_companies = target_companies or []
         target_job = (target_job or "").strip()
+
+        # IT-only: a target title outside the IT field is not used to steer
+        # the search or scoring (the frontend dropdown already prevents this;
+        # this is the server-side guard for direct API calls).
+        if target_job and self.it_only and not is_it_title(target_job):
+            logger.warning("Ignoring non-IT target job: %r", target_job)
+            target_job = ""
 
         logger.info("Extracting keywords from resume...")
         resume_keywords = extract_keywords(resume, top_n=self.top_keywords)
@@ -188,12 +202,23 @@ class JobMatcher:
             max_keywords=len(search_terms),
         )
 
+        # IT-only: drop every listing that is not an IT role before scoring.
+        if self.it_only and jobs:
+            before = len(jobs)
+            jobs = [j for j in jobs if looks_like_it_job(j.title, j.description)]
+            logger.info("IT filter kept %d of %d jobs", len(jobs), before)
+
         if not jobs:
-            logger.warning("No jobs returned from JSearch.")
+            logger.warning("No (IT) jobs returned from JSearch.")
             return MatchResult(keywords=keywords, total_jobs=0, top_jobs=[], top_companies=[], raw_jobs=[])
 
         logger.info("Scoring %d jobs against resume...", len(jobs))
-        scorer      = JobScorer(resume=resume, keywords=keywords, target_description=target_text)
+        scorer      = JobScorer(
+            resume=resume,
+            keywords=keywords,
+            target_description=target_text,
+            target_job=target_job,
+        )
         scored_jobs = scorer.score_all(jobs)
         companies   = scorer.rank_companies(
             scored_jobs,

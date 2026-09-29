@@ -3,7 +3,8 @@
 # ==============================================================================
 #
 # PURPOSE:
-#   Coordinates the complete /api/analyze workflow:
+#   Coordinates the complete /api/analyze workflow (IT-field only — a non-IT
+#   target_job is rejected with 422 in STEP 1.5):
 #
 #       Upload
 #          ↓
@@ -79,6 +80,7 @@ from app.services.job_matcher import JobMatcher
 from app.services.jsearch_client import _infer_experience_level
 from app.services.resume_enricher import enrich_resume_local
 from app.services.target_job_matcher import calculate_target_job_gap
+from app.data.it_domain import is_it_title, canonical_it_title
 from app.services.certification_engine import recommend_certifications
 from app.utils.logger import logger
 
@@ -1386,6 +1388,28 @@ async def handle_analyze(
         )
 
     # ==========================================================================
+    # STEP 1.5: IT-ONLY TARGET JOB
+    #
+    # Aura is scoped to the IT field. The Upload form's dropdown only offers
+    # IT titles; this is the server-side guard for direct API calls. A blank
+    # title is still allowed (the search then runs from the resume keywords).
+    # ==========================================================================
+
+    target_job = (target_job or "").strip()
+
+    if target_job:
+        if not is_it_title(target_job):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Aura currently supports IT roles only. "
+                    "Please choose a job title from the IT list."
+                ),
+            )
+        # Store/search the canonical spelling when it is one of the dropdown titles.
+        target_job = canonical_it_title(target_job) or target_job
+
+    # ==========================================================================
     # STEP 2: PARSE TARGET COMPANIES
     # ==========================================================================
 
@@ -1563,6 +1587,15 @@ async def handle_analyze(
         target_job,
         parsed,
     )
+
+    if target_job and target_job_gap is None:
+        # A valid IT title with no entry in job_requirements.py: the gap
+        # checklist is skipped and skill gaps come from the job posting /
+        # taxonomy fallback instead.
+        logger.info(
+            "No job_requirements entry for IT target job %r — skipping target-job gap.",
+            target_job,
+        )
 
     # ==========================================================================
     # STEP 7.5: SELECT JOB-POSTING TEXT FOR SKILL-GAP COMPARISON
