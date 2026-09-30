@@ -82,6 +82,7 @@ from app.api.v1.endpoints import auth as auth_router
 from app.routes.parsing import router as parsing_router
 from app.api.routes.jobs import router as jobs_router
 from app.api.routes.resumes import router as resumes_router
+from app.api.routes.analysis_history import router as analysis_history_router
 from app.controllers.analyze_controller import handle_analyze
 from app.dependencies.auth import get_current_user
 from app.models.auth_schemas import AuthUser
@@ -127,6 +128,7 @@ app.include_router(auth_router.router, prefix="/api")
 app.include_router(parsing_router, prefix="/api")
 app.include_router(jobs_router, prefix="/api")
 app.include_router(resumes_router, prefix="/api")
+app.include_router(analysis_history_router, prefix="/api")
 
 
 @app.post("/api/analyze")

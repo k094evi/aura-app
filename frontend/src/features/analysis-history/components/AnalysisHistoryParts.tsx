@@ -125,27 +125,52 @@ export function AnalysisHistoryHeader({ disabled = false }: AnalysisHistoryHeade
 /* -------------------------------- Pagination -------------------------------- */
 
 type AnalysisHistoryPaginationProps = {
+  page: number; // 1-based
+  pageSize: number;
+  // Rows on the current page
   shown: number;
+  // Rows across all pages
   total: number;
+  onPrevious: () => void;
+  onNext: () => void;
+  // Disables both buttons while a page is loading
+  loading?: boolean;
 };
 
-// Static "Showing 1-N of M" footer with Previous / Next buttons.
-export function AnalysisHistoryPagination({ shown, total }: AnalysisHistoryPaginationProps) {
+// "Showing 1-6 of 24 resumes" footer with working Previous / Next buttons.
+export function AnalysisHistoryPagination({
+  page,
+  pageSize,
+  shown,
+  total,
+  onPrevious,
+  onNext,
+  loading = false,
+}: AnalysisHistoryPaginationProps) {
+  const first = shown === 0 ? 0 : (page - 1) * pageSize + 1;
+  const last = (page - 1) * pageSize + shown;
+  const hasPrevious = page > 1;
+  const hasNext = last < total;
+
   return (
     <div className="flex w-full flex-wrap items-center justify-between gap-4">
       <p className="text-sm font-normal text-[#4b5563]">
-        Showing 1-{shown} of {total} resumes
+        Showing {first}-{last} of {total} {total === 1 ? 'resume' : 'resumes'}
       </p>
       <div className="flex items-center gap-3">
         <button
           type="button"
-          className="rounded-[10px] border-[1.5px] border-[#e5e7eb] bg-white/[0.72] px-4 py-2.5 text-sm font-semibold text-[#4b5563]"
+          onClick={onPrevious}
+          disabled={!hasPrevious || loading}
+          className="rounded-[10px] border-[1.5px] border-[#e5e7eb] bg-white/[0.72] px-4 py-2.5 text-sm font-semibold text-[#4b5563] transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
         >
           ← Previous
         </button>
         <button
           type="button"
-          className="rounded-[10px] bg-[#8b5cf6] px-4 py-2.5 text-sm font-bold text-white shadow-[0px_4px_6px_0px_rgba(139,92,246,0.3)] transition-opacity hover:opacity-90"
+          onClick={onNext}
+          disabled={!hasNext || loading}
+          className="rounded-[10px] bg-[#8b5cf6] px-4 py-2.5 text-sm font-bold text-white shadow-[0px_4px_6px_0px_rgba(139,92,246,0.3)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Next →
         </button>

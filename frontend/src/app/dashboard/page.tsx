@@ -3,6 +3,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { motion } from 'motion/react';
 import { Info, TrendingUp } from 'lucide-react';
 
@@ -131,24 +132,64 @@ function StatCard({ label, value, hint }: { label: string; value: string | numbe
 }
 
 export default function DashboardPage() {
+  const searchParams = useSearchParams();
   const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  // Starts true when opening a saved analysis (?analysis=<id>) so the loading
+  // overlay shows straight away instead of flashing the empty dashboard.
+  const [isAnalyzing, setIsAnalyzing] = useState(() => searchParams.get('analysis') !== null);
   const [error, setError] = useState<string | null>(null);
   // Real running count of analyses this session (see loadResumesAnalyzed above) —
   // not derived from `result`, since `result` only ever holds the LATEST analysis
   // and would make this number regress if the user re-analyzed an older resume.
   const [resumesAnalyzed, setResumesAnalyzed] = useState(0);
 
-  // Restore the last analysis and the session's resume count after a refresh
+  // "View Results" on the Resume History page links here as /dashboard?analysis=<id>
+  const analysisId = searchParams.get('analysis');
+
+  // Restore the session's resume count, then either open the saved analysis
+  // the URL points at (from Resume History) or the last analysis after a refresh.
   useEffect(() => {
+    setResumesAnalyzed(loadResumesAnalyzed());
+
+    if (analysisId) {
+      const controller = new AbortController();
+
+      (async () => {
+        try {
+          const res = await fetch(`/api/analysis-history/${encodeURIComponent(analysisId)}`, {
+            signal: controller.signal,
+            cache: 'no-store',
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => null);
+            throw new Error(err?.detail ?? "We couldn't load that saved analysis.");
+          }
+          const saved = toResult(await res.json());
+          setResult(saved);
+          try {
+            // Keep it across a refresh, same as a fresh analysis.
+            sessionStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+          } catch {
+            // Not being able to persist is fine; the results still show.
+          }
+        } catch (e) {
+          if (e instanceof DOMException && e.name === 'AbortError') return;
+          setError(e instanceof Error ? e.message : "We couldn't load that saved analysis.");
+        } finally {
+          if (!controller.signal.aborted) setIsAnalyzing(false);
+        }
+      })();
+
+      return () => controller.abort();
+    }
+
     try {
       const saved = sessionStorage.getItem(STORAGE_KEY);
       if (saved) setResult(toResult(JSON.parse(saved)));
     } catch {
       // Storage unavailable or corrupted: start from the empty state.
     }
-    setResumesAnalyzed(loadResumesAnalyzed());
-  }, []);
+  }, [analysisId]);
 
   const handleAnalyze = async (payload: UploadPayload) => {
     setIsAnalyzing(true);

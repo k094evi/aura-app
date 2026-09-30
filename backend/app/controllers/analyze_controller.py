@@ -1325,10 +1325,11 @@ def _select_job_posting_text(
 # ==============================================================================
 
 def _shape_certifications(skill_gaps: list[dict]) -> list[dict]:
-    missing_skills = [
-        g.get("skill") for g in (skill_gaps or [])
-        if g.get("missing") and g.get("skill")
-    ]
+    missing_skills: list[str] = []
+    for gap in skill_gaps or []:
+        skill = gap.get("skill")
+        if gap.get("missing") and isinstance(skill, str) and skill.strip():
+            missing_skills.append(skill.strip())
 
     if not missing_skills:
         return []

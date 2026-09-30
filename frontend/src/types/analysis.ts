@@ -61,3 +61,25 @@ export interface AnalysisResult {
     relevance: string;
   }[];
 }
+
+// One row of GET /api/analysis-history (a past analysis, summarised for the
+// Resume History list). `id` is the analysis id used by "View Results".
+export interface AnalysisHistoryItem {
+  id: string;
+  resume_id: string | null;
+  filename: string;
+  created_at: string | null;
+  target_job: string;
+  // Companies the user typed/selected on upload
+  target_companies: string[];
+  // Companies the job search actually matched (fallback when none were targeted)
+  matched_companies: string[];
+  ats_score: number;
+}
+
+export interface AnalysisHistoryPage {
+  items: AnalysisHistoryItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
