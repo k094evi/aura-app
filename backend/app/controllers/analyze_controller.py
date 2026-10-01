@@ -81,7 +81,7 @@ from app.services.jsearch_client import _infer_experience_level
 from app.services.resume_enricher import enrich_resume_local
 from app.services.target_job_matcher import calculate_target_job_gap
 from app.data.it_domain import is_it_title, canonical_it_title
-from app.services.certification_engine import recommend_certifications
+from app.data.job_requirements import JOB_REQUIREMENTS
 from app.utils.logger import logger
 
 
@@ -1309,58 +1309,162 @@ def _select_job_posting_text(
 # SHAPE CERTIFICATIONS
 # ==============================================================================
 #
-# certification_engine.recommend_certifications() existed in the codebase but
-# was never actually called anywhere in this controller — `certifications`
-# was always missing from the API response, so CertificationRecommendations.tsx
-# on the frontend permanently rendered its "No certification recommendations
-# yet." empty state regardless of the resume. This wires it in using the
-# missing skills already computed by enrich_resume_local()'s skill_gaps.
+# CertificationRecommendations.tsx expects a flat list of
+#   {name, provider, reason, relevance}   (relevance: "required" | "optional")
 #
-# certification_engine returns one entry per missing skill:
-#   {"skill": ..., "missing": True, "recommendation": ..., "certifications": [names]}
-# The frontend's Certification type is one row PER CERTIFICATION NAME, not
-# per skill, so this flattens that structure. Skills with no matching rows
-# in the Supabase "certifications" table simply contribute nothing — we
-# don't fabricate a certification name that doesn't exist.
+# Single source: job_requirements.py (there is no Supabase certifications
+# table). Target-job gap certifications come first; certifications linked to
+# the user's missing skills fill the rest (and are the only source when no
+# target job was selected).
 # ==============================================================================
 
-def _shape_certifications(skill_gaps: list[dict]) -> list[dict]:
-    missing_skills = [
-        g.get("skill") for g in (skill_gaps or [])
-        if g.get("missing") and g.get("skill")
+_CERT_ACRONYMS = {
+    "aws", "ccna", "ccnp", "cism", "cissp", "comptia", "cysa+", "iso", "istqb",
+    "cncf", "soc", "ux", "ai", "ml", "bi", "a+", "network+", "security+",
+}
+
+_CERT_PROVIDERS = [
+    ("aws ", "Amazon Web Services"),
+    ("azure ", "Microsoft"),
+    ("microsoft ", "Microsoft"),
+    ("google ", "Google"),
+    ("meta ", "Meta"),
+    ("comptia ", "CompTIA"),
+    ("cncf ", "CNCF"),
+    ("red hat ", "Red Hat"),
+    ("oracle ", "Oracle"),
+    ("tableau ", "Tableau"),
+    ("istqb ", "ISTQB"),
+    ("nielsen norman ", "Nielsen Norman Group"),
+    ("iso ", "ISO"),
+    ("ccna", "Cisco"),
+    ("ccnp", "Cisco"),
+    ("cissp", "(ISC)2"),
+    ("cism", "ISACA"),
+    ("certified ethical hacker", "EC-Council"),
+    ("certified soc analyst", "EC-Council"),
+    ("associate android developer", "Google"),
+]
+
+
+def _display_cert_name(name: str) -> str:
+    words = []
+    for w in name.strip().split():
+        lw = w.lower()
+        if lw in _CERT_ACRONYMS:
+            words.append(lw.upper().replace("CYSA+", "CySA+"))
+        else:
+            words.append(w.capitalize())
+    return " ".join(words)
+
+
+def _cert_provider(name: str) -> str:
+    n = name.strip().lower()
+    for prefix, provider in _CERT_PROVIDERS:
+        if n.startswith(prefix):
+            return provider
+    return ""
+
+
+_MAX_CERTIFICATIONS = 12
+
+_SKILL_CERT_INDEX: dict[str, dict[str, int]] | None = None
+
+
+def _skill_cert_index() -> dict[str, dict[str, int]]:
+    """
+    {skill (lowercase): {cert name (lowercase): weight}} built once from
+    job_requirements.py. A cert is linked to every skill listed by the roles
+    that list that cert (required skill = weight 2, optional skill = 1).
+    """
+    global _SKILL_CERT_INDEX
+    if _SKILL_CERT_INDEX is not None:
+        return _SKILL_CERT_INDEX
+
+    index: dict[str, dict[str, int]] = {}
+    for job_name, job in JOB_REQUIREMENTS.items():
+        if not is_it_title(job_name):
+            continue
+        certs = (job.get("required_certifications") or []) + (job.get("optional_certifications") or [])
+        if not certs:
+            continue
+        for weight, key in ((2, "required_skills"), (1, "optional_skills")):
+            for skill in job.get(key) or []:
+                bucket = index.setdefault(skill.strip().lower(), {})
+                for cert in certs:
+                    c = cert.strip().lower()
+                    bucket[c] = max(bucket.get(c, 0), weight)
+
+    _SKILL_CERT_INDEX = index
+    return index
+
+
+def _shape_certifications(
+    skill_gaps: list[dict],
+    target_job_gap: dict | None = None,
+) -> list[dict]:
+    """
+    Builds the flat list CertificationRecommendations.tsx expects.
+    Source is job_requirements.py only (no Supabase certifications table):
+
+      1. Target job selected -> its missing required / optional certifications
+         ("required" / "optional").
+      2. Always, to fill the card (and the only source when no target job was
+         chosen) -> certifications linked to the user's MISSING skills through
+         the roles in job_requirements.py ("optional").
+    """
+    shaped: list[dict] = []
+    seen: set[str] = set()
+
+    def _add(raw_name: str, reason: str, relevance: str) -> None:
+        if len(shaped) >= _MAX_CERTIFICATIONS or not isinstance(raw_name, str):
+            return
+        key = raw_name.strip().lower()
+        if not key or key in seen:
+            return
+        seen.add(key)
+        shaped.append({
+            "name": _display_cert_name(raw_name),
+            "provider": _cert_provider(raw_name),
+            "reason": reason,
+            "relevance": relevance,
+        })
+
+    # -- 1. target-job certifications ---------------------------------------
+    if target_job_gap:
+        job = target_job_gap.get("target_job") or "your target role"
+        for c in target_job_gap.get("missing_certifications", []) or []:
+            _add(c, f"Expected for {job} roles and not found on your resume.", "required")
+        for c in target_job_gap.get("missing_optional_certifications", []) or []:
+            _add(c, f"Can strengthen your profile for {job} roles.", "optional")
+
+    # -- 2. certifications for missing skills -------------------------------
+    missing = [
+        g["skill"].strip()
+        for g in (skill_gaps or [])
+        if g.get("missing") and isinstance(g.get("skill"), str) and g["skill"].strip()
     ]
 
-    if not missing_skills:
-        return []
+    index = _skill_cert_index()
+    scores: dict[str, int] = {}
+    why: dict[str, list[str]] = {}
+    for skill in missing:
+        for cert, weight in index.get(skill.lower(), {}).items():
+            scores[cert] = scores.get(cert, 0) + weight
+            why.setdefault(cert, [])
+            if skill not in why[cert]:
+                why[cert].append(skill)
 
-    try:
-        recs = recommend_certifications(missing_skills)
-    except Exception:
-        logger.exception("Certification lookup failed — omitting certifications from response")
-        return []
+    for cert in sorted(scores, key=lambda c: (-scores[c], c)):
+        skills_txt = ", ".join(why[cert][:3])
+        _add(cert, f"Relevant to your skill gap: {skills_txt}.", "optional")
 
-    shaped: list[dict] = []
-    seen_names: set[str] = set()
-
-    for rec in recs:
-        skill = rec.get("skill", "")
-        for cert_name in rec.get("certifications", []) or []:
-            if not cert_name or cert_name in seen_names:
-                continue
-            seen_names.add(cert_name)
-            shaped.append({
-                "name": cert_name,
-                # The certifications table only stores a name per skill —
-                # no provider/vendor column exists yet, so this is left
-                # blank rather than guessed.
-                "provider": "",
-                "reason": f"Recommended to help close your {skill} skill gap.",
-                # Every entry here came from a MISSING skill by construction
-                # (see missing_skills above), so all are "required" — there's
-                # no "optional, nice-to-have" tier in this data source yet.
-                "relevance": "required",
-            })
-
+    logger.info(
+        "Certifications shaped: %d (target-job gap: %s, missing skills: %s)",
+        len(shaped),
+        "yes" if target_job_gap else "no",
+        missing,
+    )
     return shaped
 
 
@@ -1658,7 +1762,10 @@ async def handle_analyze(
     # STEP 8.5: CERTIFICATION RECOMMENDATIONS
     # ==========================================================================
 
-    certifications_shaped = _shape_certifications(enrichment["skill_gaps"])
+    certifications_shaped = _shape_certifications(
+        enrichment["skill_gaps"],
+        target_job_gap,
+    )
 
     # ==========================================================================
     # STEP 9: PERSIST RESUME
