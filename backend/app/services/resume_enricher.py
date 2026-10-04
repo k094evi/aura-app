@@ -1,111 +1,6 @@
 # ==============================================================================
 # FILE: app/services/resume_enricher.py
 # ==============================================================================
-# PURPOSE OF THIS FILE (GUIDE):
-#   This is the FINAL and LARGEST step of the pipeline — it's what actually
-#   produces the numbers and written feedback the user sees on their
-#   dashboard (ATS score, per-dimension bar chart, strengths, improvements,
-#   skill gaps, grammar issues).
-#
-#   Full pipeline:
-#       resume_parser.py --> keyword_extractor.py --> jsearch_client.py --> resume_enricher.py (THIS FILE)
-#       (bytes -> structured   (structured resume      (keywords -> real     (resume + keywords + real jobs
-#        ParsedResume)           -> keywords)             job listings)        -> score + feedback dict)
-#
-#   As the module docstring below explains, this file is a full local
-#   (no external API, no cost) replacement for what used to be a live call
-#   to the Claude API — everything here is computed deterministically with
-#   plain Python (regex, string ops, arithmetic) from data the earlier
-#   pipeline stages already produced.
-#
-# HOW TO READ THIS FILE (it's long — here's the map):
-#   1. SKILL TAXONOMY / constants (top)      — reference data used for
-#      scoring and gap-detection (skill categories, impact-language regex
-#      patterns, resume-cliché/grammar regex checks).
-#   2. DIMENSION SCORERS (_score_keywords, _score_format, _score_skills,
-#      _score_impact, _score_length) — each independently scores one
-#      aspect of the resume from 0–100. These 5 scores, weighted, become
-#      the overall ATS score.
-#   3. SHARED HELPERS — small utilities (_sample_skills, _first_line,
-#      _extract_impact_examples, _top_job_vocab, _matched_job_terms,
-#      _missing_job_terms) used by both the scorers above and the
-#      text-generators below, so the written feedback always references
-#      the SAME concrete terms/lines the score was actually based on
-#      (not generic, disconnected boilerplate).
-#   4. TEXT GENERATORS (_generate_strengths, _generate_improvements) —
-#      turn the scores + shared helpers into specific, human-readable
-#      bullet points quoting the user's actual resume content.
-#   5. _detect_skill_gaps — cross-references the resume against both the
-#      skill taxonomy and the vocabulary of the user's top-matching job
-#      postings to flag which skills are present vs. missing. THIS IS THE
-#      BACKUP/FALLBACK path — see _detect_skill_gaps_from_posting below
-#      for the new PRIMARY path that runs when actual job-posting text
-#      (pasted JD or a matched real job listing) is available.
-#   6. _check_grammar — Formatting & Readability checks: visual flow
-#      (bullet-glyph consistency, date-format consistency, wall-of-text
-#      detection) plus linguistic clarity (passive voice, first-person
-#      pronouns, resume clichés, filler words, overlong sentences, etc.).
-#   7. enrich_resume_local() — PUBLIC ENTRY POINT. Ties everything above
-#      together: runs all 5 dimension scorers, computes the weighted
-#      overall ATS score, and returns one dict shaped exactly like the
-#      old Claude-API JSON response so nothing downstream (e.g. main.py)
-#      needs to change.
-#
-# WHERE THIS FITS FOR CALLERS:
-#   Call `enrich_resume_local(resume, keywords, top_jobs)` with:
-#     - resume:   the ParsedResume from resume_parser.parse_resume()
-#     - keywords: the list from keyword_extractor.extract_keywords()
-#     - top_jobs: shaped/scored job dicts (from jsearch_client + a job
-#                 scorer step) — each expected to have at least
-#                 "title", "description", and optionally "matched_skills".
-#
-# SKILL-GAP SOURCE PRIORITY (added this revision):
-#   1. job_posting_text (if given)  — PRIMARY. Extracts skills directly
-#      from the single best-matching REAL job listing from JSearch and
-#      compares them against the resume: Matched vs Missing, exactly as
-#      originally specified — no taxonomy, no aggregation across
-#      multiple jobs. The caller (analyze_controller.py) is responsible
-#      for choosing this text; as of this revision, it's always a
-#      JSearch listing's description, never the user's pasted JD.
-#   2. Otherwise — BACKUP. Falls back to the existing _detect_skill_gaps
-#      (target_job_gap checklist + aggregated top_jobs matched_skills +
-#      hardcoded SKILL_TAXONOMY categories), unchanged from before —
-#      used whenever JSearch returned no usable job listing at all.
-#   See _detect_skill_gaps_from_posting() and enrich_resume_local()'s
-#   job_posting_text/job_posting_source params.
-# ==============================================================================
-
-# app/services/resume_enricher.py
-"""
-Local NLP enrichment engine for Aura Resume Analyzer.
-
-Replaces the Claude API call entirely — no external dependencies, no cost.
-All scores are computed deterministically from the ParsedResume object
-and the keyword/job data already produced by the existing pipeline.
-
-Scoring Architecture
-────────────────────
-ATS Score (0–100) = weighted average of 5 dimension scores:
-
-  Dimension        Weight   What it measures
-  ─────────────    ──────   ────────────────────────────────────────────
-  Keywords           25%    Keyword density vs. matched job keywords
-  Format             20%    Section completeness (has summary/exp/skills/edu)
-  Skills             25%    Skills block coverage & depth
-  Impact             20%    Quantified achievements (numbers, %, $, metrics)
-  Length             10%    Word count in the optimal 400–800 range
-
-Each dimension score is also surfaced individually in `sections` for the
-Dimension Analysis bar chart in the frontend.
-
-Strengths / Improvements
-─────────────────────────
-These are generated from actual resume content — specific skill names,
-real bullet lines containing metrics, and actual terms shared with (or
-missing from) the user's top-matching job postings — rather than generic
-template sentences, so two different resumes with the same score never
-produce identical text.
-"""
 
 import re
 import math
@@ -119,7 +14,7 @@ from app.services.skill_matcher import skills_present
 # (add "pyspellchecker" to requirements.txt). If it isn't installed, the
 # spelling check is skipped gracefully rather than crashing the pipeline.
 try:
-    from spellchecker import SpellChecker as _SpellChecker
+    from spellchecker import SpellChecker as _SpellChecker  # type: ignore[import-not-found]
 except ImportError:
     _SpellChecker = None
 
@@ -876,6 +771,64 @@ def _detect_skill_gaps_from_posting(
     return results[:12]
 
 
+def _detect_keyword_gaps_from_postings(
+    resume: ParsedResume,
+    postings: list[dict],
+) -> list[dict]:
+    """
+    KEYWORD path: looks at the postings of the user's top companies (the
+    controller passes the best job of each of the top 3) and reports terms
+    ranked by how many of those postings mention them. A term wanted by
+    3 of 3 companies is a stronger signal than one from a single posting.
+
+    postings: [{"text": str, "label": "Title at Company", "exclude_terms": set}]
+    Returns the same {skill, missing, recommendation} shape as skill_gaps.
+    """
+    counts: dict[str, int] = {}
+    display: dict[str, str] = {}
+    for posting in postings:
+        terms = extract_skill_terms_from_posting(
+            posting["text"], top_n=20, exclude_terms=posting.get("exclude_terms")
+        )
+        for term in dict.fromkeys(terms):  # once per posting
+            key = term.lower()
+            counts[key] = counts.get(key, 0) + 1
+            display.setdefault(key, term)
+
+    if not counts:
+        return []
+
+    keys = sorted(counts, key=lambda k: (-counts[k], k))
+    resume_text = (resume.raw_text or "").lower()
+    matches = skills_present(
+        [display[k] for k in keys],
+        resume_text,
+        skills_block=resume.skills_block,
+        raw_text=resume.raw_text,
+    )
+
+    total = len(postings)
+    results: list[dict] = []
+    for k in keys:
+        term = display[k]
+        present = matches[term].present
+        shown = term.title() if term.islower() else term
+        where = f"{counts[k]} of {total} top-company postings"
+        results.append({
+            "skill": shown,
+            "missing": not present,
+            "recommendation": (
+                f"Found in your resume \u2014 also asked for in {where}."
+                if present else
+                f"Asked for in {where} but not found in your resume \u2014 "
+                "add it if it truthfully applies to your experience."
+            ),
+        })
+
+    results.sort(key=lambda r: r["missing"])
+    return results[:12]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # SKILL GAP DETECTOR — BACKUP/FALLBACK PATH (unchanged from before)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1552,6 +1505,7 @@ def enrich_resume_local(
     job_posting_text: Optional[str] = None,
     job_posting_source: Optional[str] = None,
     job_posting_exclude_terms: Optional[set[str]] = None,
+    keyword_postings: Optional[list[dict]] = None,
 ) -> dict:
     """
     PUBLIC ENTRY POINT for this file — this is the only function other
@@ -1645,6 +1599,17 @@ def enrich_resume_local(
             "no job listing was matched by JSearch"
         )
 
+    # ── Keyword gaps: top-3-company postings (skills above stay top-1) ──────
+    keyword_gaps = (
+        _detect_keyword_gaps_from_postings(resume, keyword_postings)
+        if keyword_postings else []
+    )
+    keyword_gap_source = (
+        "the best job posting from each of your top "
+        f"{len(keyword_postings)} matched companies"
+        if keyword_postings else ""
+    )
+
     # ── Build output ─────────────────────────────────────────────────────────
     return {
         "ats_score": ats_score,
@@ -1663,5 +1628,7 @@ def enrich_resume_local(
         ),
         "skill_gaps":       skill_gaps,
         "skill_gap_source": skill_gap_source,
+        "keyword_gaps":       keyword_gaps,
+        "keyword_gap_source": keyword_gap_source,
         "grammar_issues": _check_grammar(resume),
     }

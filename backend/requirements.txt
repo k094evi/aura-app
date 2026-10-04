@@ -22,3 +22,4 @@ supabase
 email-validator          # required by EmailStr in app/models/auth_schemas.py
 python-magic-bin; sys_platform == "win32"   # optional stronger MIME detection; file_handler.py falls back to extension-checking without it
 fastembed>=0.3.0
+spellchecker

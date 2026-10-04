@@ -1,0 +1,49 @@
+diff --git a/frontend/.gitignore b/frontend/.gitignore
+index 5ef6a52..d679473 100644
+--- a/frontend/.gitignore
++++ b/frontend/.gitignore
+@@ -39,3 +39,6 @@ yarn-error.log*
+ # typescript
+ *.tsbuildinfo
+ next-env.d.ts
++
++# nested stray build output
++**/.next/
+diff --git a/frontend/src/app/analysis-history/[analysisId]/page.tsx b/frontend/src/app/analysis-history/[analysisId]/page.tsx
+index 1b37a80..6ad19ad 100644
+--- a/frontend/src/app/analysis-history/[analysisId]/page.tsx
++++ b/frontend/src/app/analysis-history/[analysisId]/page.tsx
+@@ -792,9 +792,9 @@ export default function AnalysisHistoryDetailPage() {
+                 <div className="absolute inset-0 rounded-full bg-gray-200/50" />
+ 
+                 <div
+-                  className="absolute inset-0 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500"
++                  className="absolute inset-0 rounded-full"
+                   style={{
+-                    clipPath: `conic-gradient(from 0deg, #8b5cf6 0deg, #06b6d4 ${
++                    background: `conic-gradient(from 0deg, #8b5cf6, #06b6d4 ${
+                       atsScore * 3.6
+                     }deg, transparent ${atsScore * 3.6}deg)`,
+                   }}
+diff --git a/frontend/src/lib/analysisResult.ts b/frontend/src/lib/analysisResult.ts
+index 3f9c827..d0017f3 100644
+--- a/frontend/src/lib/analysisResult.ts
++++ b/frontend/src/lib/analysisResult.ts
+@@ -11,9 +11,14 @@ export function toResult(data: unknown): AnalysisResult {
+     improvements: Array.isArray(value.improvements)
+       ? value.improvements
+       : [],
+-    skill_gaps: Array.isArray(value.skill_gaps)
+-      ? value.skill_gaps
+-      : [],
++    // skill_gaps is saved either as an array or as an object like
++    // { matched_skills, missing_required_skills, missing_optional_skills }.
++    // Keep both shapes; coercing objects to [] wiped the saved skill data.
++    skill_gaps:
++      Array.isArray(value.skill_gaps) ||
++      (typeof value.skill_gaps === 'object' && value.skill_gaps !== null)
++        ? value.skill_gaps
++        : [],
+     grammar_issues: Array.isArray(value.grammar_issues)
+       ? value.grammar_issues
+       : [],

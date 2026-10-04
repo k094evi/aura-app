@@ -68,6 +68,7 @@ STOP_WORDS = {
 "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
     "of", "with", "by", "from", "as", "is", "was", "are", "were", "be",
     "been", "being", "have", "has", "had", "do", "does", "did", "will",
+    "am",
     "would", "could", "should", "may", "might", "shall", "can", "that",
     "this", "these", "those", "it", "its", "i", "my", "me", "we", "our",
     "you", "your", "he", "she", "they", "their", "him", "her", "us",
@@ -93,7 +94,8 @@ STOP_WORDS = {
     "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
     "summary", "education", "certifications", "languages", "awards", 
     "activities", "information", "additional", "contact", "address", 
-    "phone", "email", "website", "technologies", "qualifications", "architecture"
+    "phone", "email", "website", "technologies", "qualifications", "architecture",
+    "manila",
     # months / date noise
     "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep",
     "oct", "nov", "dec", "january", "february", "march", "april",
@@ -267,7 +269,7 @@ JD_NOISE_WORDS = {
     "location", "locations", "schedule", "shift", "hours", "salary",
     "compensation", "eeo", "employer", "disability", "veteran",
     "join", "seeking", "required", "preferred", "including",
-    "our", "team", "understanding", "solid", "new",
+    "our", "team", "understanding", "solid", "new", "am", "manila",
     "and", "product", "growth", "learn",
     # generic marketing/filler adjectives common in postings — these
     # will never be a complete list (see the note on

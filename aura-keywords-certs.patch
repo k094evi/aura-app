@@ -1,0 +1,462 @@
+diff --git a/backend/app/controllers/analyze_controller.py b/backend/app/controllers/analyze_controller.py
+index 50dbe42..698431c 100644
+--- a/backend/app/controllers/analyze_controller.py
++++ b/backend/app/controllers/analyze_controller.py
+@@ -1133,6 +1133,7 @@ def _persist_analysis_result(
+     enrichment: dict,
+     extracted_skills: list[str],
+     companies_shaped: list[dict],
++    result_payload: dict | None = None,
+ ) -> str | None:
+ 
+     if resume_id is None:
+@@ -1166,6 +1167,10 @@ def _persist_analysis_result(
+         "grammar_issues": enrichment["grammar_issues"],
+         "company_matches": companies_shaped,
+         "detected_role": None,
++        # Full /api/analyze payload so Resume History -> "View Results"
++        # re-opens certifications, top_jobs, keyword_gaps, etc.
++        # (column added by 003_analysis_result_payload.sql).
++        "result_json": result_payload,
+     }
+ 
+     try:
+@@ -1305,6 +1310,32 @@ def _select_job_posting_text(
+     return None, None, set()
+ 
+ 
++def _select_keyword_postings(result, n: int = 3) -> list[dict]:
++    """
++    Keyword optimization uses the top `n` COMPANIES (skills still use only
++    the single top job — see _select_job_posting_text). For each of the top
++    n ranked companies we take that company's best-scoring job and its FULL
++    description.
++    """
++    postings: list[dict] = []
++    for company_match in (result.top_companies or [])[:n]:
++        scored = _get_attr(company_match, "top_job", default=None)
++        job = getattr(scored, "job", None)
++        description = _get_attr(job, "description", "job_description", default="")
++        if not description or not description.strip():
++            continue
++        title = _clean_string(_get_attr(job, "title", "job_title"), default="a matched role")
++        company = _clean_string(
++            _get_attr(company_match, "company", "company_name"), default="a matched company"
++        )
++        postings.append({
++            "text": description.strip(),
++            "label": f"{title} at {company}",
++            "exclude_terms": _tokenize_for_exclusion(f"{title} {company}"),
++        })
++    return postings
++
++
+ # ==============================================================================
+ # SHAPE CERTIFICATIONS
+ # ==============================================================================
+@@ -1719,6 +1750,13 @@ async def handle_analyze(
+             "to hardcoded taxonomy"
+         )
+ 
++    keyword_postings = _select_keyword_postings(result, n=3)
++    logger.info(
++        "Keyword source: %d posting(s) from top companies: %s",
++        len(keyword_postings),
++        [p["label"] for p in keyword_postings],
++    )
++
+     # ==========================================================================
+     # STEP 8: RESUME ENRICHMENT
+     # ==========================================================================
+@@ -1737,6 +1775,7 @@ async def handle_analyze(
+             job_posting_text=job_posting_text,
+             job_posting_source=job_posting_source,
+             job_posting_exclude_terms=job_posting_exclude_terms,
++            keyword_postings=keyword_postings,
+         )
+ 
+     except Exception:
+@@ -1789,12 +1828,30 @@ async def handle_analyze(
+     # STEP 10: PERSIST ANALYSIS
+     # ==========================================================================
+ 
++    response_payload = {
++        "keywords": result.keywords,
++        "total_jobs": result.total_jobs,
++        "top_jobs": top_jobs_shaped,
++        "companies": companies_shaped,
++        "ats_score": enrichment["ats_score"],
++        "sections": enrichment["sections"],
++        "strengths": enrichment["strengths"],
++        "improvements": enrichment["improvements"],
++        "skill_gaps": enrichment["skill_gaps"],
++        "skill_gap_source": enrichment["skill_gap_source"],
++        "keyword_gaps": enrichment["keyword_gaps"],
++        "keyword_gap_source": enrichment["keyword_gap_source"],
++        "grammar_issues": enrichment["grammar_issues"],
++        "certifications": certifications_shaped,
++    }
++
+     analysis_id = _persist_analysis_result(
+         resume_id=resume_id,
+         user_id=user_id,
+         enrichment=enrichment,
+         extracted_skills=result.keywords,
+         companies_shaped=companies_shaped,
++        result_payload=response_payload,
+     )
+ 
+     # ==========================================================================
+@@ -1828,6 +1885,10 @@ async def handle_analyze(
+ 
+         "skill_gap_source": enrichment["skill_gap_source"],
+ 
++        "keyword_gaps": enrichment["keyword_gaps"],
++
++        "keyword_gap_source": enrichment["keyword_gap_source"],
++
+         "grammar_issues": enrichment["grammar_issues"],
+ 
+         "certifications": certifications_shaped,
+diff --git a/backend/app/services/resume_enricher.py b/backend/app/services/resume_enricher.py
+index abae0c9..9866bf5 100644
+--- a/backend/app/services/resume_enricher.py
++++ b/backend/app/services/resume_enricher.py
+@@ -876,6 +876,64 @@ def _detect_skill_gaps_from_posting(
+     return results[:12]
+ 
+ 
++def _detect_keyword_gaps_from_postings(
++    resume: ParsedResume,
++    postings: list[dict],
++) -> list[dict]:
++    """
++    KEYWORD path: looks at the postings of the user's top companies (the
++    controller passes the best job of each of the top 3) and reports terms
++    ranked by how many of those postings mention them. A term wanted by
++    3 of 3 companies is a stronger signal than one from a single posting.
++
++    postings: [{"text": str, "label": "Title at Company", "exclude_terms": set}]
++    Returns the same {skill, missing, recommendation} shape as skill_gaps.
++    """
++    counts: dict[str, int] = {}
++    display: dict[str, str] = {}
++    for posting in postings:
++        terms = extract_skill_terms_from_posting(
++            posting["text"], top_n=20, exclude_terms=posting.get("exclude_terms")
++        )
++        for term in dict.fromkeys(terms):  # once per posting
++            key = term.lower()
++            counts[key] = counts.get(key, 0) + 1
++            display.setdefault(key, term)
++
++    if not counts:
++        return []
++
++    keys = sorted(counts, key=lambda k: (-counts[k], k))
++    resume_text = (resume.raw_text or "").lower()
++    matches = skills_present(
++        [display[k] for k in keys],
++        resume_text,
++        skills_block=resume.skills_block,
++        raw_text=resume.raw_text,
++    )
++
++    total = len(postings)
++    results: list[dict] = []
++    for k in keys:
++        term = display[k]
++        present = matches[term].present
++        shown = term.title() if term.islower() else term
++        where = f"{counts[k]} of {total} top-company postings"
++        results.append({
++            "skill": shown,
++            "missing": not present,
++            "recommendation": (
++                f"Found in your resume \u2014 also asked for in {where}."
++                if present else
++                f"Asked for in {where} but not found in your resume \u2014 "
++                "add it if it truthfully applies to your experience."
++            ),
++        })
++
++    results.sort(key=lambda r: r["missing"])
++    return results[:12]
++
++
+ # ─────────────────────────────────────────────────────────────────────────────
+ # SKILL GAP DETECTOR — BACKUP/FALLBACK PATH (unchanged from before)
+ # ─────────────────────────────────────────────────────────────────────────────
+@@ -1552,6 +1610,7 @@ def enrich_resume_local(
+     job_posting_text: Optional[str] = None,
+     job_posting_source: Optional[str] = None,
+     job_posting_exclude_terms: Optional[set[str]] = None,
++    keyword_postings: Optional[list[dict]] = None,
+ ) -> dict:
+     """
+     PUBLIC ENTRY POINT for this file — this is the only function other
+@@ -1645,6 +1704,17 @@ def enrich_resume_local(
+             "no job listing was matched by JSearch"
+         )
+ 
++    # ── Keyword gaps: top-3-company postings (skills above stay top-1) ──────
++    keyword_gaps = (
++        _detect_keyword_gaps_from_postings(resume, keyword_postings)
++        if keyword_postings else []
++    )
++    keyword_gap_source = (
++        "the best job posting from each of your top "
++        f"{len(keyword_postings)} matched companies"
++        if keyword_postings else ""
++    )
++
+     # ── Build output ─────────────────────────────────────────────────────────
+     return {
+         "ats_score": ats_score,
+@@ -1663,5 +1733,7 @@ def enrich_resume_local(
+         ),
+         "skill_gaps":       skill_gaps,
+         "skill_gap_source": skill_gap_source,
++        "keyword_gaps":       keyword_gaps,
++        "keyword_gap_source": keyword_gap_source,
+         "grammar_issues": _check_grammar(resume),
+     }
+\ No newline at end of file
+diff --git a/backend/app/services/target_job_matcher.py b/backend/app/services/target_job_matcher.py
+index e64c89d..cb828d4 100644
+--- a/backend/app/services/target_job_matcher.py
++++ b/backend/app/services/target_job_matcher.py
+@@ -172,6 +172,15 @@ def _build_resume_haystack(
+     ).lower()
+ 
+ 
++# ============================================================
++# CERTIFICATION PRESENCE (literal match only)
++# ============================================================
++
++def _cert_present(certification: str, haystack: str) -> bool:
++    """True only if the certification name literally appears on the resume."""
++    return certification.strip().lower() in haystack
++
++
+ # ============================================================
+ # CALCULATE TARGET JOB GAP
+ # ============================================================
+@@ -265,10 +274,12 @@ def calculate_target_job_gap(
+     # substring matching missed it. See skill_matcher.py for details.
+     # --------------------------------------------------------
+ 
+-    all_terms = list(dict.fromkeys(
+-        required_skills + optional_skills
+-        + required_certifications + optional_certifications
+-    ))
++    # Certifications are deliberately NOT sent through the semantic fallback:
++    # a certificate title like "meta frontend developer professional
++    # certificate" is embedding-similar to a resume line such as "Frontend
++    # Developer", which wrongly marked it as already held. Certs need a
++    # literal mention on the resume (see _cert_present below).
++    all_terms = list(dict.fromkeys(required_skills + optional_skills))
+     matches = skills_present(
+         all_terms,
+         haystack,
+@@ -313,7 +324,7 @@ def calculate_target_job_gap(
+     missing_certifications = [
+         certification
+         for certification in required_certifications
+-        if not matches[certification].present
++        if not _cert_present(certification, haystack)
+     ]
+ 
+     # --------------------------------------------------------
+@@ -325,7 +336,7 @@ def calculate_target_job_gap(
+         for certification in (
+             required_certifications + optional_certifications
+         )
+-        if matches[certification].present
++        if _cert_present(certification, haystack)
+     ]
+ 
+     # --------------------------------------------------------
+@@ -335,7 +346,7 @@ def calculate_target_job_gap(
+     missing_optional_certifications = [
+         certification
+         for certification in optional_certifications
+-        if not matches[certification].present
++        if not _cert_present(certification, haystack)
+     ]
+ 
+     # --------------------------------------------------------
+@@ -428,10 +439,12 @@ def calculate_target_job_gap_from_row(
+     # semantic-fallback behavior as calculate_target_job_gap() above.
+     # --------------------------------------------------------
+ 
+-    all_terms = list(dict.fromkeys(
+-        required_skills + optional_skills
+-        + required_certifications + optional_certifications
+-    ))
++    # Certifications are deliberately NOT sent through the semantic fallback:
++    # a certificate title like "meta frontend developer professional
++    # certificate" is embedding-similar to a resume line such as "Frontend
++    # Developer", which wrongly marked it as already held. Certs need a
++    # literal mention on the resume (see _cert_present below).
++    all_terms = list(dict.fromkeys(required_skills + optional_skills))
+     matches = skills_present(
+         all_terms,
+         haystack,
+@@ -478,7 +491,7 @@ def calculate_target_job_gap_from_row(
+         for certification in (
+             required_certifications + optional_certifications
+         )
+-        if matches[certification].present
++        if _cert_present(certification, haystack)
+     ]
+ 
+     # --------------------------------------------------------
+@@ -488,7 +501,7 @@ def calculate_target_job_gap_from_row(
+     missing_certifications = [
+         certification
+         for certification in required_certifications
+-        if not matches[certification].present
++        if not _cert_present(certification, haystack)
+     ]
+ 
+     # --------------------------------------------------------
+@@ -498,7 +511,7 @@ def calculate_target_job_gap_from_row(
+     missing_optional_certifications = [
+         certification
+         for certification in optional_certifications
+-        if not matches[certification].present
++        if not _cert_present(certification, haystack)
+     ]
+ 
+     # --------------------------------------------------------
+diff --git a/frontend/src/app/dashboard/page.tsx b/frontend/src/app/dashboard/page.tsx
+index 3762854..f09768c 100644
+--- a/frontend/src/app/dashboard/page.tsx
++++ b/frontend/src/app/dashboard/page.tsx
+@@ -73,6 +73,7 @@ function toResult(raw: Record<string, any>): AnalysisResult {
+     strengths: raw.strengths ?? [],
+     improvements: raw.improvements ?? raw.suggestions ?? [],
+     skill_gaps: raw.skill_gaps ?? raw.skillGaps ?? [],
++    keyword_gaps: raw.keyword_gaps ?? [],
+     grammar_issues: raw.grammar_issues ?? raw.grammarIssues ?? [],
+     certifications: raw.certifications ?? [],
+   };
+@@ -286,7 +287,7 @@ export default function DashboardPage() {
+               <KeyStrengths strengths={result.strengths} />
+               <SmartSuggestions improvements={result.improvements} />
+             </div>
+-            <KeywordSkillOptimization skillGaps={result.skill_gaps} />
++            <KeywordSkillOptimization skillGaps={result.skill_gaps} keywordGaps={result.keyword_gaps ?? []} />
+             <CertificationRecommendations certifications={result.certifications ?? []} />
+             <FormattingReadability grammarIssues={result.grammar_issues} />
+             <CompanyMatchCarousel companies={result.companies} />
+diff --git a/frontend/src/features/dashboard/components/KeywordSkillOptimization.tsx b/frontend/src/features/dashboard/components/KeywordSkillOptimization.tsx
+index 96eb10e..b323342 100644
+--- a/frontend/src/features/dashboard/components/KeywordSkillOptimization.tsx
++++ b/frontend/src/features/dashboard/components/KeywordSkillOptimization.tsx
+@@ -13,23 +13,33 @@ type SkillGap = {
+ };
+ 
+ type KeywordSkillOptimizationProps = {
++  // From your single best-matching job posting
+   skillGaps: SkillGap[];
++  // From the best posting of each of your top 3 matched companies
++  keywordGaps?: SkillGap[];
+ };
+ 
+ // Skills shown per page (a 2 x 2 grid, as in the Figma design)
+ const PAGE_SIZE = 4;
+ 
+ // Card displaying a paginated grid of skills, each with a status badge and a recommendation
+-export default function KeywordSkillOptimization({ skillGaps }: KeywordSkillOptimizationProps) {
++export default function KeywordSkillOptimization({
++  skillGaps,
++  keywordGaps = [],
++}: KeywordSkillOptimizationProps) {
++  const [tab, setTab] = useState<'skills' | 'keywords'>('skills');
+   const [page, setPage] = useState(0);
+ 
+-  const total = skillGaps.length;
++  const items = tab === 'skills' ? skillGaps : keywordGaps;
++  const noun = tab === 'skills' ? 'skills' : 'keywords';
++
++  const total = items.length;
+   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+   // Clamp in case the list shrinks while a later page is open
+   const currentPage = Math.min(page, totalPages - 1);
+ 
+   const startIndex = currentPage * PAGE_SIZE;
+-  const visible = skillGaps.slice(startIndex, startIndex + PAGE_SIZE);
++  const visible = items.slice(startIndex, startIndex + PAGE_SIZE);
+   const isFirstPage = currentPage === 0;
+   const isLastPage = currentPage >= totalPages - 1;
+ 
+@@ -50,9 +60,30 @@ export default function KeywordSkillOptimization({ skillGaps }: KeywordSkillOpti
+         </div>
+       </div>
+ 
++      {/* Tabs: skills come from the top job, keywords from the top 3 companies */}
++      <div className="flex gap-2">
++        {(['skills', 'keywords'] as const).map((t) => (
++          <button
++            key={t}
++            type="button"
++            onClick={() => {
++              setTab(t);
++              setPage(0);
++            }}
++            className={`rounded-[10px] px-4 py-2 text-[13px] font-medium capitalize transition ${
++              tab === t
++                ? 'bg-[#8b5cf6] text-white'
++                : 'border border-[#e5e7eb] bg-white/[0.72] text-[#4b5563] hover:bg-white'
++            }`}
++          >
++            {t === 'skills' ? 'Skills (top job)' : 'Keywords (top 3 companies)'}
++          </button>
++        ))}
++      </div>
++
+       {/* Skills grid - each item shows skill name, status badge, and recommendation */}
+       {total === 0 ? (
+-        <p className="text-[13px] text-[#4b5563]">No skills to show yet.</p>
++        <p className="text-[13px] text-[#4b5563]">No {noun} to show yet.</p>
+       ) : (
+         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+           {visible.map((item, i) => (
+@@ -87,7 +118,7 @@ export default function KeywordSkillOptimization({ skillGaps }: KeywordSkillOpti
+       {totalPages > 1 && (
+         <div className="flex flex-wrap items-center justify-between gap-3">
+           <p className="text-[13px] text-[#4b5563]">
+-            Showing {startIndex + 1}–{startIndex + visible.length} of {total} skills
++            Showing {startIndex + 1}–{startIndex + visible.length} of {total} {noun}
+           </p>
+ 
+           <div className="flex items-center gap-[10px] font-medium">
+diff --git a/frontend/src/lib/analysisResult.ts b/frontend/src/lib/analysisResult.ts
+index 3f9c827..a2e4253 100644
+--- a/frontend/src/lib/analysisResult.ts
++++ b/frontend/src/lib/analysisResult.ts
+@@ -14,6 +14,9 @@ export function toResult(data: unknown): AnalysisResult {
+     skill_gaps: Array.isArray(value.skill_gaps)
+       ? value.skill_gaps
+       : [],
++    keyword_gaps: Array.isArray(value.keyword_gaps)
++      ? value.keyword_gaps
++      : [],
+     grammar_issues: Array.isArray(value.grammar_issues)
+       ? value.grammar_issues
+       : [],
+diff --git a/frontend/src/types/analysis.ts b/frontend/src/types/analysis.ts
+index 7c072fc..c604275 100644
+--- a/frontend/src/types/analysis.ts
++++ b/frontend/src/types/analysis.ts
+@@ -52,6 +52,8 @@ export interface AnalysisResult {
+   strengths: string[];
+   improvements: string[];
+   skill_gaps: { skill: string; missing: boolean; recommendation: string }[];
++  // Keywords asked for across the top 3 matched companies (skills use only the top job)
++  keyword_gaps?: { skill: string; missing: boolean; recommendation: string }[];
+   grammar_issues: { type: string; text: string }[];
+   // Optional: only present when the backend returns certification suggestions
+   certifications?: {

@@ -24,10 +24,12 @@
 import os
 import urllib.parse
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
 
 from app.config import settings
 from app.models.auth_schemas import (
+    ChangePasswordRequest,
     SignUpRequest,
     SignInRequest,
     ForgotPasswordRequest,
@@ -40,9 +42,13 @@ from app.models.auth_schemas import (
     ResendSignupOtpRequest,
     VerifyResetOtpRequest,
     ResetTokensResponse,
+    RequestEmailChangeRequest,
+    VerifyEmailChangeRequest,
+    UpdateProfileRequest,
+    VerifyMFARequest,
 )
 from app.services import auth_service
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import bearer_scheme, get_authenticated_user, get_current_user
 
 # All routes in this file are grouped under prefix "/auth" and tagged
 # "auth" so they appear together in the auto-generated OpenAPI/Swagger docs.
@@ -229,7 +235,7 @@ def get_oauth_url(provider: str):
 # than trusting anything the client claims about its own identity).
 # ----------------------------------------------------------------------------
 @router.get("/me", response_model=AuthUser)
-def get_me(user: AuthUser = Depends(get_current_user)):
+def get_me(user: AuthUser = Depends(get_authenticated_user)):
     """
     Returns the currently authenticated user, verified from the bearer
     token — never trust a user ID the frontend sends you directly.
@@ -237,3 +243,149 @@ def get_me(user: AuthUser = Depends(get_current_user)):
     without re-prompting for a password.
     """
     return user
+
+
+def _required_refresh_token(refresh_token: str | None) -> str:
+    if not refresh_token:
+        raise HTTPException(
+            status_code=401,
+            detail="Your session has expired. Please sign in again.",
+        )
+    return refresh_token
+
+
+@router.get("/settings/account", response_model=AuthUser)
+def get_settings_account(user: AuthUser = Depends(get_current_user)):
+    return user
+
+
+@router.patch("/settings/account", response_model=AuthUser)
+def patch_settings_account(
+    payload: UpdateProfileRequest,
+    user: AuthUser = Depends(get_current_user),
+):
+    try:
+        return auth_service.update_profile(user.id, payload.full_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/settings/email/request", response_model=MessageResponse)
+def request_settings_email_change(
+    payload: RequestEmailChangeRequest,
+    user: AuthUser = Depends(get_current_user),
+):
+    try:
+        auth_service.request_email_change(user, str(payload.email), payload.current_password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return MessageResponse(message="A verification code has been sent to your new email address.")
+
+
+@router.post("/settings/email/verify")
+def verify_settings_email_change(
+    payload: VerifyEmailChangeRequest,
+    user: AuthUser = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    refresh_token: str | None = Header(default=None, alias="X-Refresh-Token"),
+):
+    try:
+        return auth_service.verify_email_change(
+            user,
+            credentials.credentials,
+            _required_refresh_token(refresh_token),
+            str(payload.email),
+            payload.token,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/settings/password")
+def change_settings_password(
+    payload: ChangePasswordRequest,
+    user: AuthUser = Depends(get_current_user),
+):
+    try:
+        return auth_service.change_password(
+            user,
+            payload.current_password,
+            payload.new_password,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/settings/account", response_model=MessageResponse)
+def delete_settings_account(user: AuthUser = Depends(get_current_user)):
+    try:
+        auth_service.delete_account(user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return MessageResponse(message="Your account has been deleted.")
+
+
+@router.get("/settings/mfa")
+def get_settings_mfa(
+    user: AuthUser = Depends(get_authenticated_user),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    refresh_token: str | None = Header(default=None, alias="X-Refresh-Token"),
+):
+    try:
+        factors = auth_service.list_mfa_factors(
+            credentials.credentials,
+            _required_refresh_token(refresh_token),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"totp": factors}
+
+
+@router.post("/settings/mfa/enroll")
+def enroll_settings_mfa(
+    user: AuthUser = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    refresh_token: str | None = Header(default=None, alias="X-Refresh-Token"),
+):
+    try:
+        return auth_service.enroll_mfa(
+            credentials.credentials,
+            _required_refresh_token(refresh_token),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/settings/mfa/verify")
+def verify_settings_mfa(
+    payload: VerifyMFARequest,
+    user: AuthUser = Depends(get_authenticated_user),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    refresh_token: str | None = Header(default=None, alias="X-Refresh-Token"),
+):
+    try:
+        return auth_service.verify_mfa(
+            user.id,
+            credentials.credentials,
+            _required_refresh_token(refresh_token),
+            payload.factor_id,
+            payload.code,
+            payload.action,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/settings/sign-out-others", response_model=MessageResponse)
+def sign_out_settings_other_sessions(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    refresh_token: str | None = Header(default=None, alias="X-Refresh-Token"),
+):
+    try:
+        auth_service.sign_out_other_sessions(
+            credentials.credentials,
+            _required_refresh_token(refresh_token),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return MessageResponse(message="Other sessions have been signed out.")

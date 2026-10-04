@@ -44,6 +44,11 @@ export function getAccessToken(): string | null {
   return localStorage.getItem(ACCESS_TOKEN_KEY);
 }
 
+export function saveUser(user: StoredUser) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+}
+
 export function getRefreshToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem(REFRESH_TOKEN_KEY);
@@ -82,5 +87,12 @@ export function authHeaders(extra?: HeadersInit): Headers {
   const headers = new Headers(extra);
   const token = getAccessToken();
   if (token) headers.set('Authorization', `Bearer ${token}`);
+  return headers;
+}
+
+export function authSessionHeaders(extra?: HeadersInit): Headers {
+  const headers = authHeaders(extra);
+  const refreshToken = getRefreshToken();
+  if (refreshToken) headers.set('X-Refresh-Token', refreshToken);
   return headers;
 }

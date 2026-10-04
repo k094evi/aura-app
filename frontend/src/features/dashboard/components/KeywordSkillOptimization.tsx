@@ -13,23 +13,33 @@ type SkillGap = {
 };
 
 type KeywordSkillOptimizationProps = {
+  // From your single best-matching job posting
   skillGaps: SkillGap[];
+  // From the best posting of each of your top 3 matched companies
+  keywordGaps?: SkillGap[];
 };
 
 // Skills shown per page (a 2 x 2 grid, as in the Figma design)
 const PAGE_SIZE = 4;
 
 // Card displaying a paginated grid of skills, each with a status badge and a recommendation
-export default function KeywordSkillOptimization({ skillGaps }: KeywordSkillOptimizationProps) {
+export default function KeywordSkillOptimization({
+  skillGaps,
+  keywordGaps = [],
+}: KeywordSkillOptimizationProps) {
+  const [tab, setTab] = useState<'skills' | 'keywords'>('skills');
   const [page, setPage] = useState(0);
 
-  const total = skillGaps.length;
+  const items = tab === 'skills' ? skillGaps : keywordGaps;
+  const noun = tab === 'skills' ? 'skills' : 'keywords';
+
+  const total = items.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   // Clamp in case the list shrinks while a later page is open
   const currentPage = Math.min(page, totalPages - 1);
 
   const startIndex = currentPage * PAGE_SIZE;
-  const visible = skillGaps.slice(startIndex, startIndex + PAGE_SIZE);
+  const visible = items.slice(startIndex, startIndex + PAGE_SIZE);
   const isFirstPage = currentPage === 0;
   const isLastPage = currentPage >= totalPages - 1;
 
@@ -50,9 +60,30 @@ export default function KeywordSkillOptimization({ skillGaps }: KeywordSkillOpti
         </div>
       </div>
 
+      {/* Tabs: skills come from the top job, keywords from the top 3 companies */}
+      <div className="flex gap-2">
+        {(['skills', 'keywords'] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => {
+              setTab(t);
+              setPage(0);
+            }}
+            className={`rounded-[10px] px-4 py-2 text-[13px] font-medium capitalize transition ${
+              tab === t
+                ? 'bg-[#8b5cf6] text-white'
+                : 'border border-[#e5e7eb] bg-white/[0.72] text-[#4b5563] hover:bg-white'
+            }`}
+          >
+            {t === 'skills' ? 'Skills (top job)' : 'Keywords (top 3 companies)'}
+          </button>
+        ))}
+      </div>
+
       {/* Skills grid - each item shows skill name, status badge, and recommendation */}
       {total === 0 ? (
-        <p className="text-[13px] text-[#4b5563]">No skills to show yet.</p>
+        <p className="text-[13px] text-[#4b5563]">No {noun} to show yet.</p>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {visible.map((item, i) => (
@@ -87,7 +118,7 @@ export default function KeywordSkillOptimization({ skillGaps }: KeywordSkillOpti
       {totalPages > 1 && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-[13px] text-[#4b5563]">
-            Showing {startIndex + 1}–{startIndex + visible.length} of {total} skills
+            Showing {startIndex + 1}–{startIndex + visible.length} of {total} {noun}
           </p>
 
           <div className="flex items-center gap-[10px] font-medium">

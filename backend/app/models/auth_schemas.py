@@ -69,6 +69,31 @@ class ResetPasswordRequest(BaseModel):
     new_password: str = Field(min_length=8)
 
 
+class UpdateProfileRequest(BaseModel):
+    full_name: str = Field(max_length=100)
+
+
+class RequestEmailChangeRequest(BaseModel):
+    email: EmailStr
+    current_password: str = Field(min_length=1)
+
+
+class VerifyEmailChangeRequest(BaseModel):
+    email: EmailStr
+    token: str = Field(min_length=6, max_length=6)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=8)
+
+
+class VerifyMFARequest(BaseModel):
+    factor_id: str = Field(min_length=1)
+    code: str = Field(pattern=r"^\d{6}$")
+    action: str = Field(pattern=r"^(enable|disable|challenge)$")
+
+
 # ============================================================================
 # ── Response models (used by auth_service.py) ───────────────────────────
 # ============================================================================
@@ -80,6 +105,9 @@ class AuthUser(BaseModel):
     id: str
     email: Optional[str] = None
     full_name: Optional[str] = None
+    providers: list[str] = Field(default_factory=list)
+    password_changed_at: Optional[str] = None
+    mfa_enabled: bool = False
 
 
 # Returned by /auth/signup and /auth/signin on success. Includes the

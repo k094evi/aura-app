@@ -73,6 +73,7 @@ function toResult(raw: Record<string, any>): AnalysisResult {
     strengths: raw.strengths ?? [],
     improvements: raw.improvements ?? raw.suggestions ?? [],
     skill_gaps: raw.skill_gaps ?? raw.skillGaps ?? [],
+    keyword_gaps: raw.keyword_gaps ?? [],
     grammar_issues: raw.grammar_issues ?? raw.grammarIssues ?? [],
     certifications: raw.certifications ?? [],
   };
@@ -81,7 +82,7 @@ function toResult(raw: Record<string, any>): AnalysisResult {
 async function analyzeResume({ file, jobTitle, companies }: UploadPayload): Promise<AnalysisResult> {
   const body = new FormData();
   body.append('file', file);
-  body.append('job_title', jobTitle);
+  body.append('target_job', jobTitle);
   body.append('target_companies', companies);
 
   // Use the same field names and Authorization header as the fetch in your current
@@ -286,7 +287,7 @@ export default function DashboardPage() {
               <KeyStrengths strengths={result.strengths} />
               <SmartSuggestions improvements={result.improvements} />
             </div>
-            <KeywordSkillOptimization skillGaps={result.skill_gaps} />
+            <KeywordSkillOptimization skillGaps={result.skill_gaps} keywordGaps={result.keyword_gaps ?? []} />
             <CertificationRecommendations certifications={result.certifications ?? []} />
             <FormattingReadability grammarIssues={result.grammar_issues} />
             <CompanyMatchCarousel companies={result.companies} />

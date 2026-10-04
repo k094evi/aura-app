@@ -1133,6 +1133,7 @@ def _persist_analysis_result(
     enrichment: dict,
     extracted_skills: list[str],
     companies_shaped: list[dict],
+    result_payload: dict | None = None,
 ) -> str | None:
 
     if resume_id is None:
@@ -1166,6 +1167,10 @@ def _persist_analysis_result(
         "grammar_issues": enrichment["grammar_issues"],
         "company_matches": companies_shaped,
         "detected_role": None,
+        # Full /api/analyze payload so Resume History -> "View Results"
+        # re-opens certifications, top_jobs, keyword_gaps, etc.
+        # (column added by 003_analysis_result_payload.sql).
+        "result_json": result_payload,
     }
 
     try:
@@ -1303,6 +1308,32 @@ def _select_job_posting_text(
             )
 
     return None, None, set()
+
+
+def _select_keyword_postings(result, n: int = 3) -> list[dict]:
+    """
+    Keyword optimization uses the top `n` COMPANIES (skills still use only
+    the single top job — see _select_job_posting_text). For each of the top
+    n ranked companies we take that company's best-scoring job and its FULL
+    description.
+    """
+    postings: list[dict] = []
+    for company_match in (result.top_companies or [])[:n]:
+        scored = _get_attr(company_match, "top_job", default=None)
+        job = getattr(scored, "job", None)
+        description = _get_attr(job, "description", "job_description", default="")
+        if not description or not description.strip():
+            continue
+        title = _clean_string(_get_attr(job, "title", "job_title"), default="a matched role")
+        company = _clean_string(
+            _get_attr(company_match, "company", "company_name"), default="a matched company"
+        )
+        postings.append({
+            "text": description.strip(),
+            "label": f"{title} at {company}",
+            "exclude_terms": _tokenize_for_exclusion(f"{title} {company}"),
+        })
+    return postings
 
 
 # ==============================================================================
@@ -1719,6 +1750,13 @@ async def handle_analyze(
             "to hardcoded taxonomy"
         )
 
+    keyword_postings = _select_keyword_postings(result, n=3)
+    logger.info(
+        "Keyword source: %d posting(s) from top companies: %s",
+        len(keyword_postings),
+        [p["label"] for p in keyword_postings],
+    )
+
     # ==========================================================================
     # STEP 8: RESUME ENRICHMENT
     # ==========================================================================
@@ -1737,6 +1775,7 @@ async def handle_analyze(
             job_posting_text=job_posting_text,
             job_posting_source=job_posting_source,
             job_posting_exclude_terms=job_posting_exclude_terms,
+            keyword_postings=keyword_postings,
         )
 
     except Exception:
@@ -1789,12 +1828,30 @@ async def handle_analyze(
     # STEP 10: PERSIST ANALYSIS
     # ==========================================================================
 
+    response_payload = {
+        "keywords": result.keywords,
+        "total_jobs": result.total_jobs,
+        "top_jobs": top_jobs_shaped,
+        "companies": companies_shaped,
+        "ats_score": enrichment["ats_score"],
+        "sections": enrichment["sections"],
+        "strengths": enrichment["strengths"],
+        "improvements": enrichment["improvements"],
+        "skill_gaps": enrichment["skill_gaps"],
+        "skill_gap_source": enrichment["skill_gap_source"],
+        "keyword_gaps": enrichment["keyword_gaps"],
+        "keyword_gap_source": enrichment["keyword_gap_source"],
+        "grammar_issues": enrichment["grammar_issues"],
+        "certifications": certifications_shaped,
+    }
+
     analysis_id = _persist_analysis_result(
         resume_id=resume_id,
         user_id=user_id,
         enrichment=enrichment,
         extracted_skills=result.keywords,
         companies_shaped=companies_shaped,
+        result_payload=response_payload,
     )
 
     # ==========================================================================
@@ -1827,6 +1884,10 @@ async def handle_analyze(
         "skill_gaps": enrichment["skill_gaps"],
 
         "skill_gap_source": enrichment["skill_gap_source"],
+
+        "keyword_gaps": enrichment["keyword_gaps"],
+
+        "keyword_gap_source": enrichment["keyword_gap_source"],
 
         "grammar_issues": enrichment["grammar_issues"],
 

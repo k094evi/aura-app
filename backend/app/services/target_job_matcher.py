@@ -173,6 +173,15 @@ def _build_resume_haystack(
 
 
 # ============================================================
+# CERTIFICATION PRESENCE (literal match only)
+# ============================================================
+
+def _cert_present(certification: str, haystack: str) -> bool:
+    """True only if the certification name literally appears on the resume."""
+    return certification.strip().lower() in haystack
+
+
+# ============================================================
 # CALCULATE TARGET JOB GAP
 # ============================================================
 
@@ -265,10 +274,12 @@ def calculate_target_job_gap(
     # substring matching missed it. See skill_matcher.py for details.
     # --------------------------------------------------------
 
-    all_terms = list(dict.fromkeys(
-        required_skills + optional_skills
-        + required_certifications + optional_certifications
-    ))
+    # Certifications are deliberately NOT sent through the semantic fallback:
+    # a certificate title like "meta frontend developer professional
+    # certificate" is embedding-similar to a resume line such as "Frontend
+    # Developer", which wrongly marked it as already held. Certs need a
+    # literal mention on the resume (see _cert_present below).
+    all_terms = list(dict.fromkeys(required_skills + optional_skills))
     matches = skills_present(
         all_terms,
         haystack,
@@ -313,7 +324,7 @@ def calculate_target_job_gap(
     missing_certifications = [
         certification
         for certification in required_certifications
-        if not matches[certification].present
+        if not _cert_present(certification, haystack)
     ]
 
     # --------------------------------------------------------
@@ -325,7 +336,7 @@ def calculate_target_job_gap(
         for certification in (
             required_certifications + optional_certifications
         )
-        if matches[certification].present
+        if _cert_present(certification, haystack)
     ]
 
     # --------------------------------------------------------
@@ -335,7 +346,7 @@ def calculate_target_job_gap(
     missing_optional_certifications = [
         certification
         for certification in optional_certifications
-        if not matches[certification].present
+        if not _cert_present(certification, haystack)
     ]
 
     # --------------------------------------------------------
@@ -428,10 +439,12 @@ def calculate_target_job_gap_from_row(
     # semantic-fallback behavior as calculate_target_job_gap() above.
     # --------------------------------------------------------
 
-    all_terms = list(dict.fromkeys(
-        required_skills + optional_skills
-        + required_certifications + optional_certifications
-    ))
+    # Certifications are deliberately NOT sent through the semantic fallback:
+    # a certificate title like "meta frontend developer professional
+    # certificate" is embedding-similar to a resume line such as "Frontend
+    # Developer", which wrongly marked it as already held. Certs need a
+    # literal mention on the resume (see _cert_present below).
+    all_terms = list(dict.fromkeys(required_skills + optional_skills))
     matches = skills_present(
         all_terms,
         haystack,
@@ -478,7 +491,7 @@ def calculate_target_job_gap_from_row(
         for certification in (
             required_certifications + optional_certifications
         )
-        if matches[certification].present
+        if _cert_present(certification, haystack)
     ]
 
     # --------------------------------------------------------
@@ -488,7 +501,7 @@ def calculate_target_job_gap_from_row(
     missing_certifications = [
         certification
         for certification in required_certifications
-        if not matches[certification].present
+        if not _cert_present(certification, haystack)
     ]
 
     # --------------------------------------------------------
@@ -498,7 +511,7 @@ def calculate_target_job_gap_from_row(
     missing_optional_certifications = [
         certification
         for certification in optional_certifications
-        if not matches[certification].present
+        if not _cert_present(certification, haystack)
     ]
 
     # --------------------------------------------------------

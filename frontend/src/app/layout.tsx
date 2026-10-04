@@ -22,7 +22,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={dmSans.className}>
         {/* Wraps pages with layout that varies based on the current route.
             Suspense is required because ConditionalLayout uses useSearchParams. */}

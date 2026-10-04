@@ -11,8 +11,13 @@ export function toResult(data: unknown): AnalysisResult {
     improvements: Array.isArray(value.improvements)
       ? value.improvements
       : [],
-    skill_gaps: Array.isArray(value.skill_gaps)
-      ? value.skill_gaps
+    skill_gaps:
+      Array.isArray(value.skill_gaps) ||
+      (typeof value.skill_gaps === 'object' && value.skill_gaps !== null)
+        ? value.skill_gaps
+        : [],
+    keyword_gaps: Array.isArray(value.keyword_gaps)
+      ? value.keyword_gaps
       : [],
     grammar_issues: Array.isArray(value.grammar_issues)
       ? value.grammar_issues

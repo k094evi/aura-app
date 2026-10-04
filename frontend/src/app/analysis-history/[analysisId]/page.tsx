@@ -792,9 +792,9 @@ export default function AnalysisHistoryDetailPage() {
                 <div className="absolute inset-0 rounded-full bg-gray-200/50" />
 
                 <div
-                  className="absolute inset-0 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500"
+                  className="absolute inset-0 rounded-full"
                   style={{
-                    clipPath: `conic-gradient(from 0deg, #8b5cf6 0deg, #06b6d4 ${
+                    background: `conic-gradient(from 0deg, #8b5cf6, #06b6d4 ${
                       atsScore * 3.6
                     }deg, transparent ${atsScore * 3.6}deg)`,
                   }}

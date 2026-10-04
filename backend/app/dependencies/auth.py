@@ -46,6 +46,8 @@
 #   (`Depends(get_current_user)`), no route code has to change.
 # ==============================================================================
 
+import base64
+import json
 import logging
 
 from fastapi import Depends, HTTPException, status
@@ -63,9 +65,7 @@ logger = logging.getLogger(__name__)
 bearer_scheme = HTTPBearer()
 
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-) -> AuthUser:
+def _load_authenticated_user(token: str) -> AuthUser:
     """
     FastAPI dependency that authenticates the current request.
 
@@ -80,8 +80,6 @@ def get_current_user(
                   from Supabase's verified response.
     """
     # Grab just the raw token string out of the "Bearer <token>" header.
-    token = credentials.credentials
-
     try:
         # Ask Supabase to verify this token server-side (checks signature +
         # expiry) and tell us which user it belongs to.
@@ -112,12 +110,42 @@ def get_current_user(
     # were stored on the Supabase user record (e.g. full_name).
     user_obj = result.user
     metadata = getattr(user_obj, "user_metadata", None) or {}
+    app_metadata = getattr(user_obj, "app_metadata", None) or {}
+    providers = app_metadata.get("providers") or [app_metadata.get("provider")]
 
-    # Build and return the app's own AuthUser model. Routes that depend on
-    # get_current_user receive this object, not Supabase's raw response —
-    # this keeps the rest of the app decoupled from Supabase's SDK shape.
     return AuthUser(
         id=user_obj.id,
         email=user_obj.email,
         full_name=metadata.get("full_name"),
+        providers=sorted({provider for provider in providers if provider}),
+        password_changed_at=app_metadata.get("password_changed_at"),
+        mfa_enabled=bool(app_metadata.get("mfa_enabled", False)),
     )
+
+
+def _token_assurance_level(token: str) -> str | None:
+    try:
+        encoded_claims = token.split(".")[1]
+        encoded_claims += "=" * (-len(encoded_claims) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(encoded_claims))
+        return claims.get("aal")
+    except (IndexError, ValueError, json.JSONDecodeError):
+        return None
+
+
+def get_authenticated_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+) -> AuthUser:
+    return _load_authenticated_user(credentials.credentials)
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+) -> AuthUser:
+    user = _load_authenticated_user(credentials.credentials)
+    if user.mfa_enabled and _token_assurance_level(credentials.credentials) != "aal2":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Two-factor verification is required. Open /mfa-challenge to continue.",
+        )
+    return user
