@@ -13,6 +13,7 @@ import {
   AssessmentSidebar,
   CertificationRecommendations,
   CompanyMatchCarousel,
+  DashboardChatbot,
   DashboardHeader,
   FormattingReadability,
   JobListings,
@@ -239,6 +240,7 @@ export default function DashboardPage() {
     <div className="relative min-h-screen w-full overflow-hidden bg-[#f0eeff]">
       {/* Ambient background orbs + top accent line (same as Settings) */}
       <SettingsBackground />
+      <DashboardChatbot />
 
       {/* Top padding leaves room for the fixed Navbar.
           Full width with the same side padding as the History page (px-6 md:px-20). */}

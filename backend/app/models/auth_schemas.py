@@ -88,6 +88,12 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(min_length=8)
 
 
+# POST /auth/mfa/challenge body — the 6-digit code from the user's
+# authenticator app, submitted right after signing in with 2FA enabled.
+class MFAChallengeRequest(BaseModel):
+    code: str = Field(pattern=r"^\d{6}$")
+
+
 class VerifyMFARequest(BaseModel):
     factor_id: str = Field(min_length=1)
     code: str = Field(pattern=r"^\d{6}$")
@@ -119,6 +125,10 @@ class AuthResponse(BaseModel):
     access_token: str
     refresh_token: Optional[str] = None
     email_confirmation_required: bool = False
+    # True when the account has 2FA enabled and this session is only
+    # aal1 (password-level). The frontend must send the user through
+    # /mfa-challenge before protected endpoints will accept the token.
+    mfa_required: bool = False
 
 
 # Generic "just tell me what happened" response, used for endpoints that

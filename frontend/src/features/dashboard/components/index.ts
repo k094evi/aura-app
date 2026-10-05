@@ -3,6 +3,7 @@
 
 // Header + result cards
 export { default as DashboardHeader } from './DashboardHeader';
+export { default as DashboardChatbot } from './DashboardChatbot';
 export { default as AssessmentSidebar } from './AssessmentSidebar';
 export { default as KeyStrengths } from './KeyStrengths';
 export { default as SmartSuggestions } from './SmartSuggestions';

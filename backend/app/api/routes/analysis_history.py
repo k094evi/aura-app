@@ -121,7 +121,9 @@ def get_analysis(
     try:
         response = (
             supabase_admin.table("analysis_results")
-            .select("*")
+            .select(
+                "*, resumes(filename, target_job, target_companies, created_at)"
+            )
             .eq("id", analysis_id)
             .eq("user_id", user.id)
             .limit(1)
@@ -138,11 +140,35 @@ def get_analysis(
     if not rows or not isinstance(rows[0], dict):
         raise HTTPException(status_code=404, detail="Analysis not found")
     row: Dict[str, Any] = rows[0]
+    resume = _resume_of(row)
 
     # Preferred: the complete payload saved at analysis time.
     payload = row.get("result_json")
     if isinstance(payload, dict):
-        return {**payload, "analysis_id": str(row["id"]), "resume_id": row.get("resume_id")}
+        return {
+            **payload,
+            "analysis_id": str(row["id"]),
+            "resume_id": row.get("resume_id"),
+            "filename": (
+                resume.get("filename")
+                or payload.get("filename")
+                or payload.get("resume_filename")
+                or "Untitled resume"
+            ),
+            "uploaded_at": resume.get("created_at"),
+            "created_at": row.get("created_at"),
+            "target_job": (
+                resume.get("target_job")
+                or payload.get("target_job")
+                or row.get("detected_role")
+                or ""
+            ),
+            "target_companies": (
+                resume.get("target_companies")
+                or payload.get("target_companies")
+                or []
+            ),
+        }
 
     # Fallback for rows saved before 003_analysis_result_payload.sql: rebuild
     # what the columns still hold. top_jobs / total_jobs / certifications were
@@ -159,6 +185,13 @@ def get_analysis(
     return {
         "analysis_id": str(row["id"]),
         "resume_id": row.get("resume_id"),
+        "filename": resume.get("filename") or "Untitled resume",
+        "uploaded_at": resume.get("created_at"),
+        "created_at": row.get("created_at"),
+        "target_job": (
+            resume.get("target_job") or row.get("detected_role") or ""
+        ),
+        "target_companies": resume.get("target_companies") or [],
         "keywords": row.get("extracted_skills") or [],
         "total_jobs": 0,
         "top_jobs": [],

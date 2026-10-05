@@ -24,6 +24,7 @@ import { generateReportPDF } from '@/lib/exportReport';
 type SavedAnalysis = AnalysisResult & {
   id?: string;
   filename?: string;
+  uploaded_at?: string;
   created_at?: string;
   target_job?: string;
   target_companies?: unknown[];
@@ -389,6 +390,8 @@ export default function AnalysisHistoryDetailPage() {
             ''
         );
 
+        parsed.uploaded_at = String(source.uploaded_at ?? '');
+
         parsed.target_job = String(
           source.target_job ??
             source.selected_job ??
@@ -580,28 +583,21 @@ export default function AnalysisHistoryDetailPage() {
         ? 100
         : 0;
 
-  const dimensionItems = [
-    {
-      name: 'Formatting',
-      score: atsScore,
-    },
-    {
-      name: 'Keywords',
-      score: keywordCoverage,
-    },
-    {
-      name: 'Quantification',
-      score: undefined,
-    },
-    {
-      name: 'Impact',
-      score: undefined,
-    },
-    {
-      name: 'Readability',
-      score: undefined,
-    },
-  ];
+  const savedSections =
+    Array.isArray(result.sections) && result.sections.length > 0
+      ? result.sections
+      : ['Keywords', 'Format', 'Skills', 'Impact', 'Length'].map((name) => ({
+          name,
+          value: null,
+        }));
+
+  const dimensionItems = savedSections.map((section) => ({
+    name: section.name,
+    score:
+      typeof section.value === 'number' && Number.isFinite(section.value)
+        ? Math.max(0, Math.min(100, section.value))
+        : undefined,
+  }));
 
   return (
     <div className="min-h-screen relative bg-indigo-50 overflow-hidden">
@@ -700,14 +696,6 @@ export default function AnalysisHistoryDetailPage() {
               <ArrowLeft className="size-4" />
               Back to History
             </Link>
-
-            <div className="px-3 py-1.5 bg-white/70 rounded-full outline outline-1 outline-offset-[-1px] outline-white flex items-center gap-2">
-              <ShieldCheck className="size-3.5 text-gray-600" />
-
-              <span className="text-gray-600 text-xs font-semibold font-['DM_Sans']">
-                Historical result · Saved snapshot
-              </span>
-            </div>
           </div>
 
           <div className="flex justify-between items-start gap-6">
@@ -724,7 +712,8 @@ export default function AnalysisHistoryDetailPage() {
 
               <div className="flex flex-wrap items-center gap-2.5">
                 <span className="text-gray-600 text-sm font-normal font-['DM_Sans']">
-                  Analyzed {formatDate(analysis.created_at)}
+                  Uploaded{' '}
+                  {formatDate(analysis.uploaded_at || analysis.created_at)}
                 </span>
 
                 <span className="text-gray-400">•</span>
@@ -754,7 +743,7 @@ export default function AnalysisHistoryDetailPage() {
               type="button"
               onClick={handleExport}
               disabled={isExporting}
-              className="hidden md:inline-flex shrink-0 items-center gap-2 px-5 py-3 bg-white/80 rounded-full shadow-sm outline outline-1 outline-white text-gray-700 text-sm font-bold font-['DM_Sans'] hover:bg-white transition disabled:opacity-50"
+              className="flex items-center gap-2 self-start rounded-[12px] border-[1.5px] border-[#e3e5eb] bg-white/[0.72] px-5 py-3 text-sm font-medium text-[#454a54] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.05)] backdrop-blur-[12px] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-white/[0.72]"
             >
               {isExporting ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -878,8 +867,8 @@ export default function AnalysisHistoryDetailPage() {
 
                   <div className="w-11 text-right text-gray-900 text-xs font-extrabold font-['DM_Sans']">
                     {dimension.score !== undefined
-                      ? `${dimension.score}%`
-                      : '—'}
+                      ? `${Math.round(dimension.score)}%`
+                      : '-'}
                   </div>
                 </div>
               ))}
@@ -889,9 +878,8 @@ export default function AnalysisHistoryDetailPage() {
               <Target className="size-4 text-cyan-500 shrink-0" />
 
               <div className="flex-1 text-gray-600 text-xs font-semibold font-['DM_Sans']">
-                Role-specific keyword coverage is calculated from the saved
-                skill-match data. Dimensions without a stored numeric score
-                are not fabricated.
+                These are the saved section scores shown on the dashboard.
+                Dimensions without a stored numeric score are not fabricated.
               </div>
             </div>
           </div>
@@ -909,7 +897,7 @@ export default function AnalysisHistoryDetailPage() {
 
             <div>
               <div className="text-gray-900 text-lg font-bold font-['DM_Sans']">
-                Key Strengths &amp; Priority Improvements
+                Key Strengths &amp; Smart Suggestions
               </div>
 
               <div className="text-gray-600 text-xs font-normal font-['DM_Sans']">
@@ -1008,7 +996,7 @@ export default function AnalysisHistoryDetailPage() {
 
               <div>
                 <div className="text-gray-900 text-lg font-bold font-['DM_Sans']">
-                  Keyword &amp; Skill Match
+                  Keyword &amp; Skill Optimization
                 </div>
 
                 <div className="text-gray-600 text-xs font-normal font-['DM_Sans']">
@@ -1226,7 +1214,7 @@ export default function AnalysisHistoryDetailPage() {
         </div>
 
         {/* ========================= */}
-        {/* RECOMMENDATIONS */}
+        {/* CERTIFICATIONS */}
         {/* ========================= */}
 
         <div className="mt-6 p-7 bg-white/80 rounded-[20px] shadow-[0px_12px_34px_0px_rgba(17,24,39,0.04)] outline outline-[1.5px] outline-white backdrop-blur-md flex flex-col gap-6">
@@ -1237,7 +1225,7 @@ export default function AnalysisHistoryDetailPage() {
 
             <div>
               <div className="text-gray-900 text-lg font-bold font-['DM_Sans']">
-                Recommendations &amp; Certifications
+                Certification Recommendations
               </div>
 
               <div className="text-gray-600 text-xs font-normal font-['DM_Sans']">
@@ -1246,50 +1234,7 @@ export default function AnalysisHistoryDetailPage() {
             </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-5">
-            {/* Improvements / Recommendations */}
-
-            <div className="p-5 bg-white/60 rounded-2xl outline outline-1 outline-white flex flex-col gap-3.5">
-              <div className="text-gray-900 text-lg font-bold font-['DM_Sans']">
-                Relevant recommendations
-              </div>
-
-              {improvements.length > 0 ? (
-                improvements.slice(0, 5).map((improvement, index) => (
-                  <div
-                    key={`${improvement}-${index}`}
-                    className="flex items-start gap-3"
-                  >
-                    <div className="size-6 bg-violet-500/10 rounded-full flex justify-center items-center shrink-0">
-                      <Lightbulb className="size-3 text-violet-500" />
-                    </div>
-
-                    <div className="flex-1 flex flex-col gap-[3px]">
-                      <div className="flex justify-between items-center gap-2">
-                        <div className="text-gray-900 text-xs font-bold font-['DM_Sans']">
-                          Improvement {index + 1}
-                        </div>
-
-                        <div className="px-2.5 py-[5px] bg-violet-500/10 rounded-full text-violet-500 text-xs font-bold font-['DM_Sans']">
-                          Recommendation
-                        </div>
-                      </div>
-
-                      <div className="text-gray-600 text-xs font-normal font-['DM_Sans'] leading-4">
-                        {improvement}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-gray-500 text-xs font-['DM_Sans']">
-                  No recommendations were saved for this analysis.
-                </p>
-              )}
-            </div>
-
-            {/* Certifications */}
-
+          <div className="grid grid-cols-1 gap-5">
             <div className="p-5 bg-white/60 rounded-2xl outline outline-1 outline-white flex flex-col gap-3.5">
               <div className="text-gray-900 text-lg font-bold font-['DM_Sans']">
                 Certification recommendations

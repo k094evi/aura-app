@@ -19,6 +19,20 @@ export interface StoredUser {
   id: string;
   email?: string | null;
   full_name?: string | null;
+  mfa_enabled?: boolean;
+}
+
+declare global {
+  interface Window {
+    _jfAgentIdentifiedUser?: {
+      metadata: Record<string, string>;
+      userID: string;
+      userHash: string;
+    };
+    AgentClientSDK?: {
+      resetUser?: () => void;
+    };
+  }
 }
 
 /** Persists a session after a successful signin/signup/OAuth callback. */
@@ -72,6 +86,12 @@ export function isAuthenticated(): boolean {
 /** Clears the stored session — call this on logout or a 401 from the API. */
 export function clearSession() {
   if (typeof window === 'undefined') return;
+  try {
+    window.AgentClientSDK?.resetUser?.();
+  } catch (error) {
+    console.error('Failed to reset the Jotform agent identity:', error);
+  }
+  delete window._jfAgentIdentifiedUser;
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
@@ -95,4 +115,23 @@ export function authSessionHeaders(extra?: HeadersInit): Headers {
   const refreshToken = getRefreshToken();
   if (refreshToken) headers.set('X-Refresh-Token', refreshToken);
   return headers;
+}
+
+/**
+ * Reads the Supabase "authenticator assurance level" claim from the stored
+ * access token: "aal1" = password only, "aal2" = password + 2FA code.
+ * This only decides which screen to show; the backend is the real authority
+ * and re-checks the token on every protected request.
+ */
+export function getAssuranceLevel(): 'aal1' | 'aal2' | null {
+  const token = getAccessToken();
+  if (!token) return null;
+  try {
+    let payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    payload += '='.repeat((4 - (payload.length % 4)) % 4);
+    const claims = JSON.parse(atob(payload));
+    return claims.aal === 'aal2' ? 'aal2' : 'aal1';
+  } catch {
+    return null;
+  }
 }

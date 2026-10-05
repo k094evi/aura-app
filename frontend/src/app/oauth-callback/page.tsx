@@ -57,7 +57,8 @@ export default function OAuthCallbackPage() {
         }
 
         saveSession(access_token, refresh_token, user);
-        router.push('/dashboard');
+        // /auth/me reports mfa_enabled; OAuth sessions start at aal1 too.
+        router.push(user.mfa_enabled ? '/mfa-challenge' : '/dashboard');
       } catch (err: any) {
         setError(err.message || 'Something went wrong. Please try again.');
       }

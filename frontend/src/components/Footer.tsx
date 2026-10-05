@@ -14,6 +14,7 @@ export const Footer = () => {
   const fromMap: Record<string, string> = {
     '/dashboard': 'dashboard',
     '/signin': 'signin',
+    '/mfa-challenge': 'mfa-challenge',
     '/signup': 'signup',
     '/upload': 'upload',
   };

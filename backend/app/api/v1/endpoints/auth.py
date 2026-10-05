@@ -46,6 +46,7 @@ from app.models.auth_schemas import (
     VerifyEmailChangeRequest,
     UpdateProfileRequest,
     VerifyMFARequest,
+    MFAChallengeRequest,
 )
 from app.services import auth_service
 from app.dependencies.auth import bearer_scheme, get_authenticated_user, get_current_user
@@ -371,6 +372,30 @@ def verify_settings_mfa(
             payload.factor_id,
             payload.code,
             payload.action,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ----------------------------------------------------------------------------
+# POST /auth/mfa/challenge
+# Completes sign-in for accounts with 2FA enabled. Deliberately uses
+# get_authenticated_user (NOT get_current_user): the caller only has an aal1
+# session at this point, which get_current_user would reject with 403.
+# Returns upgraded aal2 tokens on success.
+# ----------------------------------------------------------------------------
+@router.post("/mfa/challenge")
+def mfa_challenge(
+    payload: MFAChallengeRequest,
+    user: AuthUser = Depends(get_authenticated_user),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    refresh_token: str | None = Header(default=None, alias="X-Refresh-Token"),
+):
+    try:
+        return auth_service.challenge_mfa(
+            credentials.credentials,
+            _required_refresh_token(refresh_token),
+            payload.code,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

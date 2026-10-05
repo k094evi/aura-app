@@ -14,10 +14,12 @@ export type AnalysisRecord = {
   id: string;
   filename: string;
   date: string;
+  createdAt: string | null;
   // Target role shown as the card's bold subtitle.
   role: string;
   // Company pills rendered on the card.
   companies: string[];
+  searchableCompanies: string[];
   // Count for the "+N more" pill.
   moreCompanies: number;
   atsScore: number;

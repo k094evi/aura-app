@@ -77,16 +77,43 @@ export function AnalysisHistoryEmptyRings() {
 
 /* ------------------------- Title + search/filter row ------------------------- */
 
+export type AnalysisHistorySearchCategory = 'all' | 'filename' | 'role' | 'company';
+
 type AnalysisHistoryHeaderProps = {
-  // Empty-state frame shows the search box and dropdown dimmed and inert.
   disabled?: boolean;
+  search: string;
+  category: AnalysisHistorySearchCategory;
+  dateFrom: string;
+  dateTo: string;
+  hasFilters: boolean;
+  onSearchChange: (value: string) => void;
+  onCategoryChange: (value: AnalysisHistorySearchCategory) => void;
+  onDateFromChange: (value: string) => void;
+  onDateToChange: (value: string) => void;
+  onClearFilters: () => void;
 };
 
-// Hardcoded / presentational: the search box and category dropdown match the
-// Figma visually but are not wired to any filtering yet.
-export function AnalysisHistoryHeader({ disabled = false }: AnalysisHistoryHeaderProps) {
+export function AnalysisHistoryHeader({
+  disabled = false,
+  search,
+  category,
+  dateFrom,
+  dateTo,
+  hasFilters,
+  onSearchChange,
+  onCategoryChange,
+  onDateFromChange,
+  onDateToChange,
+  onClearFilters,
+}: AnalysisHistoryHeaderProps) {
+  const handleCategoryChange = (value: string) => {
+    if (value === 'all' || value === 'filename' || value === 'role' || value === 'company') {
+      onCategoryChange(value);
+    }
+  };
+
   return (
-    <div className="flex w-full flex-col gap-5 md:flex-row md:items-center md:justify-between">
+    <div className="flex w-full flex-col gap-5">
       <div className="flex flex-col gap-1.5">
         <h1 className="text-[32px] font-extrabold leading-normal text-[#111827]">Resume History</h1>
         <p className="text-sm font-normal text-[#4b5563]">View and track all your resume optimization results</p>
@@ -101,22 +128,65 @@ export function AnalysisHistoryHeader({ disabled = false }: AnalysisHistoryHeade
           <Search className="size-4 shrink-0 text-[#737885]" />
           <input
             type="text"
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
             placeholder="Search resumes..."
             disabled={disabled}
+            aria-label="Search resume history"
             className="w-full min-w-0 bg-transparent text-sm font-normal text-[#111827] outline-none placeholder:text-[#737885]"
           />
         </label>
 
-        <button
-          type="button"
-          disabled={disabled}
-          className={`flex items-center gap-3 rounded-[10px] border border-[#e5e7eb] px-3.5 py-2.5 text-sm font-semibold text-[#4b5563] ${
-            disabled ? 'bg-white/[0.72] opacity-60' : ''
-          }`}
-        >
-          All Categories
-          <ChevronDown className="size-3.5 text-[#4b5563]" />
-        </button>
+        <label className="relative">
+          <span className="sr-only">Search category</span>
+          <select
+            value={category}
+            onChange={(event) => handleCategoryChange(event.target.value)}
+            disabled={disabled}
+            className="h-[42px] appearance-none rounded-[10px] border border-[#e5e7eb] bg-white/[0.85] py-2.5 pl-3.5 pr-9 text-sm font-semibold text-[#4b5563] disabled:opacity-60"
+          >
+            <option value="all">All Fields</option>
+            <option value="filename">Resume Filename</option>
+            <option value="role">Target Job/Role</option>
+            <option value="company">Company Name</option>
+          </select>
+          <ChevronDown aria-hidden className="pointer-events-none absolute right-3 top-1/2 size-3.5 -translate-y-1/2 text-[#4b5563]" />
+        </label>
+
+        <label className="flex h-[42px] items-center gap-2 rounded-[10px] border border-[#e5e7eb] bg-white/[0.85] px-3 text-sm text-[#4b5563]">
+          <span className="whitespace-nowrap text-xs font-semibold">From</span>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(event) => onDateFromChange(event.target.value)}
+            disabled={disabled}
+            aria-label="Filter analyses from date"
+            className="min-w-0 bg-transparent text-sm text-[#111827] outline-none disabled:opacity-60"
+          />
+        </label>
+
+        <label className="flex h-[42px] items-center gap-2 rounded-[10px] border border-[#e5e7eb] bg-white/[0.85] px-3 text-sm text-[#4b5563]">
+          <span className="whitespace-nowrap text-xs font-semibold">To</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(event) => onDateToChange(event.target.value)}
+            disabled={disabled}
+            aria-label="Filter analyses to date"
+            className="min-w-0 bg-transparent text-sm text-[#111827] outline-none disabled:opacity-60"
+          />
+        </label>
+
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={onClearFilters}
+            className="flex h-[42px] items-center gap-2 rounded-[10px] px-3 text-sm font-semibold text-[#6d28d9] transition-colors hover:bg-[#8b5cf6]/10"
+          >
+            <CircleX aria-hidden className="size-4" />
+            Clear filters
+          </button>
+        )}
       </div>
     </div>
   );

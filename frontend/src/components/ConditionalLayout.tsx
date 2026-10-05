@@ -14,10 +14,10 @@ const AUTHENTICATED_FROM_VALUES = ['dashboard', 'profile', 'analysis-history', '
 // borrow it from the "from" query param.
 const LEGAL_ROUTES = ['/privacy', '/terms-of-service'];
 // Legal pages opened from these pages keep the Navbar hidden (they have none)
-const NO_NAVBAR_FROM_VALUES = ['signup', 'signin', 'forgot-password'];
+const NO_NAVBAR_FROM_VALUES = ['signup', 'signin', 'forgot-password', 'mfa-challenge'];
 // Auth pages that draw their own full-screen layout (AuthShell / sign-in page),
 // including their own footer, so the site-wide Navbar and Footer are hidden.
-const HIDDEN_ROUTES = ['/signup', '/signin', '/forgot-password', '/reset-password'];
+const HIDDEN_ROUTES = ['/signup', '/signin', '/forgot-password', '/reset-password', '/mfa-challenge'];
 
 // Layout wrapper that conditionally shows/hides the Navbar and Footer
 // based on the current route, and drives the Navbar's authenticated

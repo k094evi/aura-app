@@ -30,6 +30,7 @@ def _extract_user(user_obj, full_name: Optional[str] = None) -> AuthUser:
         full_name=full_name or metadata.get("full_name"),
         providers=sorted({provider for provider in providers if provider}),
         password_changed_at=app_metadata.get("password_changed_at"),
+        mfa_enabled=bool(app_metadata.get("mfa_enabled", False)),
     )
 
 
@@ -88,11 +89,15 @@ def sign_in(email: str, password: str) -> AuthResponse:
     if not result.user or not result.session:
         raise ValueError("Invalid email or password.")
 
+    user = _extract_user(result.user)
     return AuthResponse(
-        user=_extract_user(result.user),
+        user=user,
         access_token=result.session.access_token,
         refresh_token=result.session.refresh_token,
         email_confirmation_required=False,
+        # Password login only yields an aal1 session. If 2FA is on, the
+        # caller must finish /auth/mfa/challenge to get an aal2 session.
+        mfa_required=user.mfa_enabled,
     )
 
 
@@ -399,6 +404,48 @@ def verify_mfa(
         ),
         "access_token": result.access_token,
         "refresh_token": result.refresh_token,
+    }
+
+
+_INVALID_MFA_CODE = "That code is invalid or expired. Please try again."
+
+
+def challenge_mfa(access_token: str, refresh_token: str, code: str) -> dict:
+    """
+    Second step of sign-in for accounts with 2FA enabled.
+
+    The caller already holds an aal1 session from the password step. We look
+    up their verified TOTP factor server-side (the client never needs to know
+    or send a factor id), verify the code, and return the upgraded aal2
+    tokens that get_current_user accepts.
+    """
+    client = _user_client(access_token, refresh_token)
+    try:
+        factors = client.auth.mfa.list_factors()
+        factor = next((f for f in factors.totp if f.status == "verified"), None)
+    except Exception as exc:
+        logger.warning("Could not list MFA factors for challenge: %s", exc)
+        raise ValueError("Could not load two-factor authentication. Please try again.") from exc
+
+    if factor is None:
+        raise ValueError("Two-factor authentication is not set up on this account.")
+
+    try:
+        result = client.auth.mfa.challenge_and_verify(
+            {"factor_id": factor.id, "code": code}
+        )
+    except Exception as exc:
+        logger.warning("MFA challenge failed: %s", exc)
+        raise ValueError(_INVALID_MFA_CODE) from exc
+
+    if not result or not result.access_token:
+        raise ValueError(_INVALID_MFA_CODE)
+
+    return {
+        "message": "Two-factor authentication verified.",
+        "access_token": result.access_token,
+        "refresh_token": result.refresh_token,
+        "user": _extract_user(result.user) if getattr(result, "user", None) else None,
     }
 
 

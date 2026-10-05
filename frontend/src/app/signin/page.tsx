@@ -105,7 +105,9 @@ export default function LoginPage() {
 
       // On success isSubmitting is intentionally left true so the button
       // stays disabled until the navigation completes.
-      router.push('/dashboard');
+      // Accounts with 2FA only hold a password-level (aal1) session here,
+      // which the backend rejects on protected routes until the code is entered.
+      router.push(data.mfa_required ? '/mfa-challenge' : '/dashboard');
     } catch (err: any) {
       setError(err.message || 'Something went wrong. Please try again.');
       setIsSubmitting(false);

@@ -12,7 +12,6 @@ import { getStoredUser } from '@/lib/auth';
 const AUTH_NAV_LINKS = [
   { label: 'Dashboard', href: '/dashboard' },
   { label: 'History', href: '/analysis-history' },
-  { label: 'AI Mode', href: '/ai-mode' },
   { label: 'Settings', href: '/settings' },
 ];
 
