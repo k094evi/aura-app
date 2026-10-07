@@ -2,36 +2,32 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 
-// Represents a single skill, whether it's missing from the resume, and a recommendation
-type SkillGap = {
+type OptimizationItem = {
   skill: string;
   missing: boolean;
   recommendation: string;
+  source_companies?: string[];
 };
 
 type KeywordSkillOptimizationProps = {
-  // From your single best-matching job posting
-  skillGaps: SkillGap[];
-  // From the best posting of each of your top 3 matched companies
-  keywordGaps?: SkillGap[];
+  items: OptimizationItem[];
 };
 
-// Skills shown per page (a 2 x 2 grid, as in the Figma design)
+// Terms shown per page (a 2 x 2 grid, as in the Figma design)
 const PAGE_SIZE = 4;
 
-// Card displaying a paginated grid of skills, each with a status badge and a recommendation
+// Card displaying a paginated grid of terms, each with a status badge and a recommendation
 export default function KeywordSkillOptimization({
-  skillGaps,
-  keywordGaps = [],
+  items,
 }: KeywordSkillOptimizationProps) {
-  const [tab, setTab] = useState<'skills' | 'keywords'>('skills');
   const [page, setPage] = useState(0);
 
-  const items = tab === 'skills' ? skillGaps : keywordGaps;
-  const noun = tab === 'skills' ? 'skills' : 'keywords';
+  useEffect(() => {
+    setPage(0);
+  }, [items]);
 
   const total = items.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -55,35 +51,14 @@ export default function KeywordSkillOptimization({
             Keyword &amp; Skill Optimization
           </h3>
           <p className="text-[13px] text-[#4b5563]">
-            Optimize keyword relevance for your target role level
+            Mixed skills and keywords requested by your top five matched companies
           </p>
         </div>
       </div>
 
-      {/* Tabs: skills come from the top job, keywords from the top 3 companies */}
-      <div className="flex gap-2">
-        {(['skills', 'keywords'] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => {
-              setTab(t);
-              setPage(0);
-            }}
-            className={`rounded-[10px] px-4 py-2 text-[13px] font-medium capitalize transition ${
-              tab === t
-                ? 'bg-[#8b5cf6] text-white'
-                : 'border border-[#e5e7eb] bg-white/[0.72] text-[#4b5563] hover:bg-white'
-            }`}
-          >
-            {t === 'skills' ? 'Skills (top job)' : 'Keywords (top 3 companies)'}
-          </button>
-        ))}
-      </div>
-
-      {/* Skills grid - each item shows skill name, status badge, and recommendation */}
+      {/* One mixed list of skill and keyword terms from the top five companies */}
       {total === 0 ? (
-        <p className="text-[13px] text-[#4b5563]">No {noun} to show yet.</p>
+        <p className="text-[13px] text-[#4b5563]">No keywords or skills to show yet.</p>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {visible.map((item, i) => (
@@ -108,6 +83,12 @@ export default function KeywordSkillOptimization({
                 )}
               </div>
 
+              {item.source_companies?.length ? (
+                <p className="text-[11px] font-semibold text-[#7c3aed]">
+                  From: {item.source_companies.join(', ')}
+                </p>
+              ) : null}
+
               <p className="text-[13px] leading-[1.4] text-[#4b5563]">{item.recommendation}</p>
             </div>
           ))}
@@ -118,7 +99,7 @@ export default function KeywordSkillOptimization({
       {totalPages > 1 && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-[13px] text-[#4b5563]">
-            Showing {startIndex + 1}–{startIndex + visible.length} of {total} {noun}
+            Showing {startIndex + 1}–{startIndex + visible.length} of {total} terms
           </p>
 
           <div className="flex items-center gap-[10px] font-medium">

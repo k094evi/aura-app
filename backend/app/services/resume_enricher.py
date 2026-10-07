@@ -776,16 +776,16 @@ def _detect_keyword_gaps_from_postings(
     postings: list[dict],
 ) -> list[dict]:
     """
-    KEYWORD path: looks at the postings of the user's top companies (the
-    controller passes the best job of each of the top 3) and reports terms
-    ranked by how many of those postings mention them. A term wanted by
-    3 of 3 companies is a stronger signal than one from a single posting.
+    Optimization path: looks at the best posting for each of the user's top
+    five companies and reports terms ranked by how many postings mention them.
 
-    postings: [{"text": str, "label": "Title at Company", "exclude_terms": set}]
-    Returns the same {skill, missing, recommendation} shape as skill_gaps.
+    postings: [{"text": str, "label": "Title at Company", "company": str,
+                "exclude_terms": set}]
+    Returns {skill, missing, recommendation, source_companies} entries.
     """
     counts: dict[str, int] = {}
     display: dict[str, str] = {}
+    companies_by_term: dict[str, list[str]] = {}
     for posting in postings:
         terms = extract_skill_terms_from_posting(
             posting["text"], top_n=20, exclude_terms=posting.get("exclude_terms")
@@ -794,6 +794,9 @@ def _detect_keyword_gaps_from_postings(
             key = term.lower()
             counts[key] = counts.get(key, 0) + 1
             display.setdefault(key, term)
+            company = posting.get("company")
+            if company and company not in companies_by_term.setdefault(key, []):
+                companies_by_term[key].append(company)
 
     if not counts:
         return []
@@ -817,6 +820,7 @@ def _detect_keyword_gaps_from_postings(
         results.append({
             "skill": shown,
             "missing": not present,
+            "source_companies": companies_by_term.get(k, []),
             "recommendation": (
                 f"Found in your resume \u2014 also asked for in {where}."
                 if present else

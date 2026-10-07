@@ -5,7 +5,7 @@
 #   Defines all Pydantic models used for authentication — both the
 #   request bodies the API accepts and the response bodies it returns.
 #   Pydantic models give FastAPI automatic request validation (e.g.
-#   rejecting a signup with a password under 8 characters before your
+# rejecting a signup with a password that doesn't meet policy before your
 #   code even runs) and automatic response serialization + OpenAPI/Swagger
 #   docs generation.
 #
@@ -28,7 +28,9 @@ Matches the fields used in app/services/auth_service.py.
 """
 
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field
+import re
+
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 # ============================================================================
@@ -37,12 +39,38 @@ from pydantic import BaseModel, EmailStr, Field
 
 # POST /auth/signup body.
 # EmailStr automatically validates that `email` looks like a real email
-# address. Field(min_length=8) rejects short passwords with a 422 before
+# address. Password policy fields reject weak passwords with a 422 before
 # the route function even runs.
+PASSWORD_POLICY_DESCRIPTION = (
+    "At least 8 characters, including a lowercase letter, an uppercase letter, "
+    "a number, and a symbol"
+)
+
+
+def _validate_password_policy(password: str) -> str:
+    meets_policy = (
+        re.search(r"[a-z]", password)
+        and re.search(r"[A-Z]", password)
+        and re.search(r"[0-9]", password)
+        and re.search(r"[^A-Za-z0-9\s]", password)
+    )
+    if not meets_policy:
+        raise ValueError(PASSWORD_POLICY_DESCRIPTION)
+    return password
+
+
 class SignUpRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=8, description="Minimum 8 characters")
+    password: str = Field(
+        min_length=8,
+        description=PASSWORD_POLICY_DESCRIPTION,
+    )
     full_name: Optional[str] = None
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_policy(cls, password: str) -> str:
+        return _validate_password_policy(password)
 
 
 # POST /auth/signin body. No min_length check here — we don't want to
@@ -61,12 +89,20 @@ class ForgotPasswordRequest(BaseModel):
 
 # POST /auth/reset-password body. access_token/refresh_token come from
 # the Supabase reset-password email link (the frontend extracts them
-# from the URL and forwards them here). new_password is held to the
-# same 8-character minimum as signup.
+# from the URL and forwards them here). new_password must meet the same
+# password policy as signup.
 class ResetPasswordRequest(BaseModel):
     access_token: str
     refresh_token: str
-    new_password: str = Field(min_length=8)
+    new_password: str = Field(
+        min_length=8,
+        description=PASSWORD_POLICY_DESCRIPTION,
+    )
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password_policy(cls, password: str) -> str:
+        return _validate_password_policy(password)
 
 
 class UpdateProfileRequest(BaseModel):
@@ -85,7 +121,15 @@ class VerifyEmailChangeRequest(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(min_length=1)
-    new_password: str = Field(min_length=8)
+    new_password: str = Field(
+        min_length=8,
+        description=PASSWORD_POLICY_DESCRIPTION,
+    )
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password_policy(cls, password: str) -> str:
+        return _validate_password_policy(password)
 
 
 # POST /auth/mfa/challenge body — the 6-digit code from the user's

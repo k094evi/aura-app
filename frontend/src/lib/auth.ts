@@ -14,6 +14,29 @@
 const ACCESS_TOKEN_KEY = 'aura_access_token';
 const REFRESH_TOKEN_KEY = 'aura_refresh_token';
 const USER_KEY = 'aura_user';
+export const AUTH_CHANGE_EVENT = 'aura:auth-change';
+const JOTFORM_AGENT_ROOT_ID = 'JotformAgent-01a108ada8687000814d4e82b99ffcaab47d';
+const JOTFORM_AUTH_GATE_STYLE_ID = 'aura-jotform-auth-gate';
+
+export function setJotformAgentVisible(isVisible: boolean) {
+  if (typeof document === 'undefined') return;
+
+  const existingStyle = document.getElementById(JOTFORM_AUTH_GATE_STYLE_ID);
+  if (isVisible) {
+    existingStyle?.remove();
+    return;
+  }
+
+  if (existingStyle) return;
+  const style = document.createElement('style');
+  style.id = JOTFORM_AUTH_GATE_STYLE_ID;
+  style.textContent = `#${JOTFORM_AGENT_ROOT_ID} { display: none !important; }`;
+  document.head.appendChild(style);
+}
+
+function notifyAuthChange() {
+  window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
+}
 
 export interface StoredUser {
   id: string;
@@ -51,6 +74,8 @@ export function saveSession(
   if (user) {
     localStorage.setItem(USER_KEY, JSON.stringify(user));
   }
+  setJotformAgentVisible(true);
+  notifyAuthChange();
 }
 
 export function getAccessToken(): string | null {
@@ -95,6 +120,8 @@ export function clearSession() {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  setJotformAgentVisible(false);
+  notifyAuthChange();
 }
 
 /**

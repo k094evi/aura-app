@@ -1,8 +1,12 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import Script from 'next/script';
-import { getAccessToken } from '@/lib/auth';
+import {
+  AUTH_CHANGE_EVENT,
+  getAccessToken,
+  setJotformAgentVisible,
+} from '@/lib/auth';
 
 interface AgentIdentity {
   metadata: Record<string, string>;
@@ -10,12 +14,45 @@ interface AgentIdentity {
   userHash: string;
 }
 
+function subscribeToAuthChanges(onChange: () => void) {
+  if (typeof window === 'undefined') return () => {};
+
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === 'aura_access_token' || event.key === null) onChange();
+  };
+  const handleAuthChange = () => onChange();
+  window.addEventListener('storage', handleStorage);
+  window.addEventListener(AUTH_CHANGE_EVENT, handleAuthChange);
+  return () => {
+    window.removeEventListener('storage', handleStorage);
+    window.removeEventListener(AUTH_CHANGE_EVENT, handleAuthChange);
+  };
+}
+
+function getAuthSnapshot() {
+  return !!getAccessToken();
+}
+
+function getServerAuthSnapshot() {
+  return false;
+}
+
 export default function DashboardChatbot() {
+  const isAuthenticated = useSyncExternalStore(
+    subscribeToAuthChanges,
+    getAuthSnapshot,
+    getServerAuthSnapshot
+  );
+
+  useEffect(() => {
+    setJotformAgentVisible(isAuthenticated);
+  }, [isAuthenticated]);
+
   useEffect(() => {
     let cancelled = false;
     const accessToken = getAccessToken();
 
-    if (!accessToken) return;
+    if (!isAuthenticated || !accessToken) return;
 
     const identifyUser = async () => {
       try {
@@ -45,7 +82,9 @@ export default function DashboardChatbot() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isAuthenticated]);
+
+  if (!isAuthenticated) return null;
 
   return (
     <Script

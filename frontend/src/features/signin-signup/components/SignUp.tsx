@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { saveSession } from '@/lib/auth';
+import { getPasswordPolicyError, PASSWORD_POLICY_MESSAGE } from '@/lib/passwordPolicy';
 import AuthShell, { GRADIENT_BG } from './AuthShell';
 import OtpVerification from './OtpVerification';
 
@@ -68,9 +69,7 @@ export default function SignUp() {
         : null;
     const nextPasswordError = !password
       ? 'Password is required'
-      : password.length < 8
-        ? 'Password must be at least 8 characters'
-        : null;
+      : getPasswordPolicyError(password);
     const nextConfirmError = !confirm
       ? 'Please confirm your password'
       : confirm !== password
@@ -229,6 +228,7 @@ export default function SignUp() {
                   </button>
                 </div>
                 {passwordError && <p className="text-[12px] font-medium text-[#ef4444]">{passwordError}</p>}
+                <p className="text-[12px] text-[#6b7280]">{PASSWORD_POLICY_MESSAGE}</p>
               </div>
 
               {/* Confirm password */}

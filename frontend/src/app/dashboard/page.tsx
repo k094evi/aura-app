@@ -289,7 +289,9 @@ export default function DashboardPage() {
               <KeyStrengths strengths={result.strengths} />
               <SmartSuggestions improvements={result.improvements} />
             </div>
-            <KeywordSkillOptimization skillGaps={result.skill_gaps} keywordGaps={result.keyword_gaps ?? []} />
+            <KeywordSkillOptimization
+              items={result.keyword_gaps?.length ? result.keyword_gaps : result.skill_gaps}
+            />
             <CertificationRecommendations certifications={result.certifications ?? []} />
             <FormattingReadability grammarIssues={result.grammar_issues} />
             <CompanyMatchCarousel companies={result.companies} />

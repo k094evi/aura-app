@@ -52,8 +52,13 @@ export interface AnalysisResult {
   strengths: string[];
   improvements: string[];
   skill_gaps: { skill: string; missing: boolean; recommendation: string }[];
-  // Keywords asked for across the top 3 matched companies (skills use only the top job)
-  keyword_gaps?: { skill: string; missing: boolean; recommendation: string }[];
+  // Combined skill/keyword terms requested across the top five matched companies.
+  keyword_gaps?: {
+    skill: string;
+    missing: boolean;
+    recommendation: string;
+    source_companies?: string[];
+  }[];
   grammar_issues: { type: string; text: string }[];
   // Optional: only present when the backend returns certification suggestions
   certifications?: {

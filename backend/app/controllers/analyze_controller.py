@@ -1310,12 +1310,11 @@ def _select_job_posting_text(
     return None, None, set()
 
 
-def _select_keyword_postings(result, n: int = 3) -> list[dict]:
+def _select_keyword_postings(result, n: int = 5) -> list[dict]:
     """
-    Keyword optimization uses the top `n` COMPANIES (skills still use only
-    the single top job — see _select_job_posting_text). For each of the top
-    n ranked companies we take that company's best-scoring job and its FULL
-    description.
+    Keyword and skill optimization uses the top `n` COMPANIES. For each of
+    the top n ranked companies, take that company's best-scoring job and its
+    FULL description.
     """
     postings: list[dict] = []
     for company_match in (result.top_companies or [])[:n]:
@@ -1331,6 +1330,7 @@ def _select_keyword_postings(result, n: int = 3) -> list[dict]:
         postings.append({
             "text": description.strip(),
             "label": f"{title} at {company}",
+            "company": company,
             "exclude_terms": _tokenize_for_exclusion(f"{title} {company}"),
         })
     return postings
@@ -1750,7 +1750,7 @@ async def handle_analyze(
             "to hardcoded taxonomy"
         )
 
-    keyword_postings = _select_keyword_postings(result, n=3)
+    keyword_postings = _select_keyword_postings(result, n=5)
     logger.info(
         "Keyword source: %d posting(s) from top companies: %s",
         len(keyword_postings),

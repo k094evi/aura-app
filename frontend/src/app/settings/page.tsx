@@ -14,6 +14,7 @@ import {
 } from '@/features/settings/components/SettingsUI';
 import TwoFactorModal from '@/features/settings/components/TwoFactorModal';
 import { authSessionHeaders, clearSession, saveSession, saveUser } from '@/lib/auth';
+import { getPasswordPolicyError, PASSWORD_POLICY_MESSAGE } from '@/lib/passwordPolicy';
 
 type SettingsAccount = {
   id: string;
@@ -226,8 +227,9 @@ export default function SettingsPage() {
       setPasswordError('Fill in all three fields.');
       return;
     }
-    if (newPassword.length < 8) {
-      setPasswordError('New password must be at least 8 characters.');
+    const newPasswordPolicyError = getPasswordPolicyError(newPassword);
+    if (newPasswordPolicyError) {
+      setPasswordError(newPasswordPolicyError.replace(/^Password/, 'New password'));
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -475,10 +477,11 @@ export default function SettingsPage() {
                 type="password"
                 value={newPassword}
                 onChange={setNewPassword}
-                placeholder="At least 8 characters"
+                placeholder="Enter a new password"
                 autoComplete="new-password"
                 disabled={passwordLocked || passwordSaving}
               />
+              <p className="text-xs text-[#667085]">{PASSWORD_POLICY_MESSAGE}</p>
               <TextField
                 label="Confirm New Password"
                 type="password"
