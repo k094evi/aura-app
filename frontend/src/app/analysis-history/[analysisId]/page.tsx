@@ -197,6 +197,45 @@ function normalizeSkillList(value: unknown): string[] {
     .filter(Boolean);
 }
 
+type MixedTerm = {
+  skill: string;
+  missing: boolean;
+  recommendation: string;
+  companies: string[];
+};
+
+// One mixed list of skills + keywords from the top five companies; each term
+// carries the companies whose postings asked for it. Falls back to the older
+// skill_gaps array for analyses saved before keyword_gaps existed.
+function getMixedTerms(result: AnyRecord): MixedTerm[] {
+  const source =
+    Array.isArray(result.keyword_gaps) && result.keyword_gaps.length > 0
+      ? result.keyword_gaps
+      : Array.isArray(result.skill_gaps)
+        ? result.skill_gaps
+        : [];
+
+  const seen = new Set<string>();
+  const terms: MixedTerm[] = [];
+
+  source.forEach((item: unknown) => {
+    if (!isRecord(item)) return;
+    const skill = String(item.skill ?? item.name ?? '').trim();
+    if (!skill || seen.has(skill.toLowerCase())) return;
+    seen.add(skill.toLowerCase());
+    terms.push({
+      skill,
+      missing: item.missing === true,
+      recommendation: String(item.recommendation ?? ''),
+      companies: Array.isArray(item.source_companies)
+        ? item.source_companies.map(String).filter(Boolean)
+        : [],
+    });
+  });
+
+  return terms;
+}
+
 function getSkillData(result: AnyRecord) {
   const raw = result.skill_gaps;
 
@@ -480,6 +519,8 @@ export default function AnalysisHistoryDetailPage() {
 
     const skillData = getSkillData(result);
 
+    const mixedTerms = getMixedTerms(result);
+
     const status = getStatus(atsScore);
 
     return {
@@ -495,6 +536,7 @@ export default function AnalysisHistoryDetailPage() {
       topJobs,
       keywords,
       skillData,
+      mixedTerms,
       status,
     };
   }, [analysis]);
@@ -556,6 +598,7 @@ export default function AnalysisHistoryDetailPage() {
     topJobs,
     keywords,
     skillData,
+    mixedTerms,
     status,
   } = view;
 
@@ -569,16 +612,11 @@ export default function AnalysisHistoryDetailPage() {
     selectedCompanies.length - displayedCompanies.length
   );
 
-  const totalSkills =
-    skillData.matched.length +
-    skillData.required.length +
-    skillData.optional.length;
+  const matchedCount = mixedTerms.filter((t) => !t.missing).length;
 
   const keywordCoverage =
-    totalSkills > 0
-      ? Math.round(
-          (skillData.matched.length / totalSkills) * 100
-        )
+    mixedTerms.length > 0
+      ? Math.round((matchedCount / mixedTerms.length) * 100)
       : keywords.length > 0
         ? 100
         : 0;
@@ -1000,7 +1038,7 @@ export default function AnalysisHistoryDetailPage() {
                 </div>
 
                 <div className="text-gray-600 text-xs font-normal font-['DM_Sans']">
-                  Role-specific terms found in the saved resume
+                  Mixed skills and keywords requested by your top five matched companies
                 </div>
               </div>
             </div>
@@ -1016,98 +1054,54 @@ export default function AnalysisHistoryDetailPage() {
             </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-5">
-            {/* Matched */}
+          <div className="grid md:grid-cols-2 gap-4">
+            {mixedTerms.length === 0 ? (
+              <span className="text-gray-500 text-xs font-['DM_Sans']">
+                No keywords or skills were saved.
+              </span>
+            ) : (
+              mixedTerms.map((term) => (
+                <div
+                  key={term.skill}
+                  className="p-5 bg-white/60 rounded-2xl outline outline-1 outline-white flex flex-col gap-2.5"
+                >
+                  <div className="flex justify-between items-center gap-3">
+                    <div className="text-gray-900 text-sm font-bold font-['DM_Sans'] truncate">
+                      {term.skill}
+                    </div>
 
-            <div className="p-5 bg-white/60 rounded-2xl outline outline-1 outline-white flex flex-col gap-3.5">
-              <div className="flex justify-between items-center">
-                <div className="text-gray-900 text-base font-bold font-['DM_Sans']">
-                  Matched in resume
-                </div>
+                    {term.missing ? (
+                      <span className="shrink-0 px-2.5 py-[5px] bg-amber-100 rounded-full text-amber-600 text-xs font-bold font-['DM_Sans']">
+                        Missing
+                      </span>
+                    ) : (
+                      <span className="shrink-0 px-2.5 py-[5px] bg-emerald-50 rounded-full text-emerald-500 text-xs font-bold font-['DM_Sans']">
+                        ✓ In resume
+                      </span>
+                    )}
+                  </div>
 
-                <div className="px-2.5 py-[5px] bg-emerald-50 rounded-full text-emerald-500 text-xs font-bold font-['DM_Sans']">
-                  {skillData.matched.length} matched
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {skillData.matched.length > 0 ? (
-                  skillData.matched.map((skill) => (
-                    <span
-                      key={skill}
-                      className="px-2.5 py-[5px] bg-emerald-50 rounded-full text-emerald-500 text-xs font-bold font-['DM_Sans']"
-                    >
-                      ✓ {skill}
-                    </span>
-                  ))
-                ) : keywords.length > 0 ? (
-                  keywords.map((keyword) => (
-                    <span
-                      key={keyword}
-                      className="px-2.5 py-[5px] bg-emerald-50 rounded-full text-emerald-500 text-xs font-bold font-['DM_Sans']"
-                    >
-                      ✓ {keyword}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-gray-500 text-xs font-['DM_Sans']">
-                    No matched skills were saved.
-                  </span>
-                )}
-              </div>
-
-              <div className="text-gray-600 text-xs font-normal font-['DM_Sans'] leading-4">
-                Skills shown here come from the saved role-specific analysis.
-              </div>
-            </div>
-
-            {/* Gaps */}
-
-            <div className="p-5 bg-white/60 rounded-2xl outline outline-1 outline-white flex flex-col gap-3.5">
-              <div className="flex justify-between items-center">
-                <div className="text-gray-900 text-base font-bold font-['DM_Sans']">
-                  Relevant gaps
-                </div>
-
-                <div className="px-2.5 py-[5px] bg-amber-100 rounded-full text-amber-600 text-xs font-bold font-['DM_Sans']">
-                  {skillData.required.length +
-                    skillData.optional.length}{' '}
-                  opportunities
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {skillData.required.map((skill) => (
-                  <span
-                    key={`required-${skill}`}
-                    className="px-2.5 py-[5px] bg-red-100 rounded-full text-red-600 text-xs font-bold font-['DM_Sans']"
-                  >
-                    Required · {skill}
-                  </span>
-                ))}
-
-                {skillData.optional.map((skill) => (
-                  <span
-                    key={`optional-${skill}`}
-                    className="px-2.5 py-[5px] bg-amber-100 rounded-full text-amber-600 text-xs font-bold font-['DM_Sans']"
-                  >
-                    Optional · {skill}
-                  </span>
-                ))}
-
-                {skillData.required.length === 0 &&
-                  skillData.optional.length === 0 && (
-                    <span className="text-emerald-500 text-xs font-bold font-['DM_Sans']">
-                      No skill gaps were saved.
-                    </span>
+                  {term.companies.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {term.companies.map((company) => (
+                        <span
+                          key={company}
+                          className="px-2 py-[3px] bg-violet-500/10 rounded-full text-violet-600 text-[11px] font-semibold font-['DM_Sans']"
+                        >
+                          {company}
+                        </span>
+                      ))}
+                    </div>
                   )}
-              </div>
 
-              <div className="text-gray-600 text-xs font-normal font-['DM_Sans'] leading-4">
-                Required and optional gaps are based on the selected{' '}
-                {targetJob} role.
-              </div>
-            </div>
+                  {term.recommendation && (
+                    <div className="text-gray-600 text-xs font-normal font-['DM_Sans'] leading-4">
+                      {term.recommendation}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
 
           <div className="flex items-center gap-3.5">

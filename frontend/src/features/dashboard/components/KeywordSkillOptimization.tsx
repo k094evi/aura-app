@@ -71,22 +71,29 @@ export default function KeywordSkillOptimization({
                   {item.skill}
                 </span>
 
-                {/* Badge indicates whether the skill is missing (optional) or present (required) */}
+                {/* Badge: in the resume already, or missing from it */}
                 {item.missing ? (
-                  <span className="shrink-0 rounded-[6px] bg-[#fef9c3] px-2 py-1 text-[10px] font-extrabold leading-none text-[#a16207]">
-                    Optional
+                  <span className="shrink-0 rounded-[6px] bg-[#fee2e2] px-2 py-1 text-[10px] font-extrabold leading-none text-[#dc2626]">
+                    Missing
                   </span>
                 ) : (
-                  <span className="shrink-0 rounded-[6px] bg-[#fee2e2] px-2 py-1 text-[10px] font-extrabold leading-none text-[#dc2626]">
-                    Required
+                  <span className="shrink-0 rounded-[6px] bg-[#dcfce7] px-2 py-1 text-[10px] font-extrabold leading-none text-[#16a34a]">
+                    In resume
                   </span>
                 )}
               </div>
 
               {item.source_companies?.length ? (
-                <p className="text-[11px] font-semibold text-[#7c3aed]">
-                  From: {item.source_companies.join(', ')}
-                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {item.source_companies.map((company) => (
+                    <span
+                      key={company}
+                      className="rounded-full bg-[#8b5cf6]/10 px-2 py-[3px] text-[11px] font-semibold text-[#7c3aed]"
+                    >
+                      {company}
+                    </span>
+                  ))}
+                </div>
               ) : null}
 
               <p className="text-[13px] leading-[1.4] text-[#4b5563]">{item.recommendation}</p>
