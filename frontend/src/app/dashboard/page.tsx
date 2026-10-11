@@ -24,6 +24,7 @@ import {
   type UploadPayload,
 } from '@/features/dashboard/components';
 import { SettingsBackground } from '@/features/settings/components/SettingsUI';
+import { AUTH_CHANGE_EVENT, getStoredUser, isAuthenticated } from '@/lib/auth';
 
 // Keeps the last analysis across a page refresh (cleared when the tab closes).
 // Bumped to v2: the stored value is now the API shape (AnalysisResult), not the old card props.
@@ -34,6 +35,13 @@ const STORAGE_KEY = 'aura:last-analysis:v2';
 // and would never move again after the first upload). Persisted alongside
 // the last result so it survives a refresh, cleared when the tab closes.
 const STATS_KEY = 'aura:dashboard-stats:v1';
+
+// Cache keys are scoped to the signed-in user, so one account's last analysis
+// can never load for another account (or after logout).
+function storageKey(base: string): string | null {
+  const id = getStoredUser()?.id;
+  return id && isAuthenticated() ? `${base}:${id}` : null;
+}
 
 const normalizeName = (s: string) => s.trim().toLowerCase();
 
@@ -99,7 +107,9 @@ async function analyzeResume({ file, jobTitle, companies }: UploadPayload): Prom
 
 function loadResumesAnalyzed(): number {
   try {
-    const raw = sessionStorage.getItem(STATS_KEY);
+    const key = storageKey(STATS_KEY);
+    if (!key) return 0;
+    const raw = sessionStorage.getItem(key);
     if (!raw) return 0;
     const parsed = JSON.parse(raw);
     const n = Number(parsed?.resumesAnalyzed);
@@ -111,7 +121,8 @@ function loadResumesAnalyzed(): number {
 
 function saveResumesAnalyzed(count: number) {
   try {
-    sessionStorage.setItem(STATS_KEY, JSON.stringify({ resumesAnalyzed: count }));
+    const key = storageKey(STATS_KEY);
+    if (key) sessionStorage.setItem(key, JSON.stringify({ resumesAnalyzed: count }));
   } catch {
     // Not being able to persist is fine; the in-memory count still shows.
   }
@@ -170,7 +181,8 @@ export default function DashboardPage() {
           setResult(saved);
           try {
             // Keep it across a refresh, same as a fresh analysis.
-            sessionStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+            const key = storageKey(STORAGE_KEY);
+            if (key) sessionStorage.setItem(key, JSON.stringify(saved));
           } catch {
             // Not being able to persist is fine; the results still show.
           }
@@ -186,12 +198,27 @@ export default function DashboardPage() {
     }
 
     try {
-      const saved = sessionStorage.getItem(STORAGE_KEY);
+      const key = storageKey(STORAGE_KEY);
+      const saved = key ? sessionStorage.getItem(key) : null;
       if (saved) setResult(toResult(JSON.parse(saved)));
     } catch {
       // Storage unavailable or corrupted: start from the empty state.
     }
   }, [analysisId]);
+
+  // Logging out (or a 401) fires AUTH_CHANGE_EVENT: wipe whatever is on screen
+  // so the previous user's resume never lingers while the page is still mounted.
+  useEffect(() => {
+    const onAuthChange = () => {
+      if (isAuthenticated()) return;
+      setResult(null);
+      setResumesAnalyzed(0);
+      setError(null);
+      setIsAnalyzing(false);
+    };
+    window.addEventListener(AUTH_CHANGE_EVENT, onAuthChange);
+    return () => window.removeEventListener(AUTH_CHANGE_EVENT, onAuthChange);
+  }, []);
 
   const handleAnalyze = async (payload: UploadPayload) => {
     setIsAnalyzing(true);
@@ -200,7 +227,8 @@ export default function DashboardPage() {
       const next = await analyzeResume(payload);
       setResult(next);
       try {
-        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        const key = storageKey(STORAGE_KEY);
+        if (key) sessionStorage.setItem(key, JSON.stringify(next));
       } catch {
         // Not being able to persist is fine; the results still show.
       }

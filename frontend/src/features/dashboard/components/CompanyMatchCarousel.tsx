@@ -60,6 +60,22 @@ const PH_LOCATIONS = [
   'Remote',
 ];
 
+// The four job types offered in the Job Type filter.
+const JOB_TYPE_OPTIONS = ['Full-time', 'Part-time', 'Contractual', 'Freelance'] as const;
+
+// Maps whatever the backend sends (e.g. "Full-time", "FULLTIME", "Part time",
+// "CONTRACTOR", "Contract", "Freelancer") onto one of the four options above,
+// so the filter still matches when the wording differs. Returns null for
+// anything else (e.g. "Internship"); those only show under "All Job Types".
+function toJobTypeOption(raw: string): (typeof JOB_TYPE_OPTIONS)[number] | null {
+  const text = raw.toLowerCase().replace(/[^a-z]/g, '');
+  if (text.includes('fulltime')) return 'Full-time';
+  if (text.includes('parttime')) return 'Part-time';
+  if (text.includes('contract')) return 'Contractual';
+  if (text.includes('freelance')) return 'Freelance';
+  return null;
+}
+
 // Labelled dropdown from the Figma filter row (native <select> with a custom chevron)
 function FilterSelect({
   id,
@@ -129,14 +145,9 @@ export default function CompanyMatchCarousel({ companies }: CompanyMatchCarousel
   // Index of the company currently shown in the carousel
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Job Type and Experience Level options come straight from this
-  // result's own data (ultimately sourced from the matched jobs'
-  // descriptions/listings), instead of a hardcoded guess list — so the
-  // dropdown always reflects values that can actually match a company.
-  const jobTypeOptions = useMemo(
-    () => distinctValues(companies, (c) => c.jobType),
-    [companies]
-  );
+  // Job Type uses the fixed list above. Experience Level options come
+  // straight from this result's own data, so the dropdown only offers values
+  // that can actually match a company.
   const experienceLevelOptions = useMemo(
     () => distinctValues(companies, (c) => c.experienceLevel),
     [companies]
@@ -157,7 +168,7 @@ export default function CompanyMatchCarousel({ companies }: CompanyMatchCarousel
     return companies.filter((company) => {
       if (locationFilter !== 'All' && !company.location.includes(locationFilter)) return false;
 
-      if (jobTypeFilter !== 'All' && company.jobType !== jobTypeFilter) return false;
+      if (jobTypeFilter !== 'All' && toJobTypeOption(company.jobType) !== jobTypeFilter) return false;
 
       if (experienceLevelFilter !== 'All' && company.experienceLevel !== experienceLevelFilter)
         return false;
@@ -236,7 +247,7 @@ export default function CompanyMatchCarousel({ companies }: CompanyMatchCarousel
           onChange={applyFilter(setJobTypeFilter)}
         >
           <option value="All">All Job Types</option>
-          {jobTypeOptions.map((type) => (
+          {JOB_TYPE_OPTIONS.map((type) => (
             <option key={type} value={type}>
               {type}
             </option>

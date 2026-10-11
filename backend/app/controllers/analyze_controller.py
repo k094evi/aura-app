@@ -77,7 +77,7 @@ from app.services.job_matcher import JobMatcher
 # top_jobs_shaped, fall back to raw_jobs" branch below — gets the exact
 # same job_required_experience interpretation + title-guess fallback,
 # instead of a second, weaker copy of that logic.
-from app.services.jsearch_client import _infer_experience_level
+from app.services.posting_classifier import classify_experience_level
 from app.services.resume_enricher import enrich_resume_local
 from app.services.target_job_matcher import calculate_target_job_gap
 from app.data.it_domain import is_it_title, canonical_it_title
@@ -338,7 +338,7 @@ def _get_experience_level(job: Any) -> str:
         or "experience_mentioned" in value
     ):
         title = _clean_string(_get_attr(job, "title", "job_title"))
-        inferred = _infer_experience_level({"job_required_experience": value}, title)
+        inferred = classify_experience_level({"job_required_experience": value}, title)
         value = inferred  # may still be None -> falls through to the title-only guess below
 
     if value is None:
@@ -348,7 +348,7 @@ def _get_experience_level(job: Any) -> str:
         # JobListing objects, applied here too so this function behaves
         # consistently regardless of which shape of job reaches it.
         title = _clean_string(_get_attr(job, "title", "job_title"))
-        value = _infer_experience_level({}, title)
+        value = classify_experience_level({}, title)
 
     return _clean_string(
         value,

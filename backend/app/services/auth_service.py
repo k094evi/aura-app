@@ -14,10 +14,33 @@ from typing import Optional
 from supabase import create_client
 
 from app.config import settings
-from app.extensions.supabase_client import supabase, supabase_admin
+from app.extensions.supabase_client import supabase_admin
 from app.models.auth_schemas import AuthResponse, AuthUser
 
 logger = logging.getLogger(__name__)
+
+
+def _anon_client():
+    """
+    A brand-new publishable-key client for every call.
+
+    The old shared `supabase` singleton stores whichever session was set last
+    (sign-in, OTP verify, reset-password), so one user's session could bleed
+    into the next request. A fresh client per call keeps sessions isolated.
+    """
+    return create_client(settings.SUPABASE_URL, settings.SUPABASE_PUBLISHABLE_KEY)
+
+
+def _has_verified_factor(user_obj) -> bool:
+    """True if Supabase reports at least one verified MFA factor on the user.
+
+    This is the source of truth for "is 2FA on". The app_metadata flag is only
+    a cache of it, so a failed flag write can never leave 2FA un-enforced.
+    """
+    for factor in getattr(user_obj, "factors", None) or []:
+        if getattr(factor, "status", None) == "verified":
+            return True
+    return False
 
 
 def _extract_user(user_obj, full_name: Optional[str] = None) -> AuthUser:
@@ -27,10 +50,16 @@ def _extract_user(user_obj, full_name: Optional[str] = None) -> AuthUser:
     return AuthUser(
         id=user_obj.id,
         email=user_obj.email,
-        full_name=full_name or metadata.get("full_name"),
+        full_name=(
+            full_name
+            or metadata.get("full_name")
+            or metadata.get("name")
+            or metadata.get("user_name")
+        ),
         providers=sorted({provider for provider in providers if provider}),
         password_changed_at=app_metadata.get("password_changed_at"),
-        mfa_enabled=bool(app_metadata.get("mfa_enabled", False)),
+        mfa_enabled=bool(app_metadata.get("mfa_enabled", False))
+        or _has_verified_factor(user_obj),
     )
 
 
@@ -46,7 +75,7 @@ def _friendly_auth_error(exc: Exception) -> str:
 
 def sign_up(email: str, password: str, full_name: Optional[str] = None) -> AuthResponse:
     try:
-        result = supabase.auth.sign_up({
+        result = _anon_client().auth.sign_up({
             "email": email,
             "password": password,
             "options": {"data": {"full_name": full_name}} if full_name else {},
@@ -78,7 +107,7 @@ def sign_up(email: str, password: str, full_name: Optional[str] = None) -> AuthR
 
 def sign_in(email: str, password: str) -> AuthResponse:
     try:
-        result = supabase.auth.sign_in_with_password({
+        result = _anon_client().auth.sign_in_with_password({
             "email": email,
             "password": password,
         })
@@ -108,15 +137,15 @@ def request_password_reset(email: str, redirect_to: str) -> None:
     don't leak whether a given email has an account (account enumeration).
     """
     try:
-        supabase.auth.reset_password_email(email, {"redirect_to": redirect_to})
+        _anon_client().auth.reset_password_email(email, {"redirect_to": redirect_to})
     except Exception as exc:
         logger.warning("Password reset request failed for %s: %s", email, exc)
 
 
 def reset_password(access_token: str, refresh_token: str, new_password: str) -> None:
     try:
-        supabase.auth.set_session(access_token, refresh_token)
-        supabase.auth.update_user({"password": new_password})
+        client = _user_client(access_token, refresh_token)
+        client.auth.update_user({"password": new_password})
     except Exception as exc:
         logger.warning("Password reset (update) failed: %s", exc)
         raise ValueError(
@@ -128,7 +157,7 @@ _INVALID_CODE = "Invalid or expired code. Please try again."
 
 def verify_signup_otp(email: str, token: str) -> AuthResponse:
     try:
-        result = supabase.auth.verify_otp({"email": email, "token": token, "type": "signup"})
+        result = _anon_client().auth.verify_otp({"email": email, "token": token, "type": "signup"})
     except Exception as exc:
         logger.warning("Signup OTP verify failed for %s: %s", email, exc)
         raise ValueError(_INVALID_CODE) from exc
@@ -146,7 +175,7 @@ def verify_signup_otp(email: str, token: str) -> AuthResponse:
 
 def resend_signup_otp(email: str) -> None:
     try:
-        supabase.auth.resend({"type": "signup", "email": email})
+        _anon_client().auth.resend({"type": "signup", "email": email})
     except Exception as exc:
         logger.warning("Signup OTP resend failed for %s: %s", email, exc)
         raise ValueError("Could not resend the code. Please try again shortly.") from exc
@@ -154,7 +183,7 @@ def resend_signup_otp(email: str) -> None:
 
 def verify_reset_otp(email: str, token: str) -> tuple[str, str]:
     try:
-        result = supabase.auth.verify_otp({"email": email, "token": token, "type": "recovery"})
+        result = _anon_client().auth.verify_otp({"email": email, "token": token, "type": "recovery"})
     except Exception as exc:
         logger.warning("Recovery OTP verify failed for %s: %s", email, exc)
         raise ValueError(_INVALID_CODE) from exc
@@ -320,6 +349,9 @@ def delete_account(user_id: str) -> None:
         raise ValueError("Could not delete your account. Please try again.") from exc
 
 
+_INVALID_MFA_CODE = "That code is invalid or expired. Please try again."
+
+
 def _set_mfa_enabled(user_id: str, enabled: bool) -> None:
     admin_user = supabase_admin.auth.admin.get_user_by_id(user_id).user
     app_metadata = dict(getattr(admin_user, "app_metadata", None) or {})
@@ -351,14 +383,19 @@ def enroll_mfa(access_token: str, refresh_token: str) -> dict:
     client = _user_client(access_token, refresh_token)
     try:
         factors = client.auth.mfa.list_factors()
-        for factor in factors.totp:
-            if factor.status != "verified":
+        # list_factors().totp only contains VERIFIED factors, so abandoned
+        # (unverified) setups never showed up there and kept blocking new
+        # enrollments. `.all` includes every factor regardless of status.
+        for factor in getattr(factors, "all", None) or []:
+            if factor.factor_type == "totp" and factor.status != "verified":
                 client.auth.mfa.unenroll({"factor_id": factor.id})
+        # Unique name so a leftover factor can never collide with this one.
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
         factor = client.auth.mfa.enroll(
-            {"factor_type": "totp", "friendly_name": "Aura authenticator"}
+            {"factor_type": "totp", "friendly_name": f"Aura authenticator {stamp}"}
         )
     except Exception as exc:
-        logger.warning("Could not enroll MFA factor: %s", exc)
+        logger.exception("Could not enroll MFA factor: %s", exc)
         raise ValueError("Could not start two-factor setup. Please try again.") from exc
 
     if not factor.totp:
@@ -380,19 +417,42 @@ def verify_mfa(
     action: str,
 ) -> dict:
     client = _user_client(access_token, refresh_token)
+
+    # Step 1: check the code. Only this step may report "invalid code".
     try:
         result = client.auth.mfa.challenge_and_verify(
             {"factor_id": factor_id, "code": code}
         )
-        if action == "disable":
+    except Exception as exc:
+        logger.warning("MFA %s code check failed: %s", action, exc)
+        raise ValueError(_INVALID_MFA_CODE) from exc
+
+    if not result or not getattr(result, "access_token", None):
+        raise ValueError(_INVALID_MFA_CODE)
+
+    # Step 2: apply the change. Failures here are server problems, not bad
+    # codes, so they get their own message and a full traceback in the log.
+    if action == "disable":
+        try:
             elevated_client = _user_client(result.access_token, result.refresh_token)
             elevated_client.auth.mfa.unenroll({"factor_id": factor_id})
+        except Exception as exc:
+            logger.exception("Could not remove MFA factor for user %s", user_id)
+            raise ValueError(
+                "Your code was correct, but two-factor authentication could not be "
+                "disabled. Please try again."
+            ) from exc
+        try:
             _set_mfa_enabled(user_id, False)
-        elif action == "enable":
+        except Exception:
+            # The factor is already gone, so 2FA is no longer enforced.
+            logger.exception("Could not clear mfa_enabled flag for user %s", user_id)
+    elif action == "enable":
+        try:
             _set_mfa_enabled(user_id, True)
-    except Exception as exc:
-        logger.warning("MFA %s verification failed: %s", action, exc)
-        raise ValueError("That code is invalid or expired. Please try again.") from exc
+        except Exception:
+            # Not fatal: enforcement also checks the verified factor itself.
+            logger.exception("Could not set mfa_enabled flag for user %s", user_id)
 
     return {
         "message": (
@@ -405,9 +465,6 @@ def verify_mfa(
         "access_token": result.access_token,
         "refresh_token": result.refresh_token,
     }
-
-
-_INVALID_MFA_CODE = "That code is invalid or expired. Please try again."
 
 
 def challenge_mfa(access_token: str, refresh_token: str, code: str) -> dict:
@@ -456,3 +513,15 @@ def sign_out_other_sessions(access_token: str, refresh_token: str) -> None:
     except Exception as exc:
         logger.warning("Could not sign out other sessions: %s", exc)
         raise ValueError("Could not sign out other sessions. Please try again.") from exc
+
+
+def sign_out(access_token: str) -> None:
+    """
+    Revokes this device's Supabase session (scope "local" — other devices
+    stay signed in). Never raises: logging out must always succeed from the
+    user's point of view, even if the token already expired.
+    """
+    try:
+        supabase_admin.auth.admin.sign_out(access_token, "local")
+    except Exception as exc:
+        logger.warning("Server-side sign out failed (token may be expired): %s", exc)

@@ -16,6 +16,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from app.services.posting_classifier import (
+    classify_experience_level,
+    classify_job_type,
+    classify_target_job,
+)
+
 logger = logging.getLogger(__name__)
 
 JSEARCH_BASE_URL = "https://jsearch.p.rapidapi.com/search-v2"
@@ -39,67 +45,36 @@ COUNTRY_CODE = "ph"
 # some queries/plans, unlike the plain /search endpoint.)
 _NESTED_LIST_KEYS = ("jobs", "results", "data", "items")
 
-# Title keywords used to guess a seniority level when JSearch's own
-# `job_required_experience` field is missing or uninformative — which is
-# common in practice, since that field depends on the employer having
-# filled it in on the original posting rather than on anything this
-# client controls. Checked as substrings against the lowercased title.
-_SENIOR_TITLE_HINTS = (
-    "senior", "sr.", "sr ", "lead ", " lead", "principal", "staff",
-    "head of", "manager", "director", "architect", "chief",
-)
-_ENTRY_TITLE_HINTS = (
-    "junior", "jr.", "jr ", "entry level", "entry-level", "intern",
-    "internship", "trainee", "fresh graduate", "fresher", "associate",
-)
+def _job_type_from_api(raw: dict) -> Optional[str]:
+    """
+    Reads the employment type JSearch itself reports for a posting and maps it
+    to the four values the dashboard filters on. JSearch sends it as
+    `job_employment_types` (list), `job_employment_type` (single value) and
+    sometimes `job_employment_type_text` — e.g. "FULLTIME", "PARTTIME",
+    "CONTRACTOR", "INTERN". Returns None when none of them map to one of the
+    four values (e.g. INTERN), so the caller can fall back to classifying the
+    posting text.
+    """
+    candidates: list = []
+    listed = raw.get("job_employment_types")
+    if isinstance(listed, list):
+        candidates.extend(listed)
+    candidates.append(raw.get("job_employment_type"))
+    candidates.append(raw.get("job_employment_type_text"))
 
-
-def _experience_level_from_months(months) -> Optional[str]:
-    """Buckets a required-experience figure (in months) into a display level."""
-    if not isinstance(months, (int, float)):
-        return None
-    if months <= 12:
-        return "Entry Level"
-    if months <= 60:
-        return "Mid Level"
-    return "Senior Level"
-
-
-def _experience_level_from_title(title: str) -> Optional[str]:
-    """Last-resort guess from the job title itself — titles almost always
-    say something ("Senior Backend Engineer", "Marketing Intern") even
-    when the structured experience field on the listing doesn't."""
-    t = (title or "").lower()
-    if any(hint in t for hint in _SENIOR_TITLE_HINTS):
-        return "Senior Level"
-    if any(hint in t for hint in _ENTRY_TITLE_HINTS):
-        return "Entry Level"
+    for value in candidates:
+        if not isinstance(value, str):
+            continue
+        text = "".join(ch for ch in value.lower() if ch.isalpha())
+        if "fulltime" in text:
+            return "Full-time"
+        if "parttime" in text:
+            return "Part-time"
+        if "contract" in text:
+            return "Contractual"
+        if "freelance" in text:
+            return "Freelance"
     return None
-
-
-def _infer_experience_level(raw: dict, title: str) -> Optional[str]:
-    """
-    JSearch's `job_required_experience` field, when present, looks like:
-        {"no_experience_required": false, "required_experience_in_months": 24,
-         "experience_mentioned": true, "experience_preferred": false}
-    In practice a large share of real listings leave this null/empty —
-    that's a gap in what employers filled in on the original posting,
-    not something fixable by querying JSearch differently. Falls back
-    through, in order:
-      1. the structured months figure, when JSearch provided one
-      2. "Entry Level" when JSearch explicitly flags no experience required
-      3. a seniority guess from the job title (see _experience_level_from_title)
-    Returns None only if none of the above yield anything usable.
-    """
-    req = raw.get("job_required_experience")
-    if isinstance(req, dict):
-        if req.get("no_experience_required"):
-            return "Entry Level"
-        level = _experience_level_from_months(req.get("required_experience_in_months"))
-        if level:
-            return level
-
-    return _experience_level_from_title(title)
 
 
 @dataclass
@@ -114,15 +89,15 @@ class JobListing:
     url:              str
     category:         str
     keywords_matched: List[str] = field(default_factory=list)
-    # Seniority/experience level for this listing (e.g. "Entry Level",
-    # "Mid Level", "Senior Level"), or None if nothing could be
-    # determined at all. See _infer_experience_level() below for how
-    # this gets filled in — it did NOT exist as a field on this
-    # dataclass before, which is the actual reason experience level
-    # always showed up as "not disclosed" downstream: there was no
-    # attribute for analyze_controller.py's _get_experience_level() to
-    # find on a JobListing object, regardless of what JSearch returned.
+    # The three values the dashboard filters on, each read off the posting
+    # itself by app/services/posting_classifier.py. All are None when the
+    # posting gives no usable signal (never a guess):
+    #   experience_level - "Entry-Level" | "Junior Level" | "Mid-Level" | "Senior"
+    #   job_type         - "Full-time" | "Part-time" | "Contractual" | "Freelance"
+    #   target_job       - one of the 20 roles in job_requirements.py
     experience_level: Optional[str] = None
+    job_type:         Optional[str] = None
+    target_job:       Optional[str] = None
 
 
 class JSearchClient:
@@ -260,6 +235,11 @@ class JSearchClient:
         url = raw.get("job_apply_link") or raw.get("job_google_link") or ""
         title = raw.get("job_title", "").strip()
 
+        # Prefer the employment type JSearch reports for the posting; only when
+        # it gives none (or one outside the four supported values) classify the
+        # FULL raw posting text (description below is cut to 500 chars).
+        job_type = _job_type_from_api(raw) or classify_job_type(raw, title)
+
         return JobListing(
             job_id      = raw.get("job_id", ""),
             title       = title,
@@ -269,9 +249,14 @@ class JSearchClient:
             salary_min  = float(salary_min) if salary_min else None,
             salary_max  = float(salary_max) if salary_max else None,
             url         = url,
-            category    = raw.get("job_employment_type") or "Full-time",
+            # Kept for older callers; now the normalized job type instead of a
+            # blanket "Full-time" default, so listings with no stated type are
+            # not mislabelled.
+            category    = job_type or "Not specified",
             keywords_matched  = [keyword],
-            experience_level  = _infer_experience_level(raw, title),
+            experience_level  = classify_experience_level(raw, title),
+            job_type          = job_type,
+            target_job        = classify_target_job(title),
         )
 
     def fetch_jobs(

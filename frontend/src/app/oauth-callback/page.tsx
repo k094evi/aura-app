@@ -15,16 +15,14 @@ export default function OAuthCallbackPage() {
 
   useEffect(() => {
     // Guard against React Strict Mode double-invocation — this flow
-    // makes a network call and redirects, neither of which should
+    // makes network calls and redirects, neither of which should
     // happen twice.
     if (handled.current) return;
     handled.current = true;
 
     (async () => {
-      // Same pattern as /reset-password: Supabase appends the session
-      // to the URL fragment (#access_token=...&refresh_token=...&...)
-      // rather than a query string, so it must be parsed client-side —
-      // it never reaches the server.
+      // Supabase appends the session to the URL fragment
+      // (#access_token=...&refresh_token=...), so it is parsed client-side.
       const hash = window.location.hash.startsWith('#')
         ? window.location.hash.slice(1)
         : window.location.hash;
@@ -32,6 +30,9 @@ export default function OAuthCallbackPage() {
       const access_token = params.get('access_token');
       const refresh_token = params.get('refresh_token');
       const oauthError = params.get('error_description') || params.get('error');
+
+      // Remove the tokens from the address bar / browser history right away.
+      window.history.replaceState(null, '', window.location.pathname);
 
       if (oauthError) {
         setError(oauthError.replace(/\+/g, ' '));
@@ -44,11 +45,12 @@ export default function OAuthCallbackPage() {
       }
 
       try {
-        // Confirm the token with our backend and fetch the user's
-        // profile in one step (get_current_user verifies it against
-        // Supabase — never trust anything from the URL as-is).
+        // 1. Confirm the token with our backend and fetch the profile.
+        //    Supabase has already found-or-created the account for this
+        //    Google/GitHub identity; a returning user gets the same account.
         const res = await fetch('/api/auth/me', {
           headers: { Authorization: `Bearer ${access_token}` },
+          cache: 'no-store',
         });
         const user = await res.json().catch(() => ({}));
 
@@ -56,8 +58,23 @@ export default function OAuthCallbackPage() {
           throw new Error(user.detail || 'Could not verify your session. Please try again.');
         }
 
+        // 2. Store the session. saveSession clears the previous user's cached
+        //    resume/analysis whenever the account is different.
         saveSession(access_token, refresh_token, user);
-        // /auth/me reports mfa_enabled; OAuth sessions start at aal1 too.
+
+        // 3. Set the httpOnly cookie the dashboard/history proxies read, so
+        //    they act as THIS user and not whoever signed in before.
+        const sessionRes = await fetch('/api/auth/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ access_token, refresh_token }),
+        });
+        if (!sessionRes.ok) {
+          const data = await sessionRes.json().catch(() => ({}));
+          throw new Error(data.detail || 'Could not start your session. Please try again.');
+        }
+
+        // OAuth sessions start at aal1; accounts with 2FA continue to the challenge.
         router.push(user.mfa_enabled ? '/mfa-challenge' : '/dashboard');
       } catch (err: any) {
         setError(err.message || 'Something went wrong. Please try again.');

@@ -1,3 +1,4 @@
+// src/app/api/settings/[...segments]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
@@ -24,13 +25,22 @@ async function proxySettingsRequest(req: NextRequest, context: RouteContext, met
     return NextResponse.json({ detail: 'Settings action not found.' }, { status: 404 });
   }
 
-  const authorization = req.headers.get('authorization');
+  // Prefer the headers the client sends (localStorage session); fall back to
+  // the httpOnly cookies set at sign-in. Several settings actions (2FA setup,
+  // email change, sign out other sessions) need the refresh token as well as
+  // the access token, and localStorage may not hold one.
+  const authorization =
+    req.headers.get('authorization') ??
+    (req.cookies.get('sb_access_token')?.value
+      ? `Bearer ${req.cookies.get('sb_access_token')!.value}`
+      : null);
   if (!authorization) {
     return NextResponse.json({ detail: 'You must be signed in to manage settings.' }, { status: 401 });
   }
 
   const headers = new Headers({ Authorization: authorization });
-  const refreshToken = req.headers.get('x-refresh-token');
+  const refreshToken =
+    req.headers.get('x-refresh-token') ?? req.cookies.get('sb_refresh_token')?.value ?? null;
   if (refreshToken) headers.set('X-Refresh-Token', refreshToken);
 
   let body: string | undefined;

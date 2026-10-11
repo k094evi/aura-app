@@ -6,11 +6,18 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Briefcase, Check, ChevronDown } from 'lucide-react';
 
-import { IT_JOB_TITLES, isItJobTitle } from '@/features/dashboard/data/itCatalog';
+import { isItJobTitle } from '@/features/dashboard/data/itCatalog';
+import {
+  SUPPORTED_JOB_TITLES,
+  findSupportedJob,
+  searchSupportedJobs,
+} from '@/features/dashboard/data/supportedJobs';
 
-// The field is free-text: pick a suggestion or type any IT job title
-// (e.g. "Senior React Developer"). Non-IT titles are flagged below the field
-// and blocked when submitting.
+// The suggestions are exactly the roles the backend has a skill checklist for
+// (job_requirements.py). The field stays free-text: an alias such as
+// "web developer" is converted to its canonical title, any other IT title is
+// allowed with a note that no skill checklist exists for it, and non-IT titles
+// are flagged below the field and blocked when submitting.
 
 interface JobTitleSelectorProps {
   value: string;
@@ -49,14 +56,13 @@ export default function JobTitleSelector({
   useEffect(() => setMounted(true), []);
 
   const query = value.trim().toLowerCase();
-  const suggestions =
-    query && !showAll ? IT_JOB_TITLES.filter((t) => t.toLowerCase().includes(query)) : IT_JOB_TITLES;
-  // Cap the list while typing so a short query doesn't dump 70+ rows at once.
-  // When opened with the arrow, show everything (the menu scrolls).
-  const visibleSuggestions = showAll ? suggestions : suggestions.slice(0, 8);
-  const exactMatch = IT_JOB_TITLES.some((t) => t.toLowerCase() === query);
+  const visibleSuggestions =
+    query && !showAll ? searchSupportedJobs(value) : [...SUPPORTED_JOB_TITLES];
+  const supportedTitle = findSupportedJob(value);
   // Text that is not (yet) an IT title, shown once the list is closed
   const invalid = query.length > 0 && !isItJobTitle(value) && !isOpen;
+  // A valid IT title the backend has no skill checklist for
+  const unsupported = query.length > 0 && !invalid && !isOpen && !supportedTitle;
 
   const close = () => {
     setIsOpen(false);
@@ -113,8 +119,11 @@ export default function JobTitleSelector({
       close();
     } else if (e.key === 'Enter' && isOpen) {
       e.preventDefault();
-      if (isItJobTitle(value) || visibleSuggestions.length === 0) {
-        // What's typed is already a valid IT title: keep it exactly as typed.
+      if (supportedTitle) {
+        // Exact title or alias of a supported role: use the canonical title.
+        selectTitle(supportedTitle);
+      } else if (isItJobTitle(value) || visibleSuggestions.length === 0) {
+        // A valid IT title with no checklist: keep it exactly as typed.
         close();
       } else {
         selectTitle(visibleSuggestions[0]);
@@ -139,6 +148,15 @@ export default function JobTitleSelector({
   useEffect(() => {
     if (disabled) close();
   }, [disabled]);
+
+  // Once the list is closed, turn an alias ("web developer") into the
+  // canonical title ("Frontend Developer") so the backend finds its checklist.
+  useEffect(() => {
+    if (isOpen) return;
+    const canonical = findSupportedJob(value);
+    if (canonical && canonical !== value) onChange(canonical);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, value]);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-[6px]">
@@ -211,7 +229,7 @@ export default function JobTitleSelector({
                   className="z-[999] max-h-64 overflow-y-auto rounded-[12px] border border-[#e5e7eb] bg-white py-2 shadow-[0_16px_32px_rgba(17,24,39,0.12)]"
                 >
                   {visibleSuggestions.map((title) => {
-                    const selected = title.toLowerCase() === query;
+                    const selected = title === supportedTitle;
                     return (
                       <button
                         key={title}
@@ -241,6 +259,11 @@ export default function JobTitleSelector({
       {invalid && (
         <p role="alert" className="text-[12px] font-medium text-[#ef4444]">
           Enter an IT job title, e.g. Backend Developer.
+        </p>
+      )}
+      {unsupported && (
+        <p className="text-[12px] font-medium text-[#b45309]">
+          No skill checklist for this title yet. Pick one of the listed roles for a full skill-gap analysis.
         </p>
       )}
     </div>

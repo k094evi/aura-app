@@ -21,6 +21,7 @@
 #     the frontend claims to be its own.
 # ============================================================================
 
+import logging
 import os
 import urllib.parse
 
@@ -53,6 +54,8 @@ from app.dependencies.auth import bearer_scheme, get_authenticated_user, get_cur
 
 # All routes in this file are grouped under prefix "/auth" and tagged
 # "auth" so they appear together in the auto-generated OpenAPI/Swagger docs.
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 # Where Supabase redirects the user after they click the link in the
@@ -248,9 +251,12 @@ def get_me(user: AuthUser = Depends(get_authenticated_user)):
 
 def _required_refresh_token(refresh_token: str | None) -> str:
     if not refresh_token:
+        # Distinct message so a missing refresh token is not confused with an
+        # expired access token (both used to say "session has expired").
+        logger.warning("Settings request arrived without an X-Refresh-Token header.")
         raise HTTPException(
             status_code=401,
-            detail="Your session has expired. Please sign in again.",
+            detail="Your session is missing its refresh token. Please sign out and sign in again.",
         )
     return refresh_token
 
@@ -414,3 +420,18 @@ def sign_out_settings_other_sessions(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return MessageResponse(message="Other sessions have been signed out.")
+
+
+# ----------------------------------------------------------------------------
+# POST /auth/logout
+# Ends the Supabase session for the bearer token. Deliberately does NOT use
+# get_current_user: an expired token must still be able to "log out" cleanly.
+# Always returns 200 — logout is idempotent.
+# ----------------------------------------------------------------------------
+@router.post("/logout", response_model=MessageResponse)
+def logout(authorization: str | None = Header(default=None)):
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization[7:].strip()
+        if token:
+            auth_service.sign_out(token)
+    return MessageResponse(message="Signed out.")
