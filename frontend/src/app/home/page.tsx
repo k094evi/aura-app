@@ -285,9 +285,9 @@ type FaqEntry = {
   answer: string;
 };
 
-// One expandable question. Starts open, as in the Figma design.
+// One expandable question. Starts closed; click to open.
 function FaqItem({ question, answer }: FaqEntry) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   // Links the toggle button to the answer panel for screen readers.
   const panelId = useId();
 
