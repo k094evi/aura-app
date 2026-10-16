@@ -1,5 +1,9 @@
 import { ChevronDown, CircleX, Search } from 'lucide-react';
 
+// ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
+const BTN_MOTION =
+  'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:hover:translate-y-0';
+
 /* ---------------------------- Page background ---------------------------- */
 
 // Soft radial glow used for the three ambient orbs. The Figma exports each
@@ -178,10 +182,11 @@ export function AnalysisHistoryHeader({
         </label>
 
         {hasFilters && (
+          // CHANGED: `transition-colors` -> BTN_MOTION (hover lift)
           <button
             type="button"
             onClick={onClearFilters}
-            className="flex h-[42px] items-center gap-2 rounded-[10px] px-3 text-sm font-semibold text-[#6d28d9] transition-colors hover:bg-[#8b5cf6]/10"
+            className={`flex h-[42px] items-center gap-2 rounded-[10px] px-3 text-sm font-semibold text-[#6d28d9] ${BTN_MOTION} hover:bg-[#8b5cf6]/10`}
           >
             <CircleX aria-hidden className="size-4" />
             Clear filters
@@ -228,11 +233,12 @@ export function AnalysisHistoryPagination({
         Showing {first}-{last} of {total} {total === 1 ? 'resume' : 'resumes'}
       </p>
       <div className="flex items-center gap-3">
+        {/* CHANGED: `transition-opacity` -> BTN_MOTION (hover lift) on both buttons */}
         <button
           type="button"
           onClick={onPrevious}
           disabled={!hasPrevious || loading}
-          className="rounded-[10px] border-[1.5px] border-[#e5e7eb] bg-white/[0.72] px-4 py-2.5 text-sm font-semibold text-[#4b5563] transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
+          className={`rounded-[10px] border-[1.5px] border-[#e5e7eb] bg-white/[0.72] px-4 py-2.5 text-sm font-semibold text-[#4b5563] ${BTN_MOTION} disabled:cursor-not-allowed disabled:opacity-50`}
         >
           ← Previous
         </button>
@@ -240,7 +246,7 @@ export function AnalysisHistoryPagination({
           type="button"
           onClick={onNext}
           disabled={!hasNext || loading}
-          className="rounded-[10px] bg-[#8b5cf6] px-4 py-2.5 text-sm font-bold text-white shadow-[0px_4px_6px_0px_rgba(139,92,246,0.3)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          className={`rounded-[10px] bg-[#8b5cf6] px-4 py-2.5 text-sm font-bold text-white shadow-[0px_4px_6px_0px_rgba(139,92,246,0.3)] ${BTN_MOTION} hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50`}
         >
           Next →
         </button>

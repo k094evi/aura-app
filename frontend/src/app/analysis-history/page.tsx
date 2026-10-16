@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+// ADDED: motion for the staggered record cards
+import { motion, useReducedMotion } from 'motion/react';
 
 import AnalysisRecordCard, { type AnalysisRecord } from '@/features/analysis-history/components/AnalysisRecordCard';
 import {
@@ -19,6 +21,12 @@ import {
   MfaRequiredError,
   toAnalysisRecord,
 } from '@/lib/analysisHistory';
+// ADDED: scroll-in animation wrapper (file is src/components/reveal.tsx).
+import Reveal from '@/components/reveal';
+
+// ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
+const BTN_MOTION =
+  'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:hover:translate-y-0';
 
 // "Showing 1-6 of N resumes" in the Figma frame
 const PAGE_SIZE = 6;
@@ -26,6 +34,8 @@ const HISTORY_FETCH_SIZE = 50;
 
 export default function AnalysisHistoryPage() {
   const router = useRouter();
+  // ADDED: respect the OS "reduce motion" setting
+  const reduceMotion = useReducedMotion();
 
   const [records, setRecords] = useState<AnalysisRecord[]>([]);
   const [page, setPage] = useState(1);
@@ -121,40 +131,46 @@ export default function AnalysisHistoryPage() {
       {isEmpty && <AnalysisHistoryEmptyRings />}
 
       <main className="relative z-10 flex w-full flex-1 flex-col gap-8 px-6 py-[60px] md:px-20">
-        <AnalysisHistoryHeader
-          disabled={isEmpty}
-          search={search}
-          category={category}
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          hasFilters={hasFilters}
-          onSearchChange={(value) => updateFilter(() => setSearch(value))}
-          onCategoryChange={(value) => updateFilter(() => setCategory(value))}
-          onDateFromChange={(value) => updateFilter(() => setDateFrom(value))}
-          onDateToChange={(value) => updateFilter(() => setDateTo(value))}
-          onClearFilters={() => {
-            setSearch('');
-            setCategory('all');
-            setDateFrom('');
-            setDateTo('');
-            setPage(1);
-          }}
-        />
+        {/* CHANGED: header wrapped in <Reveal> */}
+        <Reveal>
+          <AnalysisHistoryHeader
+            disabled={isEmpty}
+            search={search}
+            category={category}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            hasFilters={hasFilters}
+            onSearchChange={(value) => updateFilter(() => setSearch(value))}
+            onCategoryChange={(value) => updateFilter(() => setCategory(value))}
+            onDateFromChange={(value) => updateFilter(() => setDateFrom(value))}
+            onDateToChange={(value) => updateFilter(() => setDateTo(value))}
+            onClearFilters={() => {
+              setSearch('');
+              setCategory('all');
+              setDateFrom('');
+              setDateTo('');
+              setPage(1);
+            }}
+          />
+        </Reveal>
 
         {error ? (
-          <div
-            role="alert"
-            className="flex flex-col items-start gap-3 rounded-2xl border-[1.5px] border-[#fee2e2] bg-white/[0.72] p-5 backdrop-blur-[12px]"
-          >
-            <p className="text-sm font-semibold text-[#dc2626]">{error}</p>
-            <button
-              type="button"
-              onClick={retryLoad}
-              className="rounded-[10px] bg-[#8b5cf6] px-4 py-2 text-sm font-bold text-white transition-opacity hover:opacity-90"
+          // CHANGED: error card wrapped in <Reveal>; button `transition-opacity` -> BTN_MOTION
+          <Reveal>
+            <div
+              role="alert"
+              className="flex flex-col items-start gap-3 rounded-2xl border-[1.5px] border-[#fee2e2] bg-white/[0.72] p-5 backdrop-blur-[12px]"
             >
-              Try again
-            </button>
-          </div>
+              <p className="text-sm font-semibold text-[#dc2626]">{error}</p>
+              <button
+                type="button"
+                onClick={retryLoad}
+                className={`rounded-[10px] bg-[#8b5cf6] px-4 py-2 text-sm font-bold text-white ${BTN_MOTION} hover:opacity-90`}
+              >
+                Try again
+              </button>
+            </div>
+          </Reveal>
         ) : loading && !hasRecords ? (
           // First load: placeholder cards so the layout doesn't jump
           <div className="flex w-full flex-col gap-4" aria-busy="true" aria-label="Loading resume history">
@@ -166,32 +182,47 @@ export default function AnalysisHistoryPage() {
             ))}
           </div>
         ) : isEmpty ? (
-          <AnalysisHistoryEmptyState />
+          // CHANGED: empty state wrapped in <Reveal>
+          <Reveal delay={0.1}>
+            <AnalysisHistoryEmptyState />
+          </Reveal>
         ) : total === 0 ? (
-          <div className="flex flex-col items-center gap-3 rounded-2xl border-[1.5px] border-white bg-white/[0.72] px-6 py-12 text-center backdrop-blur-[12px]">
-            <p className="text-base font-bold text-[#111827]">No matching analyses</p>
-            <p className="text-sm text-[#4b5563]">Try a different search or adjust the date range.</p>
-            <button
-              type="button"
-              onClick={() => {
-                setSearch('');
-                setCategory('all');
-                setDateFrom('');
-                setDateTo('');
-                setPage(1);
-              }}
-              className="rounded-[10px] bg-[#8b5cf6] px-4 py-2 text-sm font-bold text-white transition-opacity hover:opacity-90"
-            >
-              Clear filters
-            </button>
-          </div>
+          // CHANGED: "no matching" card wrapped in <Reveal>; button `transition-opacity` -> BTN_MOTION
+          <Reveal>
+            <div className="flex flex-col items-center gap-3 rounded-2xl border-[1.5px] border-white bg-white/[0.72] px-6 py-12 text-center backdrop-blur-[12px]">
+              <p className="text-base font-bold text-[#111827]">No matching analyses</p>
+              <p className="text-sm text-[#4b5563]">Try a different search or adjust the date range.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch('');
+                  setCategory('all');
+                  setDateFrom('');
+                  setDateTo('');
+                  setPage(1);
+                }}
+                className={`rounded-[10px] bg-[#8b5cf6] px-4 py-2 text-sm font-bold text-white ${BTN_MOTION} hover:opacity-90`}
+              >
+                Clear filters
+              </button>
+            </div>
+          </Reveal>
         ) : (
           <>
             <div
               className={`flex w-full flex-col gap-4 transition-opacity ${loading ? 'opacity-60' : 'opacity-100'}`}
             >
-              {visibleRecords.map((record) => (
-                <AnalysisRecordCard key={record.id} record={record} />
+              {visibleRecords.map((record, i) => (
+                // CHANGED: each card wrapped in <motion.div> with a small stagger.
+                // The key is the record id, so a new page (new records) replays it.
+                <motion.div
+                  key={record.id}
+                  initial={reduceMotion ? false : { opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: reduceMotion ? 0 : i * 0.08, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  <AnalysisRecordCard record={record} />
+                </motion.div>
               ))}
             </div>
 

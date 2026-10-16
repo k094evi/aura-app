@@ -4,6 +4,7 @@
 
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { motion, useReducedMotion } from 'motion/react';
 import { X } from 'lucide-react';
 
 // `value` is null until a resume has been analyzed.
@@ -94,7 +95,7 @@ function InfoButton({ onClick, label }: { onClick: () => void; label: string }) 
       type="button"
       onClick={onClick}
       aria-label={label}
-      className="flex size-4 shrink-0 items-center justify-center rounded-full bg-[#4b5563]/10 text-[10px] font-bold leading-none text-[#4b5563] transition hover:bg-[#7c3aed]/15 hover:text-[#7c3aed]"
+      className="flex size-6 shrink-0 items-center justify-center rounded-full border border-[#4b5563]/25 bg-[#4b5563]/10 text-[13px] font-bold leading-none text-[#4b5563] transition hover:border-[#7c3aed]/40 hover:bg-[#7c3aed]/15 hover:text-[#7c3aed]"
     >
       i
     </button>
@@ -103,8 +104,10 @@ function InfoButton({ onClick, label }: { onClick: () => void; label: string }) 
 
 // Circular progress ring showing the overall score percentage.
 // With no score yet it shows a dash and "No score yet" instead of the ring.
+// CHANGED: the filled arc now draws itself from empty to the score (motion.circle).
 function ScoreChart({ score, label = 'ATS Score' }: { score: number | null; label?: string }) {
   const gradientId = `score-ring-${useId().replace(/:/g, '')}`;
+  const reduceMotion = useReducedMotion();
 
   if (score === null) {
     return (
@@ -148,7 +151,7 @@ function ScoreChart({ score, label = 'ATS Score' }: { score: number | null; labe
         />
 
         {/* Filled portion */}
-        <circle
+        <motion.circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
@@ -157,7 +160,9 @@ function ScoreChart({ score, label = 'ATS Score' }: { score: number | null; labe
           strokeWidth={stroke}
           strokeLinecap="round"
           strokeDasharray={circumference}
-          strokeDashoffset={offset}
+          initial={reduceMotion ? false : { strokeDashoffset: circumference }}
+          animate={{ strokeDashoffset: offset }}
+          transition={{ duration: reduceMotion ? 0 : 1.1, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
         />
       </svg>
 
@@ -172,7 +177,18 @@ function ScoreChart({ score, label = 'ATS Score' }: { score: number | null; labe
 
 // One "Formatting ▬▬▬▬ 90%" row in the Dimension Analysis card.
 // With no value yet it shows just the name and a dash.
-function DimensionRow({ name, value }: { name: string; value: number | null }) {
+// CHANGED: the bar grows from 0 to its value; `index` staggers the rows.
+function DimensionRow({
+  name,
+  value,
+  index = 0,
+}: {
+  name: string;
+  value: number | null;
+  index?: number;
+}) {
+  const reduceMotion = useReducedMotion();
+
   if (value === null) {
     return (
       <div className="flex h-8 items-center justify-between gap-3">
@@ -194,9 +210,15 @@ function DimensionRow({ name, value }: { name: string; value: number | null }) {
       </p>
 
       <div className="h-2 min-w-0 flex-1 rounded-full bg-[#7c3aed]/[0.08]">
-        <div
+        <motion.div
           className="h-full rounded-full bg-[linear-gradient(90deg,#8b5cf6_0%,#06b6d4_100%)]"
-          style={{ width: `${pct}%` }}
+          initial={reduceMotion ? false : { width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{
+            duration: reduceMotion ? 0 : 0.8,
+            delay: reduceMotion ? 0 : 0.3 + index * 0.08,
+            ease: [0.22, 1, 0.36, 1],
+          }}
         />
       </div>
 
@@ -215,6 +237,8 @@ function DimensionRow({ name, value }: { name: string; value: number | null }) {
 // own stacking context, so a modal nested inside them can never paint above
 // the fixed Navbar no matter how high its z-index is. Escaping to <body>
 // fixes that, and the Navbar now dims with the rest of the page.
+//
+// CHANGED: the scrim fades in and the dialog scales/slides up (enter animation only).
 function ModalShell({
   title,
   onClose,
@@ -225,6 +249,7 @@ function ModalShell({
   children: ReactNode;
 }) {
   const titleId = useId();
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -236,15 +261,21 @@ function ModalShell({
 
   // Only rendered after a click on an "i" button, so `document` always exists here.
   return createPortal(
-    <div
+    <motion.div
+      initial={reduceMotion ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.2 }}
       className="fixed inset-0 z-[1000] flex items-center justify-center bg-[#e9e8f4]/[0.72] p-4 backdrop-blur-[2px]"
       onClick={onClose}
     >
-      <div
+      <motion.div
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()}
+        initial={reduceMotion ? false : { opacity: 0, y: 16, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
         className="flex max-h-[calc(100vh-2rem)] w-full max-w-[368px] flex-col gap-[14px] overflow-y-auto rounded-[24px] border-[1.5px] border-white bg-white/[0.88] p-6 shadow-[0_12px_36px_rgba(17,24,39,0.08)] backdrop-blur-[12px]"
       >
         {/* Header */}
@@ -263,8 +294,8 @@ function ModalShell({
         </div>
 
         {children}
-      </div>
-    </div>,
+      </motion.div>
+    </motion.div>,
     document.body
   );
 }
@@ -414,7 +445,8 @@ export default function AssessmentSidebar({ score, sections }: AssessmentSidebar
           />
         </div>
 
-        <ScoreChart score={score} />
+        {/* key={score}: replays the ring animation when a new score arrives */}
+        <ScoreChart key={score ?? 'none'} score={score} />
 
         {/* Summary note */}
         <div className="rounded-[12px] border border-[#7c3aed]/20 bg-[#7c3aed]/[0.07] p-3">
@@ -437,8 +469,13 @@ export default function AssessmentSidebar({ score, sections }: AssessmentSidebar
         </div>
 
         <div className="flex flex-col gap-4">
-          {rows.map((section) => (
-            <DimensionRow key={section.name} name={section.name} value={section.value} />
+          {rows.map((section, i) => (
+            <DimensionRow
+              key={`${section.name}-${hasResult ? score : 'none'}`}
+              name={section.name}
+              value={section.value}
+              index={i}
+            />
           ))}
         </div>
       </div>

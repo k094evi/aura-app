@@ -12,6 +12,7 @@ import { DM_Sans } from 'next/font/google';
 import { ArrowLeft, Check, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { saveSession } from '@/lib/auth';
 import { Footer } from '@/components/Footer';
+import Reveal from '@/components/reveal';
 
 // The Figma design uses DM Sans throughout.
 const dmSans = DM_Sans({
@@ -23,6 +24,10 @@ const dmSans = DM_Sans({
 // Deliberately loose check ("something@something.tld"); it only catches typos.
 // The backend is the real authority on whether the credentials are valid.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
+const BTN_MOTION =
+  'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:hover:translate-y-0';
 
 // Shared input-wrapper styling (default / focus / error states from Figma).
 // The wrapper, not the <input>, draws the border so the show/hide button can sit inside it.
@@ -36,8 +41,8 @@ const inputWrapperClass = (hasError: boolean) =>
   ].join(' ');
 
 // Google and GitHub buttons share identical styling.
-const OAUTH_BUTTON_CLASS =
-  'flex min-w-0 flex-1 items-center justify-center gap-2 rounded-[10px] border border-[#e5e7eb] bg-white px-4 py-3 text-[14px] font-semibold text-[#4b5563] shadow-[0_1px_1px_rgba(17,24,39,0.02)] transition hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-60';
+// CHANGED: `transition` -> BTN_MOTION (hover lift)
+const OAUTH_BUTTON_CLASS = `flex min-w-0 flex-1 items-center justify-center gap-2 rounded-[10px] border border-[#e5e7eb] bg-white px-4 py-3 text-[14px] font-semibold text-[#4b5563] shadow-[0_1px_1px_rgba(17,24,39,0.02)] ${BTN_MOTION} hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-60`;
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -176,7 +181,9 @@ export default function LoginPage() {
 
       {/* ───────────── Main content ───────────── */}
       <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 pb-16 pt-24 sm:pt-16">
-        <div className="flex w-full max-w-[480px] flex-col items-center gap-5">
+        {/* CHANGED: this wrapper <div> is now a <Reveal> with the same classes, so the
+            logo + card fade in together once on load. */}
+        <Reveal className="flex w-full max-w-[480px] flex-col items-center gap-5">
           {/* Logo. Same file the Navbar uses (lives in /public). */}
           <Link href="/" className="flex items-center justify-center gap-[10px]">
             <Image src="/Aura_LogoRaster.png" alt="" width={32} height={32} priority />
@@ -299,10 +306,11 @@ export default function LoginPage() {
                 </Link>
               </div>
 
+              {/* CHANGED: `transition` -> BTN_MOTION (hover lift) */}
               <button
                 type="submit"
                 disabled={busy}
-                className="flex w-full items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#7c3aed_0%,#a78bfa_60%,#06b6d4_100%)] px-8 py-[14px] text-[15px] font-bold text-white shadow-[0_2px_3px_rgba(124,58,237,0.1),0_8px_12px_rgba(124,58,237,0.25)] transition hover:brightness-105 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+                className={`flex w-full items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#7c3aed_0%,#a78bfa_60%,#06b6d4_100%)] px-8 py-[14px] text-[15px] font-bold text-white shadow-[0_2px_3px_rgba(124,58,237,0.1),0_8px_12px_rgba(124,58,237,0.25)] ${BTN_MOTION} hover:brightness-105 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60`}
               >
                 {isSubmitting ? (
                   <>
@@ -367,7 +375,7 @@ export default function LoginPage() {
               </Link>
             </p>
           </div>
-        </div>
+        </Reveal>
       </main>
 
       {/* ───────────── Footer ─────────────

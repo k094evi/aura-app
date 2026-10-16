@@ -12,6 +12,10 @@ import { normalizeItJobTitle } from '@/features/dashboard/data/itCatalog';
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB, as shown in the Figma copy
 const ALLOWED_EXT = /\.(pdf|docx)$/i;
 
+// ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
+const BTN_MOTION =
+  'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:hover:translate-y-0';
+
 export type UploadPayload = {
   file: File;
   jobTitle: string;
@@ -213,11 +217,12 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
           />
         </div>
 
+        {/* CHANGED: `transition` -> BTN_MOTION (hover lift) */}
         <button
           type="button"
           onClick={handleSubmit}
           disabled={isAnalyzing}
-          className="flex w-full items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#7c3aed_0%,#a78bfa_60%,#06b6d4_100%)] px-8 py-[14px] text-[15px] font-bold text-white shadow-[0_8px_12px_rgba(124,58,237,0.2)] transition hover:brightness-105 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
+          className={`flex w-full items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,#7c3aed_0%,#a78bfa_60%,#06b6d4_100%)] px-8 py-[14px] text-[15px] font-bold text-white shadow-[0_8px_12px_rgba(124,58,237,0.2)] ${BTN_MOTION} hover:brightness-105 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60`}
         >
           {isAnalyzing ? (
             <>

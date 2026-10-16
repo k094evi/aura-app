@@ -8,6 +8,10 @@ import type { AnalysisResult } from '@/types/analysis';
 import { generateReportPDF } from '@/lib/exportReport';
 import { getStoredUser } from '@/lib/auth';
 
+// ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
+const BTN_MOTION =
+  'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:hover:translate-y-0';
+
 export type AnalysisStatus = 'Optimized' | 'Needs Review' | 'Draft';
 
 export type AnalysisRecord = {
@@ -232,12 +236,13 @@ export default function AnalysisRecordCard({
           {record.status}
         </span>
 
-        {/* Export PDF button */}
+        {/* Export PDF button
+            CHANGED: `transition-colors` -> BTN_MOTION (hover lift) */}
         <button
           type="button"
           onClick={handleExport}
           disabled={isExporting}
-          className="flex size-9 shrink-0 items-center justify-center rounded-[10px] border-[1.5px] border-[#e5e7eb] bg-white/90 text-[#4b5563] transition-colors hover:border-[#8b5cf6]/40 hover:text-[#8b5cf6] disabled:cursor-not-allowed disabled:opacity-60"
+          className={`flex size-9 shrink-0 items-center justify-center rounded-[10px] border-[1.5px] border-[#e5e7eb] bg-white/90 text-[#4b5563] ${BTN_MOTION} hover:border-[#8b5cf6]/40 hover:text-[#8b5cf6] disabled:cursor-not-allowed disabled:opacity-60`}
           title={isExporting ? 'Exporting PDF...' : 'Export PDF'}
           aria-label={`Export PDF for ${record.filename}`}
         >
@@ -248,10 +253,11 @@ export default function AnalysisRecordCard({
           )}
         </button>
 
-        {/* Open the full dashboard for this analysis */}
+        {/* Open the full dashboard for this analysis
+            CHANGED: `transition-colors` -> BTN_MOTION (hover lift) */}
         <Link
           href={`/analysis-history/${record.id}`}
-          className="whitespace-nowrap rounded-[10px] border-[1.5px] border-[#8b5cf6]/30 bg-[#8b5cf6]/[0.08] px-4 py-2 text-[13px] font-medium text-[#8b5cf6] shadow-[0px_1px_2px_0px_rgba(17,24,39,0.02)] transition-colors hover:bg-[#8b5cf6]/15"
+          className={`whitespace-nowrap rounded-[10px] border-[1.5px] border-[#8b5cf6]/30 bg-[#8b5cf6]/[0.08] px-4 py-2 text-[13px] font-medium text-[#8b5cf6] shadow-[0px_1px_2px_0px_rgba(17,24,39,0.02)] ${BTN_MOTION} hover:bg-[#8b5cf6]/15`}
         >
           View Results →
         </Link>

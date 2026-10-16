@@ -11,6 +11,10 @@ import ResetPassword from './ResetPassword';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
+const BTN_MOTION =
+  'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:hover:translate-y-0';
+
 type Step = 'email' | 'otp' | 'reset' | 'done';
 
 async function requestResetCode(email: string) {
@@ -121,10 +125,11 @@ export default function ForgotPassword() {
               )}
             </div>
 
+            {/* CHANGED: `transition` -> BTN_MOTION (hover lift) */}
             <button
               type="submit"
               disabled={isSubmitting}
-              className={`flex w-full items-center justify-center gap-2 rounded-full ${GRADIENT_BG} px-8 py-[14px] text-[15px] font-bold text-white shadow-[0_8px_24px_rgba(124,58,237,0.25)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60`}
+              className={`flex w-full items-center justify-center gap-2 rounded-full ${GRADIENT_BG} px-8 py-[14px] text-[15px] font-bold text-white shadow-[0_8px_24px_rgba(124,58,237,0.25)] ${BTN_MOTION} hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60`}
             >
               {isSubmitting ? (
                 <>
@@ -178,9 +183,10 @@ export default function ForgotPassword() {
             <h1 className="text-[28px] font-extrabold leading-tight text-[#111827]">Password updated</h1>
             <p className="text-[14px] leading-[1.45] text-[#4b5563]">You can now sign in with your new password.</p>
           </div>
+          {/* CHANGED: `transition` -> BTN_MOTION (hover lift) */}
           <Link
             href="/signin"
-            className={`flex w-full items-center justify-center rounded-full ${GRADIENT_BG} px-8 py-[14px] text-[15px] font-bold text-white shadow-[0_8px_24px_rgba(124,58,237,0.25)] transition hover:brightness-105`}
+            className={`flex w-full items-center justify-center rounded-full ${GRADIENT_BG} px-8 py-[14px] text-[15px] font-bold text-white shadow-[0_8px_24px_rgba(124,58,237,0.25)] ${BTN_MOTION} hover:brightness-105`}
           >
             Go to Sign In
           </Link>

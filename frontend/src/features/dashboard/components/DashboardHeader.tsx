@@ -8,6 +8,10 @@ import type { AnalysisResult } from '@/types/analysis';
 import { getStoredUser } from '@/lib/auth';
 import { generateReportPDF } from '@/lib/exportReport';
 
+// ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
+const BTN_MOTION =
+  'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:hover:translate-y-0';
+
 interface DashboardHeaderProps {
   // null until a resume has been analyzed: the Export button stays disabled
   result: AnalysisResult | null;
@@ -51,12 +55,13 @@ export default function DashboardHeader({ result }: DashboardHeaderProps) {
         </p>
       </div>
 
-      {/* Export PDF button */}
+      {/* Export PDF button
+          CHANGED: `transition-colors` -> BTN_MOTION (hover lift; stays put while disabled) */}
       <button
         type="button"
         onClick={handleExport}
         disabled={!result || isExporting}
-        className="flex items-center gap-2 self-start rounded-[12px] border-[1.5px] border-[#e3e5eb] bg-white/[0.72] px-5 py-3 text-sm font-medium text-[#454a54] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.05)] backdrop-blur-[12px] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-white/[0.72]"
+        className={`flex items-center gap-2 self-start rounded-[12px] border-[1.5px] border-[#e3e5eb] bg-white/[0.72] px-5 py-3 text-sm font-medium text-[#454a54] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.05)] backdrop-blur-[12px] ${BTN_MOTION} hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-white/[0.72]`}
       >
         {isExporting ? (
           <Loader2 className="size-[18px] animate-spin" />

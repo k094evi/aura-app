@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LogOut, Shield, Trash2, X } from 'lucide-react';
 import {
+  BTN_MOTION,
   FOCUS_RING,
   GradientButton,
   Modal,
@@ -15,6 +16,8 @@ import {
 import TwoFactorModal from '@/features/settings/components/TwoFactorModal';
 import { authSessionHeaders, clearSession, saveSession, saveUser } from '@/lib/auth';
 import { getPasswordPolicyError, PASSWORD_POLICY_MESSAGE } from '@/lib/passwordPolicy';
+// ADDED: scroll-in animation wrapper (BTN_MOTION now comes from SettingsUI).
+import Reveal from '@/components/reveal';
 
 type SettingsAccount = {
   id: string;
@@ -317,12 +320,15 @@ export default function SettingsPage() {
       <SettingsBackground />
 
       <main className="relative z-10 flex w-full flex-col gap-8 px-6 pb-20 pt-14 md:px-20">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-[32px] font-extrabold leading-normal text-[#111827]">Settings</h1>
-          <p className="text-[15px] font-normal leading-normal text-[#667085]">
-            Manage your account preferences and security settings.
-          </p>
-        </div>
+        {/* CHANGED: heading block wrapped in <Reveal> */}
+        <Reveal>
+          <div className="flex flex-col gap-2">
+            <h1 className="text-[32px] font-extrabold leading-normal text-[#111827]">Settings</h1>
+            <p className="text-[15px] font-normal leading-normal text-[#667085]">
+              Manage your account preferences and security settings.
+            </p>
+          </div>
+        </Reveal>
 
         {loadError && (
           <p role="alert" className="rounded-xl border border-red-200 bg-white/80 px-5 py-4 text-sm font-semibold text-red-700">
@@ -330,231 +336,241 @@ export default function SettingsPage() {
           </p>
         )}
 
-        <SettingsCard
-          title="General Information"
-          description="Update your display name and account email."
-          footer={
-            <div className="flex w-full flex-wrap items-center justify-between gap-3">
-              {profileError ? (
-                <p role="alert" className="text-xs font-semibold text-[#dc2626]">{profileError}</p>
-              ) : profileSaved ? (
-                <p role="status" className="text-xs font-semibold text-[#10b981]">Profile saved.</p>
-              ) : (
-                <p className="text-xs text-[#9ca3af]">Changes will be applied immediately.</p>
-              )}
-              <GradientButton onClick={handleSaveProfile} disabled={loading || profileSaving || !account}>
-                {profileSaving ? 'Saving…' : profileSaved ? 'Saved' : 'Save Changes'}
-              </GradientButton>
-            </div>
-          }
-        >
-          <TextField
-            label="Display Name"
-            value={displayName}
-            onChange={setDisplayName}
-            hint="This is how your name appears across the app."
-            autoComplete="name"
-            disabled={loading || !account}
-          />
-
-          <div className="flex flex-col gap-4">
+        {/* CHANGED: General Information card wrapped in <Reveal> */}
+        <Reveal delay={0.1}>
+          <SettingsCard
+            title="General Information"
+            description="Update your display name and account email."
+            footer={
+              <div className="flex w-full flex-wrap items-center justify-between gap-3">
+                {profileError ? (
+                  <p role="alert" className="text-xs font-semibold text-[#dc2626]">{profileError}</p>
+                ) : profileSaved ? (
+                  <p role="status" className="text-xs font-semibold text-[#10b981]">Profile saved.</p>
+                ) : (
+                  <p className="text-xs text-[#9ca3af]">Changes will be applied immediately.</p>
+                )}
+                <GradientButton onClick={handleSaveProfile} disabled={loading || profileSaving || !account}>
+                  {profileSaving ? 'Saving…' : profileSaved ? 'Saved' : 'Save Changes'}
+                </GradientButton>
+              </div>
+            }
+          >
             <TextField
-              label="Current Email Address"
-              type="email"
-              value={account?.email ?? ''}
-              disabled
-              badge={isOAuthAccount ? 'Google / GitHub' : 'Verified'}
-              hint={
-                isOAuthAccount
-                  ? 'Email changes are managed by your Google or GitHub account.'
-                  : 'A verification code is required to change your email.'
-              }
+              label="Display Name"
+              value={displayName}
+              onChange={setDisplayName}
+              hint="This is how your name appears across the app."
+              autoComplete="name"
+              disabled={loading || !account}
             />
-            {!isOAuthAccount && (
+
+            <div className="flex flex-col gap-4">
+              <TextField
+                label="Current Email Address"
+                type="email"
+                value={account?.email ?? ''}
+                disabled
+                badge={isOAuthAccount ? 'Google / GitHub' : 'Verified'}
+                hint={
+                  isOAuthAccount
+                    ? 'Email changes are managed by your Google or GitHub account.'
+                    : 'A verification code is required to change your email.'
+                }
+              />
+              {!isOAuthAccount && (
+                <>
+                  <TextField
+                    label="New Email Address"
+                    type="email"
+                    value={newEmail}
+                    onChange={(value) => {
+                      setNewEmail(value);
+                      setEmailCodeSent(false);
+                      setEmailMessage(null);
+                    }}
+                    autoComplete="email"
+                    disabled={loading || emailBusy}
+                    placeholder="you@example.com"
+                  />
+                  <TextField
+                    label="Current Password"
+                    type="password"
+                    value={emailPassword}
+                    onChange={setEmailPassword}
+                    autoComplete="current-password"
+                    disabled={loading || emailBusy}
+                    placeholder="Confirm your password to continue"
+                  />
+                  {emailCodeSent && (
+                    <TextField
+                      label="Email Verification Code"
+                      value={emailCode}
+                      onChange={(value) => setEmailCode(value.replace(/\D/g, '').slice(0, 6))}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      disabled={emailBusy}
+                      placeholder="Enter the 6-digit code sent to your new email"
+                    />
+                  )}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <GradientButton
+                      onClick={emailCodeSent ? handleVerifyEmailCode : handleRequestEmailCode}
+                      disabled={loading || emailBusy || !account}
+                    >
+                      {emailBusy
+                        ? 'Please wait…'
+                        : emailCodeSent
+                          ? 'Verify Email'
+                          : 'Send Verification Code'}
+                    </GradientButton>
+                    {emailMessage && <p role="status" className="text-xs font-semibold text-[#10b981]">{emailMessage}</p>}
+                    {emailError && <p role="alert" className="text-xs font-semibold text-[#dc2626]">{emailError}</p>}
+                  </div>
+                </>
+              )}
+            </div>
+          </SettingsCard>
+        </Reveal>
+
+        {/* CHANGED: Security Settings card wrapped in <Reveal> */}
+        <Reveal delay={0.1}>
+          <SettingsCard
+            title="Security Settings"
+            description="Manage your password and two-factor authentication."
+            footer={
+              canUsePassword ? (
+                <div className="flex w-full flex-wrap items-center justify-between gap-3">
+                  {passwordError ? (
+                    <p role="alert" className="text-xs font-semibold text-[#dc2626]">{passwordError}</p>
+                  ) : passwordUpdated ? (
+                    <p role="status" className="text-xs font-semibold text-[#10b981]">Password updated. You can change it again in 60 days.</p>
+                  ) : passwordLocked && passwordAvailableAt ? (
+                    <p className="text-xs text-[#9ca3af]">
+                      Password changes are available again on {passwordAvailableAt.toLocaleDateString()}.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-[#9ca3af]">Use a strong, unique password you don&apos;t use elsewhere.</p>
+                  )}
+                  <GradientButton onClick={handleUpdatePassword} disabled={passwordSaving || loading || passwordLocked}>
+                    {passwordSaving ? 'Updating…' : 'Update Password'}
+                  </GradientButton>
+                </div>
+              ) : (
+                <p className="text-xs text-[#9ca3af]">
+                  {isOAuthAccount
+                    ? 'Your password is managed by your Google or GitHub account.'
+                    : 'Password settings are unavailable until your account has loaded.'}
+                </p>
+              )
+            }
+          >
+            <div className="flex flex-col gap-1">
+              <h3 className="text-sm font-bold text-[#111827]">Change Password</h3>
+              <p className="text-xs text-[#667085]">
+                Verify your current password before choosing a new one.
+              </p>
+            </div>
+
+            {canUsePassword && (
               <>
-                <TextField
-                  label="New Email Address"
-                  type="email"
-                  value={newEmail}
-                  onChange={(value) => {
-                    setNewEmail(value);
-                    setEmailCodeSent(false);
-                    setEmailMessage(null);
-                  }}
-                  autoComplete="email"
-                  disabled={loading || emailBusy}
-                  placeholder="you@example.com"
-                />
                 <TextField
                   label="Current Password"
                   type="password"
-                  value={emailPassword}
-                  onChange={setEmailPassword}
+                  value={currentPassword}
+                  onChange={setCurrentPassword}
+                  placeholder="Enter current password"
                   autoComplete="current-password"
-                  disabled={loading || emailBusy}
-                  placeholder="Confirm your password to continue"
+                  disabled={passwordLocked || passwordSaving}
                 />
-                {emailCodeSent && (
-                  <TextField
-                    label="Email Verification Code"
-                    value={emailCode}
-                    onChange={(value) => setEmailCode(value.replace(/\D/g, '').slice(0, 6))}
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    disabled={emailBusy}
-                    placeholder="Enter the 6-digit code sent to your new email"
-                  />
-                )}
-                <div className="flex flex-wrap items-center gap-3">
-                  <GradientButton
-                    onClick={emailCodeSent ? handleVerifyEmailCode : handleRequestEmailCode}
-                    disabled={loading || emailBusy || !account}
-                  >
-                    {emailBusy
-                      ? 'Please wait…'
-                      : emailCodeSent
-                        ? 'Verify Email'
-                        : 'Send Verification Code'}
-                  </GradientButton>
-                  {emailMessage && <p role="status" className="text-xs font-semibold text-[#10b981]">{emailMessage}</p>}
-                  {emailError && <p role="alert" className="text-xs font-semibold text-[#dc2626]">{emailError}</p>}
-                </div>
+                <TextField
+                  label="New Password"
+                  type="password"
+                  value={newPassword}
+                  onChange={setNewPassword}
+                  placeholder="Enter a new password"
+                  autoComplete="new-password"
+                  disabled={passwordLocked || passwordSaving}
+                />
+                <p className="text-xs text-[#667085]">{PASSWORD_POLICY_MESSAGE}</p>
+                <TextField
+                  label="Confirm New Password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={setConfirmPassword}
+                  placeholder="Re-enter new password"
+                  autoComplete="new-password"
+                  disabled={passwordLocked || passwordSaving}
+                />
               </>
             )}
-          </div>
-        </SettingsCard>
-
-        <SettingsCard
-          title="Security Settings"
-          description="Manage your password and two-factor authentication."
-          footer={
-            canUsePassword ? (
-              <div className="flex w-full flex-wrap items-center justify-between gap-3">
-                {passwordError ? (
-                  <p role="alert" className="text-xs font-semibold text-[#dc2626]">{passwordError}</p>
-                ) : passwordUpdated ? (
-                  <p role="status" className="text-xs font-semibold text-[#10b981]">Password updated. You can change it again in 60 days.</p>
-                ) : passwordLocked && passwordAvailableAt ? (
-                  <p className="text-xs text-[#9ca3af]">
-                    Password changes are available again on {passwordAvailableAt.toLocaleDateString()}.
-                  </p>
-                ) : (
-                  <p className="text-xs text-[#9ca3af]">Use a strong, unique password you don&apos;t use elsewhere.</p>
-                )}
-                <GradientButton onClick={handleUpdatePassword} disabled={passwordSaving || loading || passwordLocked}>
-                  {passwordSaving ? 'Updating…' : 'Update Password'}
-                </GradientButton>
-              </div>
-            ) : (
-              <p className="text-xs text-[#9ca3af]">
-                {isOAuthAccount
-                  ? 'Your password is managed by your Google or GitHub account.'
-                  : 'Password settings are unavailable until your account has loaded.'}
+            {account && !canUsePassword && (
+              <p className="text-sm text-[#667085]">
+                Your password is managed by your Google or GitHub account.
               </p>
-            )
-          }
-        >
-          <div className="flex flex-col gap-1">
-            <h3 className="text-sm font-bold text-[#111827]">Change Password</h3>
-            <p className="text-xs text-[#667085]">
-              Verify your current password before choosing a new one.
-            </p>
-          </div>
-
-          {canUsePassword && (
-            <>
-              <TextField
-                label="Current Password"
-                type="password"
-                value={currentPassword}
-                onChange={setCurrentPassword}
-                placeholder="Enter current password"
-                autoComplete="current-password"
-                disabled={passwordLocked || passwordSaving}
-              />
-              <TextField
-                label="New Password"
-                type="password"
-                value={newPassword}
-                onChange={setNewPassword}
-                placeholder="Enter a new password"
-                autoComplete="new-password"
-                disabled={passwordLocked || passwordSaving}
-              />
-              <p className="text-xs text-[#667085]">{PASSWORD_POLICY_MESSAGE}</p>
-              <TextField
-                label="Confirm New Password"
-                type="password"
-                value={confirmPassword}
-                onChange={setConfirmPassword}
-                placeholder="Re-enter new password"
-                autoComplete="new-password"
-                disabled={passwordLocked || passwordSaving}
-              />
-            </>
-          )}
-          {account && !canUsePassword && (
-            <p className="text-sm text-[#667085]">
-              Your password is managed by your Google or GitHub account.
-            </p>
-          )}
-
-          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#ddd6fe] bg-[#f5f3ff] px-6 py-5">
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <Shield className="size-4 text-[#7c3aed]" />
-                <p className="text-sm font-bold text-[#111827]">Two-Factor Authentication</p>
-              </div>
-              <p className={`text-xs ${twoFactorEnabled ? 'text-[#10b981]' : 'text-[#9ca3af]'}`}>
-                {twoFactorEnabled ? 'Currently enabled' : loading ? 'Loading status…' : 'Currently disabled'}
-              </p>
-              {twoFactorError && <p role="alert" className="text-xs text-[#dc2626]">{twoFactorError}</p>}
-            </div>
-            {twoFactorEnabled ? (
-              <SecondaryButton
-                onClick={() => {
-                  setTwoFactorMode('disable');
-                  setTwoFactorModalOpen(true);
-                }}
-                disabled={!verifiedFactorId}
-                className="rounded-lg px-5 py-[9px]"
-              >
-                Disable 2FA
-              </SecondaryButton>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setTwoFactorMode('enable');
-                  setTwoFactorModalOpen(true);
-                }}
-                disabled={loading}
-                className={`rounded-lg bg-[#7c3aed] px-5 py-[9px] text-[13px] font-bold text-white shadow-[0px_4px_5px_0px_rgba(124,58,237,0.2)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
-              >
-                Enable 2FA
-              </button>
             )}
-          </div>
-        </SettingsCard>
 
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#ddd6fe] bg-[#f5f3ff] px-6 py-5">
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <Shield className="size-4 text-[#7c3aed]" />
+                  <p className="text-sm font-bold text-[#111827]">Two-Factor Authentication</p>
+                </div>
+                <p className={`text-xs ${twoFactorEnabled ? 'text-[#10b981]' : 'text-[#9ca3af]'}`}>
+                  {twoFactorEnabled ? 'Currently enabled' : loading ? 'Loading status…' : 'Currently disabled'}
+                </p>
+                {twoFactorError && <p role="alert" className="text-xs text-[#dc2626]">{twoFactorError}</p>}
+              </div>
+              {twoFactorEnabled ? (
+                <SecondaryButton
+                  onClick={() => {
+                    setTwoFactorMode('disable');
+                    setTwoFactorModalOpen(true);
+                  }}
+                  disabled={!verifiedFactorId}
+                  className="rounded-lg px-5 py-[9px]"
+                >
+                  Disable 2FA
+                </SecondaryButton>
+              ) : (
+                // CHANGED: `transition-opacity` -> BTN_MOTION (hover lift)
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTwoFactorMode('enable');
+                    setTwoFactorModalOpen(true);
+                  }}
+                  disabled={loading}
+                  className={`rounded-lg bg-[#7c3aed] px-5 py-[9px] text-[13px] font-bold text-white shadow-[0px_4px_5px_0px_rgba(124,58,237,0.2)] ${BTN_MOTION} hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
+                >
+                  Enable 2FA
+                </button>
+              )}
+            </div>
+          </SettingsCard>
+        </Reveal>
 
-        <section className="flex w-full flex-wrap items-center justify-between gap-4 rounded-[20px] border border-[#fecaca] bg-[#fff5f5] px-8 py-6 shadow-[0px_4px_8px_0px_rgba(239,68,68,0.08)]">
-          <div className="flex flex-col gap-1">
-            <h2 className="text-base font-extrabold text-[#ef4444]">Delete Account</h2>
-            <p className="text-[13px] text-[#6b7280]">
-              Permanently remove your account and all data. This cannot be undone.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setDeleteConfirmOpen(true)}
-            disabled={loading || !account}
-            className={`inline-flex items-center gap-2 rounded-[10px] bg-[#ef4444] px-5 py-2.5 text-[13px] font-bold text-white shadow-[0px_4px_5px_0px_rgba(239,68,68,0.19)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
-          >
-            <Trash2 className="size-[15px]" />
-            Delete account
-          </button>
-        </section>
+        {/* CHANGED: Delete Account section wrapped in <Reveal> */}
+        <Reveal delay={0.1}>
+          <section className="flex w-full flex-wrap items-center justify-between gap-4 rounded-[20px] border border-[#fecaca] bg-[#fff5f5] px-8 py-6 shadow-[0px_4px_8px_0px_rgba(239,68,68,0.08)]">
+            <div className="flex flex-col gap-1">
+              <h2 className="text-base font-extrabold text-[#ef4444]">Delete Account</h2>
+              <p className="text-[13px] text-[#6b7280]">
+                Permanently remove your account and all data. This cannot be undone.
+              </p>
+            </div>
+            {/* CHANGED: `transition-opacity` -> BTN_MOTION (hover lift) */}
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmOpen(true)}
+              disabled={loading || !account}
+              className={`inline-flex items-center gap-2 rounded-[10px] bg-[#ef4444] px-5 py-2.5 text-[13px] font-bold text-white shadow-[0px_4px_5px_0px_rgba(239,68,68,0.19)] ${BTN_MOTION} hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
+            >
+              <Trash2 className="size-[15px]" />
+              Delete account
+            </button>
+          </section>
+        </Reveal>
       </main>
 
       <TwoFactorModal
@@ -593,11 +609,12 @@ export default function SettingsPage() {
         {deleteError && <p role="alert" className="mt-4 text-xs font-semibold text-[#dc2626]">{deleteError}</p>}
         <div className="mt-10 flex justify-end gap-3">
           <SecondaryButton onClick={closeDeleteModal} disabled={deleting}>Cancel</SecondaryButton>
+          {/* CHANGED: `transition-opacity` -> BTN_MOTION (hover lift) */}
           <button
             type="button"
             onClick={handleDeleteAccount}
             disabled={deleting || deleteConfirmation !== 'DELETE'}
-            className={`rounded-[10px] bg-[#ef4444] px-4 py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
+            className={`rounded-[10px] bg-[#ef4444] px-4 py-2.5 text-[13px] font-bold text-white ${BTN_MOTION} hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
           >
             {deleting ? 'Deleting…' : 'Delete account'}
           </button>

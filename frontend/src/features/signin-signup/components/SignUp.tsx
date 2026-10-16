@@ -1,6 +1,6 @@
 // src/features/signin-signup/components/SignUp.tsx
 //
-// Sign-up flow: email/password/full name -> POST /api/auth/signup ->
+// Sign-up flow: email/password/name -> POST /api/auth/signup ->
 // if Supabase requires email confirmation, show the OTP step -> POST
 // /api/auth/verify-signup-otp -> save session -> redirect.
 //
@@ -20,6 +20,10 @@ import AuthShell, { GRADIENT_BG } from './AuthShell';
 import OtpVerification from './OtpVerification';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
+const BTN_MOTION =
+  'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:hover:translate-y-0';
 
 type Step = 'form' | 'otp';
 
@@ -45,13 +49,17 @@ async function resendSignupOtp(email: string) {
 
 export default function SignUp() {
   const [step, setStep] = useState<Step>('form');
-  const [fullName, setFullName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [middleName, setMiddleName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const [fullNameError, setFullNameError] = useState<string | null>(null);
+  const [firstNameError, setFirstNameError] = useState<string | null>(null);
+  const [middleNameError, setMiddleNameError] = useState<string | null>(null);
+  const [lastNameError, setLastNameError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
@@ -61,7 +69,9 @@ export default function SignUp() {
   const router = useRouter();
 
   const handleSubmit = async () => {
-    const nextFullNameError = !fullName.trim() ? 'Full name is required' : null;
+    const nextFirstNameError = !firstName.trim() ? 'First name is required' : null;
+    const nextMiddleNameError = !middleName.trim() ? 'Middle name is required' : null;
+    const nextLastNameError = !lastName.trim() ? 'Last name is required' : null;
     const nextEmailError = !email
       ? 'Email is required'
       : !EMAIL_RE.test(email)
@@ -76,22 +86,38 @@ export default function SignUp() {
         ? 'Passwords do not match'
         : null;
 
-    setFullNameError(nextFullNameError);
+    setFirstNameError(nextFirstNameError);
+    setMiddleNameError(nextMiddleNameError);
+    setLastNameError(nextLastNameError);
     setEmailError(nextEmailError);
     setPasswordError(nextPasswordError);
     setConfirmError(nextConfirmError);
     setError(null);
 
-    if (nextFullNameError || nextEmailError || nextPasswordError || nextConfirmError) {
+    if (
+      nextFirstNameError ||
+      nextMiddleNameError ||
+      nextLastNameError ||
+      nextEmailError ||
+      nextPasswordError ||
+      nextConfirmError
+    ) {
       return;
     }
+
+    // The backend still expects a single `full_name`, so the separate
+    // fields are joined here.
+    const fullName = [firstName, middleName, lastName]
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(' ');
 
     setIsSubmitting(true);
     try {
       const res = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, full_name: fullName.trim() }),
+        body: JSON.stringify({ email, password, full_name: fullName }),
       });
       const data = await res.json().catch(() => ({}));
 
@@ -149,28 +175,76 @@ export default function SignUp() {
             }}
           >
             <div className="flex flex-col gap-4">
-              {/* Full name */}
+              {/* First name */}
               <div className="flex flex-col gap-[6px]">
-                <label htmlFor="signup-name" className="text-[13px] font-semibold text-[#4b5563]">
-                  Full Name
+                <label htmlFor="signup-first-name" className="text-[13px] font-semibold text-[#4b5563]">
+                  First Name
                 </label>
-                <div className={inputWrapperClass(!!fullNameError)}>
+                <div className={inputWrapperClass(!!firstNameError)}>
                   <input
-                    id="signup-name"
+                    id="signup-first-name"
                     type="text"
-                    autoComplete="name"
-                    placeholder="Enter your full name"
-                    value={fullName}
+                    autoComplete="given-name"
+                    placeholder="Enter your first name"
+                    value={firstName}
                     onChange={(e) => {
-                      setFullName(e.target.value);
-                      if (fullNameError) setFullNameError(null);
+                      setFirstName(e.target.value);
+                      if (firstNameError) setFirstNameError(null);
                       if (error) setError(null);
                     }}
-                    aria-invalid={!!fullNameError}
+                    aria-invalid={!!firstNameError}
                     className="min-w-0 flex-1 bg-transparent text-[14px] text-[#111827] outline-none placeholder:text-[#9ca3af]"
                   />
                 </div>
-                {fullNameError && <p className="text-[12px] font-medium text-[#ef4444]">{fullNameError}</p>}
+                {firstNameError && <p className="text-[12px] font-medium text-[#ef4444]">{firstNameError}</p>}
+              </div>
+
+              {/* Middle name */}
+              <div className="flex flex-col gap-[6px]">
+                <label htmlFor="signup-middle-name" className="text-[13px] font-semibold text-[#4b5563]">
+                  Middle Name
+                </label>
+                <div className={inputWrapperClass(!!middleNameError)}>
+                  <input
+                    id="signup-middle-name"
+                    type="text"
+                    autoComplete="additional-name"
+                    placeholder="Enter your middle name"
+                    value={middleName}
+                    onChange={(e) => {
+                      setMiddleName(e.target.value);
+                      if (middleNameError) setMiddleNameError(null);
+                      if (error) setError(null);
+                    }}
+                    aria-invalid={!!middleNameError}
+                    className="min-w-0 flex-1 bg-transparent text-[14px] text-[#111827] outline-none placeholder:text-[#9ca3af]"
+                  />
+                </div>
+                {middleNameError && <p className="text-[12px] font-medium text-[#ef4444]">{middleNameError}</p>}
+              </div>
+
+              {/* Last name */}
+              <div className="flex flex-col gap-[6px]">
+                <label htmlFor="signup-last-name" className="text-[13px] font-semibold text-[#4b5563]">
+                  Last Name
+                </label>
+                <div className={inputWrapperClass(!!lastNameError)}>
+                  <input
+                    id="signup-last-name"
+                    type="text"
+                    autoComplete="family-name"
+                    placeholder="Enter your last name"
+                    value={lastName}
+                    onChange={(e) => {
+                      setLastName(e.target.value);
+                      if (lastNameError) setLastNameError(null);
+                      if (error) setError(null);
+                    }}
+                    aria-invalid={!!lastNameError}
+                    className="min-w-0 flex-1 bg-transparent text-[14px] text-[#111827] outline-none placeholder:text-[#9ca3af]"
+                  />
+                </div>
+                {lastNameError && <p className="text-[12px] font-medium text-[#ef4444]">{lastNameError}</p>}
               </div>
 
               {/* Email */}
@@ -262,10 +336,11 @@ export default function SignUp() {
               )}
             </div>
 
+            {/* CHANGED: `transition` -> BTN_MOTION (hover lift) */}
             <button
               type="submit"
               disabled={isSubmitting}
-              className={`flex w-full items-center justify-center gap-2 rounded-full ${GRADIENT_BG} px-8 py-[14px] text-[15px] font-bold text-white shadow-[0_2px_3px_rgba(124,58,237,0.1),0_8px_12px_rgba(124,58,237,0.25)] transition hover:brightness-105 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60`}
+              className={`flex w-full items-center justify-center gap-2 rounded-full ${GRADIENT_BG} px-8 py-[14px] text-[15px] font-bold text-white shadow-[0_2px_3px_rgba(124,58,237,0.1),0_8px_12px_rgba(124,58,237,0.25)] ${BTN_MOTION} hover:brightness-105 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60`}
             >
               {isSubmitting ? (
                 <>

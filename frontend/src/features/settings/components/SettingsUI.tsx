@@ -8,6 +8,9 @@ import {
   type InputHTMLAttributes,
   type ReactNode,
 } from 'react';
+// ADDED: button hover lift (no lift while disabled, respects reduced motion).
+export const BTN_MOTION =
+  'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:hover:translate-y-0';
 
 /* -------------------------------------------------------------------------
  * Shared focus-visible ring, reused on every interactive element so
@@ -240,22 +243,24 @@ export function TextField({ label, value, onChange, hint, badge, disabled, ...in
 /* -------------------------------------------------------------------------
  * Buttons
  * ---------------------------------------------------------------------- */
+// CHANGED: `transition-opacity` -> BTN_MOTION (hover lift)
 export function GradientButton({ className = '', ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       type="button"
       {...props}
-      className={`rounded-[10px] bg-gradient-to-r from-[#7c3aed] to-[#a78bfa] px-6 py-2.5 text-[13px] font-bold text-white shadow-[0px_4px_6px_0px_rgba(124,58,237,0.25)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING} ${className}`}
+      className={`rounded-[10px] bg-gradient-to-r from-[#7c3aed] to-[#a78bfa] px-6 py-2.5 text-[13px] font-bold text-white shadow-[0px_4px_6px_0px_rgba(124,58,237,0.25)] ${BTN_MOTION} hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING} ${className}`}
     />
   );
 }
 
+// CHANGED: `transition-colors` -> BTN_MOTION (hover lift)
 export function SecondaryButton({ className = '', ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       type="button"
       {...props}
-      className={`rounded-[10px] border border-[#e5e7eb] bg-white/[0.65] px-5 py-2.5 text-[13px] font-bold text-[#374151] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING} ${className}`}
+      className={`rounded-[10px] border border-[#e5e7eb] bg-white/[0.65] px-5 py-2.5 text-[13px] font-bold text-[#374151] ${BTN_MOTION} hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING} ${className}`}
     />
   );
 }

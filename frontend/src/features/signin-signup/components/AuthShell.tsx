@@ -1,3 +1,4 @@
+// src/features/signin-signup/components/AuthShell.tsx
 'use client';
 
 import type { ReactNode } from 'react';
@@ -6,6 +7,8 @@ import Image from 'next/image';
 import { DM_Sans } from 'next/font/google';
 import { ArrowLeft } from 'lucide-react';
 import { Footer } from '@/components/Footer';
+// ADDED: scroll-in animation wrapper (file is src/components/reveal.tsx).
+import Reveal from '@/components/reveal';
 
 const dmSans = DM_Sans({
   subsets: ['latin'],
@@ -56,7 +59,10 @@ export default function AuthShell({
       </Link>
 
       <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 pb-12 pt-24">
-        <div className={`flex w-full ${maxWidthClass} flex-col items-center gap-5`}>
+        {/* CHANGED: this wrapper <div> is now a <Reveal> with the same classes.
+            AuthShell stays mounted while the steps inside it change (form -> otp -> ...),
+            so this only plays once, when the page first loads. */}
+        <Reveal className={`flex w-full ${maxWidthClass} flex-col items-center gap-5`}>
           {/* Logo + name */}
           <Link href="/" className="flex items-center justify-center gap-[10px]">
             <Image src="/Aura_LogoRaster.png" alt="" width={32} height={32} priority />
@@ -66,7 +72,7 @@ export default function AuthShell({
           <div className="flex w-full flex-col gap-5 rounded-[24px] border-[1.5px] border-white bg-white/[0.72] px-6 py-8 shadow-[0_4px_16px_rgba(124,58,237,0.05),0_20px_60px_rgba(17,24,39,0.09)] backdrop-blur-[12px] sm:px-10">
             {children}
           </div>
-        </div>
+        </Reveal>
       </main>
 
       <div className="relative z-10">

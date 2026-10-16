@@ -2,6 +2,8 @@
 
 import { Check, FileCheck } from 'lucide-react';
 import TableOfContents from '../../features/privacy-tos/TableOfContents';
+// ADDED: scroll-in animation wrapper (client component, safe to use in this server page).
+import Reveal from '@/components/reveal';
 
 export const metadata = {
   title: 'Terms of Service – Aura',
@@ -150,53 +152,62 @@ export default function TermsOfServicePage() {
       {/* Top padding leaves room for the fixed site navbar (rendered by the layout) */}
       <div className="relative z-10 mx-auto flex w-full max-w-[1440px] flex-col pt-[120px]">
         {/* ───────────── Hero ───────────── */}
-        <header className="flex flex-col gap-3 px-6 py-10 sm:px-10 lg:px-20">
-          <h1 className="text-[36px] font-extrabold leading-tight text-[#111827] sm:text-[48px]">
-            Terms of Service
-          </h1>
-          <p className="text-[16px] font-medium text-[#4b5563]">Last updated: September 1, 2026</p>
-        </header>
+        {/* CHANGED: hero wrapped in <Reveal> */}
+        <Reveal>
+          <header className="flex flex-col gap-3 px-6 py-10 sm:px-10 lg:px-20">
+            <h1 className="text-[36px] font-extrabold leading-tight text-[#111827] sm:text-[48px]">
+              Terms of Service
+            </h1>
+            <p className="text-[16px] font-medium text-[#4b5563]">Last updated: September 1, 2026</p>
+          </header>
+        </Reveal>
 
         {/* ───────────── Sidebar + sections ───────────── */}
         <div className="flex flex-col gap-8 px-6 pb-20 sm:px-10 lg:flex-row lg:items-start lg:px-20">
-          {/* Table of contents (desktop only) */}
+          {/* Table of contents (desktop only)
+              CHANGED: <Reveal> goes INSIDE the sticky <aside>, so the sticky positioning is not affected */}
           <aside className="hidden w-[300px] shrink-0 lg:sticky lg:top-28 lg:block">
-            <TableOfContents items={tocItems} />
+            <Reveal direction="left" delay={0.1}>
+              <TableOfContents items={tocItems} />
+            </Reveal>
           </aside>
 
           {/* Section cards */}
           <div className="flex min-w-0 flex-1 flex-col gap-6">
             {SECTIONS.map((section, index) => (
-              <section
-                key={section.title}
-                id={sectionId(index)}
-                className="flex w-full scroll-mt-32 flex-col gap-5 rounded-[24px] border-[1.5px] border-white bg-white/[0.79] p-6 shadow-[0_10px_30px_rgba(17,24,39,0.04)] backdrop-blur-[12px] sm:p-8"
-              >
-                {/* Section header */}
-                <div className="flex items-center gap-4">
-                  <div className="flex size-11 shrink-0 items-center justify-center rounded-[12px] border border-[#7c3aed]/20 bg-[#7c3aed]/[0.08]">
-                    <FileCheck className="size-5 text-[#7c3aed]" />
+              // CHANGED: each section card wrapped in <Reveal> (no delay, so cards far down
+              // the page animate as soon as they scroll into view).
+              <Reveal key={section.title}>
+                <section
+                  id={sectionId(index)}
+                  className="flex w-full scroll-mt-32 flex-col gap-5 rounded-[24px] border-[1.5px] border-white bg-white/[0.79] p-6 shadow-[0_10px_30px_rgba(17,24,39,0.04)] backdrop-blur-[12px] sm:p-8"
+                >
+                  {/* Section header */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex size-11 shrink-0 items-center justify-center rounded-[12px] border border-[#7c3aed]/20 bg-[#7c3aed]/[0.08]">
+                      <FileCheck className="size-5 text-[#7c3aed]" />
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-col gap-[2px]">
+                      <p className="text-[12px] font-bold uppercase text-[#06b6d4]">
+                        Section {String(index + 1).padStart(2, '0')}
+                      </p>
+                      <h2 className="text-[20px] font-extrabold leading-tight text-[#111827]">
+                        {section.title}
+                      </h2>
+                    </div>
                   </div>
-                  <div className="flex min-w-0 flex-1 flex-col gap-[2px]">
-                    <p className="text-[12px] font-bold uppercase text-[#06b6d4]">
-                      Section {String(index + 1).padStart(2, '0')}
-                    </p>
-                    <h2 className="text-[20px] font-extrabold leading-tight text-[#111827]">
-                      {section.title}
-                    </h2>
+
+                  {/* Divider */}
+                  <div className="h-px w-full bg-[linear-gradient(90deg,rgba(124,58,237,0.2)_0%,rgba(6,182,212,0.15)_60%,rgba(6,182,212,0)_100%)]" />
+
+                  {/* Section body */}
+                  <div className="flex flex-col gap-[14px]">
+                    {section.content.map((text, i) => (
+                      <ContentBlock key={i} text={text} />
+                    ))}
                   </div>
-                </div>
-
-                {/* Divider */}
-                <div className="h-px w-full bg-[linear-gradient(90deg,rgba(124,58,237,0.2)_0%,rgba(6,182,212,0.15)_60%,rgba(6,182,212,0)_100%)]" />
-
-                {/* Section body */}
-                <div className="flex flex-col gap-[14px]">
-                  {section.content.map((text, i) => (
-                    <ContentBlock key={i} text={text} />
-                  ))}
-                </div>
-              </section>
+                </section>
+              </Reveal>
             ))}
           </div>
         </div>

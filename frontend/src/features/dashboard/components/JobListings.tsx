@@ -3,9 +3,14 @@
 'use client';
 
 import { useState } from 'react';
+import { motion, useReducedMotion } from 'motion/react';
 import { Briefcase, Building2, ExternalLink, MapPin } from 'lucide-react';
 
 import type { TopJob } from '@/types/analysis';
+
+// ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
+const BTN_MOTION =
+  'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:hover:translate-y-0';
 
 type JobListingsProps = {
   jobs: TopJob[];
@@ -42,6 +47,8 @@ const toSemanticPercent = (similarity: number | undefined) => {
 // Card displaying a paginated list of the jobs found by the API
 export default function JobListings({ jobs, totalJobs, keywords = [] }: JobListingsProps) {
   const [page, setPage] = useState(0);
+  // ADDED: respect the OS "reduce motion" setting
+  const reduceMotion = useReducedMotion();
 
   const total = jobs.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -97,8 +104,13 @@ export default function JobListings({ jobs, totalJobs, keywords = [] }: JobListi
             const semanticPercent = toSemanticPercent(job.semantic_similarity);
 
             return (
-              <article
+              // CHANGED: <article> -> <motion.article>. Each job fades/slides up with a small
+              // stagger. The key includes startIndex, so this replays on every page change.
+              <motion.article
                 key={`${job.url}-${startIndex + i}`}
+                initial={reduceMotion ? false : { opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: reduceMotion ? 0 : i * 0.08, ease: [0.22, 1, 0.36, 1] }}
                 className="flex flex-col gap-3 rounded-[16px] border-[1.5px] border-white bg-white/[0.72] p-5 shadow-[0_10px_30px_rgba(17,24,39,0.03)] backdrop-blur-[12px]"
               >
                 <div className="flex items-start justify-between gap-3">
@@ -166,7 +178,7 @@ export default function JobListings({ jobs, totalJobs, keywords = [] }: JobListi
                     <ExternalLink className="size-3.5" />
                   </a>
                 )}
-              </article>
+              </motion.article>
             );
           })}
         </div>
@@ -180,11 +192,12 @@ export default function JobListings({ jobs, totalJobs, keywords = [] }: JobListi
           </p>
 
           <div className="flex items-center gap-[10px] font-medium">
+            {/* CHANGED: `transition` -> BTN_MOTION (hover lift) on both buttons */}
             <button
               type="button"
               onClick={() => setPage(currentPage - 1)}
               disabled={isFirstPage}
-              className="flex items-center gap-[6px] rounded-[10px] border border-[#e5e7eb] bg-white/[0.72] px-4 py-2 text-[#4b5563] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white/[0.72]"
+              className={`flex items-center gap-[6px] rounded-[10px] border border-[#e5e7eb] bg-white/[0.72] px-4 py-2 text-[#4b5563] ${BTN_MOTION} hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white/[0.72]`}
             >
               <span className="text-[14px]">←</span>
               <span className="text-[13px]">Previous</span>
@@ -194,7 +207,7 @@ export default function JobListings({ jobs, totalJobs, keywords = [] }: JobListi
               type="button"
               onClick={() => setPage(currentPage + 1)}
               disabled={isLastPage}
-              className="flex items-center gap-[6px] rounded-[10px] bg-[#8b5cf6] px-4 py-2 text-white shadow-[0_4px_12px_rgba(124,58,237,0.2)] transition hover:bg-[#7c3aed] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#8b5cf6]"
+              className={`flex items-center gap-[6px] rounded-[10px] bg-[#8b5cf6] px-4 py-2 text-white shadow-[0_4px_12px_rgba(124,58,237,0.2)] ${BTN_MOTION} hover:bg-[#7c3aed] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#8b5cf6]`}
             >
               <span className="text-[13px]">Next</span>
               <span className="text-[14px]">→</span>

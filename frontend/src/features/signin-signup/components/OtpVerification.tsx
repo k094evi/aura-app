@@ -4,6 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { GRADIENT_BG } from './AuthShell';
 
+// ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
+const BTN_MOTION =
+  'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:hover:translate-y-0';
+
 const OTP_LENGTH = 6;
 const RESEND_SECONDS = 30;
 
@@ -164,11 +168,12 @@ export default function OtpVerification({
         )}
       </div>
 
+      {/* CHANGED: `transition` -> BTN_MOTION (hover lift; stays put while disabled) */}
       <button
         type="button"
         onClick={handleVerify}
         disabled={!isComplete || isVerifying}
-        className={`flex w-full items-center justify-center gap-2 rounded-full ${GRADIENT_BG} px-8 py-[14px] text-[15px] font-bold text-white shadow-[0_2px_3px_rgba(124,58,237,0.1),0_8px_12px_rgba(124,58,237,0.25)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60`}
+        className={`flex w-full items-center justify-center gap-2 rounded-full ${GRADIENT_BG} px-8 py-[14px] text-[15px] font-bold text-white shadow-[0_2px_3px_rgba(124,58,237,0.1),0_8px_12px_rgba(124,58,237,0.25)] ${BTN_MOTION} hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60`}
       >
         {isVerifying && <Loader2 className="size-[18px] animate-spin" />}
         {isVerifying ? 'Verifying…' : submitLabel}

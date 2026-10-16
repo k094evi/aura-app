@@ -2,12 +2,16 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { LogOut, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { getStoredUser } from '@/lib/auth';
+
+// ADDED: hover lift for buttons (respects reduced motion).
+const BTN_MOTION =
+  'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0';
 
 const AUTH_NAV_LINKS = [
   { label: 'Dashboard', href: '/dashboard' },
@@ -50,6 +54,8 @@ export const Navbar = ({
   // Ref used to detect clicks outside the dropdown
   const dropdownRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+  // ADDED: respect the OS "reduce motion" setting (kept up here with the other hooks)
+  const reduceMotion = useReducedMotion();
 
   const [userName, setUserName] = useState('Your Account');
   const [userEmail, setUserEmail] = useState('');
@@ -161,7 +167,15 @@ export const Navbar = ({
   };
 
   return (
-    <nav className="fixed top-6 inset-x-4 sm:inset-x-8 lg:inset-x-20 z-50 font-['DM_Sans',_sans-serif]">
+    // CHANGED: <nav> -> <motion.nav>. The navbar itself slides down and fades in once on load.
+    // It is animated directly (NOT wrapped in <Reveal>): a wrapper with a transform would
+    // break `position: fixed`. Only the nav's own transform is animated, so it stays fixed.
+    <motion.nav
+      initial={reduceMotion ? false : { opacity: 0, y: -24 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+      className="fixed top-6 inset-x-4 sm:inset-x-8 lg:inset-x-20 z-50 font-['DM_Sans',_sans-serif]"
+    >
       <div className="relative flex items-center justify-between gap-4 rounded-full border border-white bg-white/80 backdrop-blur-[10px] pl-6 pr-3.5 py-3.5 shadow-[0px_2px_8px_0px_rgba(31,41,55,0.04),0px_8px_32px_0px_rgba(31,41,55,0.06)]">
         {/* Logo / brand link. The logo file lives in /public (Aura_LogoRaster.png). */}
         <Link href="/" className="flex items-center gap-2.5 shrink-0">
@@ -249,15 +263,16 @@ export const Navbar = ({
             <Link href="/signin" className="text-sm font-semibold text-[#4b5563] hover:text-[#111827] transition-colors">
               Sign In
             </Link>
+            {/* CHANGED: `transition-opacity` -> BTN_MOTION (hover lift) */}
             <Link
               href="/signup"
-              className="px-[22px] py-[11px] bg-[#111827] text-white rounded-full text-sm font-semibold hover:opacity-90 transition-opacity drop-shadow-[0px_4px_6px_rgba(17,24,39,0.1)]"
+              className={`px-[22px] py-[11px] bg-[#111827] text-white rounded-full text-sm font-semibold hover:opacity-90 ${BTN_MOTION} drop-shadow-[0px_4px_6px_rgba(17,24,39,0.1)]`}
             >
               Get Started
             </Link>
           </div>
         )}
       </div>
-    </nav>
+    </motion.nav>
   );
 };

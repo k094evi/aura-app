@@ -4,6 +4,10 @@
 
 import { useEffect, useState, type MouseEvent } from 'react';
 
+// ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
+const BTN_MOTION =
+  'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:hover:translate-y-0';
+
 type TocItem = { id: string; label: string };
 
 // Sticky "Table of Contents" card. Highlights the section currently being
@@ -54,12 +58,13 @@ export default function TableOfContents({ items }: { items: TocItem[] }) {
         {items.map((item) => {
           const isActive = item.id === activeId;
           return (
+            // CHANGED: `transition-colors` -> BTN_MOTION (hover lift)
             <a  
               key={item.id}
               href={`#${item.id}`}
               onClick={(e) => handleClick(e, item.id)}
               aria-current={isActive ? 'true' : undefined}
-              className={`rounded-[12px] border px-4 py-[10px] text-[14px] transition-colors ${
+              className={`rounded-[12px] border px-4 py-[10px] text-[14px] ${BTN_MOTION} ${
                 isActive
                   ? 'border-[#7c3aed]/20 bg-[#7c3aed]/[0.07] font-bold text-[#7c3aed]'
                   : 'border-transparent font-medium text-[#4b5563] hover:bg-[#7c3aed]/[0.04] hover:text-[#111827]'

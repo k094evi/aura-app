@@ -29,6 +29,9 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
+// ADDED: scroll-in animation wrapper (file is src/components/reveal.tsx).
+import Reveal from '@/components/reveal';
+
 // The Figma design uses DM Sans throughout.
 const dmSans = DM_Sans({
   subsets: ['latin'],
@@ -48,6 +51,10 @@ const CARD =
 // Brand gradient (violet -> cyan). Kept as a full class string so Tailwind can detect it.
 const GRADIENT_BG = 'bg-[linear-gradient(90deg,#7c3aed_0%,#a78bfa_60%,#06b6d4_100%)]';
 const GRADIENT_TEXT = `${GRADIENT_BG} bg-clip-text text-transparent`;
+
+// ADDED: hover lift for buttons (with reduced-motion support).
+const BTN_MOTION =
+  'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0';
 
 // Tinted icon tiles (background + icon color)
 const TILE = {
@@ -253,6 +260,8 @@ const SOCIALS: { glyph: ReactNode; tile: string; text: string }[] = [
 // ───────────── Section heading ─────────────
 // `accent` is the gradient-colored part of the title, rendered right after `before`.
 // `size` picks the smaller title used for the sub-heading inside Features.
+// CHANGED: the root is now wrapped in <Reveal>. The wrapper is `flex w-full justify-center`
+// so the heading stays centered exactly like before.
 function SectionHeader({
   before,
   accent,
@@ -265,17 +274,19 @@ function SectionHeader({
   size?: 'lg' | 'md';
 }) {
   return (
-    <div className="flex w-full max-w-[800px] flex-col items-center gap-4 text-center">
-      <h2
-        className={`font-extrabold leading-[1.2] text-[#111827] ${
-          size === 'lg' ? 'text-[32px] sm:text-[40px]' : 'text-[26px] sm:text-[32px]'
-        }`}
-      >
-        {before}
-        {accent && <span className={GRADIENT_TEXT}>{accent}</span>}
-      </h2>
-      <p className="max-w-[600px] text-[16px] leading-[1.6] text-[#6b7280]">{subtitle}</p>
-    </div>
+    <Reveal className="flex w-full justify-center">
+      <div className="flex w-full max-w-[800px] flex-col items-center gap-4 text-center">
+        <h2
+          className={`font-extrabold leading-[1.2] text-[#111827] ${
+            size === 'lg' ? 'text-[32px] sm:text-[40px]' : 'text-[26px] sm:text-[32px]'
+          }`}
+        >
+          {before}
+          {accent && <span className={GRADIENT_TEXT}>{accent}</span>}
+        </h2>
+        <p className="max-w-[600px] text-[16px] leading-[1.6] text-[#6b7280]">{subtitle}</p>
+      </div>
+    </Reveal>
   );
 }
 
@@ -285,9 +296,9 @@ type FaqEntry = {
   answer: string;
 };
 
-// One expandable question. Starts open, as in the Figma design.
+// One expandable question. Starts closed; click to open.
 function FaqItem({ question, answer }: FaqEntry) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   // Links the toggle button to the answer panel for screen readers.
   const panelId = useId();
 
@@ -315,11 +326,14 @@ function FaqItem({ question, answer }: FaqEntry) {
   );
 }
 
+// CHANGED: each FAQ item is wrapped in <Reveal> with a small stagger.
 function FaqList({ items }: { items: FaqEntry[] }) {
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-4">
-      {items.map((item) => (
-        <FaqItem key={item.question} question={item.question} answer={item.answer} />
+      {items.map((item, i) => (
+        <Reveal key={item.question} delay={i * 0.1}>
+          <FaqItem question={item.question} answer={item.answer} />
+        </Reveal>
       ))}
     </div>
   );
@@ -397,7 +411,7 @@ function ContactForm({ email }: { email: string }) {
         e.preventDefault();
         handleSubmit();
       }}
-      className="flex w-full flex-col gap-5 rounded-[24px] border-[1.5px] border-white bg-white/[0.72] p-6 shadow-[0_4px_16px_rgba(124,58,237,0.03),0_16px_48px_rgba(17,24,39,0.06)] backdrop-blur-[12px] sm:p-10 lg:w-[620px] lg:shrink-0"
+      className="flex w-full flex-col gap-5 rounded-[24px] border-[1.5px] border-white bg-white/[0.72] p-6 shadow-[0_4px_16px_rgba(124,58,237,0.03),0_16px_48px_rgba(17,24,39,0.06)] backdrop-blur-[12px] sm:p-10 lg:min-w-0 lg:flex-[1.24]"
     >
       {/* Name row */}
       <div className="flex flex-col gap-4 sm:flex-row">
@@ -486,9 +500,10 @@ function ContactForm({ email }: { email: string }) {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-[13px] text-[#9ca3af]">We&apos;ll get back to you within 24 hours.</p>
 
+        {/* CHANGED: `transition` -> BTN_MOTION (hover lift) */}
         <button
           type="submit"
-          className={`flex items-center justify-center gap-[10px] rounded-full ${GRADIENT_BG} py-[14px] pl-7 pr-5 text-[15px] font-bold text-white shadow-[0_2px_3px_rgba(124,58,237,0.1),0_8px_12px_rgba(124,58,237,0.25)] transition hover:brightness-105 active:brightness-95`}
+          className={`flex items-center justify-center gap-[10px] rounded-full ${GRADIENT_BG} py-[14px] pl-7 pr-5 text-[15px] font-bold text-white shadow-[0_2px_3px_rgba(124,58,237,0.1),0_8px_12px_rgba(124,58,237,0.25)] ${BTN_MOTION} hover:brightness-105 active:brightness-95`}
         >
           Send Message
           <span className="flex size-[26px] items-center justify-center rounded-full bg-white/[0.13]">
@@ -507,6 +522,8 @@ function ContactForm({ email }: { email: string }) {
 }
 
 // ───────────── Page ─────────────
+// Reveal wrappers get layout classes (flex-1, h-full, etc.) so the extra <div>
+// they add does not change any sizing or alignment.
 export default function HomePage() {
   return (
     <div
@@ -539,44 +556,53 @@ export default function HomePage() {
 
       {/* Top padding leaves room for the fixed site navbar (rendered by the layout) */}
       <main className="relative z-10 flex w-full flex-col pt-[96px]">
-        {/* ───────────── Hero ───────────── */}
+        {/* ───────────── Hero ─────────────
+            Each hero piece reveals in sequence (staggered delays). */}
         <section className="flex flex-col items-center gap-7 px-6 pb-4 pt-[72px] text-center sm:px-10 lg:px-20">
-          <div className="flex items-center gap-[7px] rounded-full border border-[#10b981]/20 bg-[#ecfdf5] px-4 py-[7px] shadow-[0_2px_4px_rgba(16,185,129,0.1)]">
-            <Sparkles className="size-[14px] text-[#10b981]" />
-            <span className="text-[13px] font-semibold text-[#047857]">Powered by BERT</span>
-          </div>
+          <Reveal delay={0}>
+            <div className="flex items-center gap-[7px] rounded-full border border-[#10b981]/20 bg-[#ecfdf5] px-4 py-[7px] shadow-[0_2px_4px_rgba(16,185,129,0.1)]">
+              <Sparkles className="size-[14px] text-[#10b981]" />
+              <span className="text-[13px] font-semibold text-[#047857]">Powered by BERT</span>
+            </div>
+          </Reveal>
 
-          <h1 className="max-w-[960px] text-[40px] font-extrabold leading-[1.1] text-[#111827] sm:text-[56px] lg:text-[68px]">
-            Your Resume,
-            <br />
-            Perfected by <span className={GRADIENT_TEXT}>AI Intelligence.</span>
-          </h1>
+          <Reveal delay={0.1} className="flex flex-col items-center">
+            <h1 className="max-w-[960px] text-[40px] font-extrabold leading-[1.1] text-[#111827] sm:text-[56px] lg:text-[68px]">
+              Your Resume,
+              <br />
+              Perfected by <span className={GRADIENT_TEXT}>AI Intelligence.</span>
+            </h1>
+          </Reveal>
 
-          <p className="max-w-[580px] text-[16px] leading-[1.65] text-[#4b5563] sm:text-[18px]">
-            Optimize your resume for applicant tracking systems, discover hidden keyword gaps, and
-            stand out to hiring managers in seconds.
-          </p>
+          <Reveal delay={0.2} className="flex flex-col items-center">
+            <p className="max-w-[580px] text-[16px] leading-[1.65] text-[#4b5563] sm:text-[18px]">
+              Optimize your resume for applicant tracking systems, discover hidden keyword gaps, and
+              stand out to hiring managers in seconds.
+            </p>
+          </Reveal>
 
-          <div className="pt-6">
-            <Link
-              href="/signup"
-              className={`flex items-center justify-center rounded-full ${GRADIENT_BG} px-8 py-4 text-[15px] font-bold text-white shadow-[0_8px_12px_rgba(124,58,237,0.2)] transition hover:brightness-105 active:brightness-95`}
-            >
-              Get Started
-            </Link>
-          </div>
+          <Reveal delay={0.3}>
+            <div className="pt-6">
+              {/* CHANGED: `transition` -> BTN_MOTION (hover lift) */}
+              <Link
+                href="/signup"
+                className={`flex items-center justify-center rounded-full ${GRADIENT_BG} px-8 py-4 text-[15px] font-bold text-white shadow-[0_8px_12px_rgba(124,58,237,0.2)] ${BTN_MOTION} hover:brightness-105 active:brightness-95`}
+              >
+                Get Started
+              </Link>
+            </div>
+          </Reveal>
         </section>
 
         {/* ───────────── Feature highlight pills ───────────── */}
         <section className="flex flex-wrap items-center justify-center gap-4 px-6 py-12 sm:px-10 lg:px-20">
-          {HIGHLIGHTS.map(({ icon: Icon, color, label }) => (
-            <div
-              key={label}
-              className="flex items-center gap-2 rounded-full border border-white/80 bg-white/[0.63] px-[18px] py-[10px] backdrop-blur-[8px]"
-            >
-              <Icon className={`size-5 ${color}`} />
-              <span className="text-[13px] font-semibold text-[#4b5563]">{label}</span>
-            </div>
+          {HIGHLIGHTS.map(({ icon: Icon, color, label }, i) => (
+            <Reveal key={label} delay={i * 0.08}>
+              <div className="flex items-center gap-2 rounded-full border border-white/80 bg-white/[0.63] px-[18px] py-[10px] backdrop-blur-[8px]">
+                <Icon className={`size-5 ${color}`} />
+                <span className="text-[13px] font-semibold text-[#4b5563]">{label}</span>
+              </div>
+            </Reveal>
           ))}
         </section>
 
@@ -592,17 +618,19 @@ export default function HomePage() {
           <div className="flex w-full flex-col gap-6 lg:flex-row lg:items-center lg:gap-8">
             {STEPS.map((step, i) => (
               <Fragment key={step.badge}>
-                <div className={`${CARD} flex flex-1 flex-col items-start gap-5 p-7 lg:min-w-0`}>
-                  <span
-                    className={`rounded-full px-3 py-1 text-[12px] font-bold leading-none ${step.badgeClass}`}
-                  >
-                    {step.badge}
-                  </span>
-                  <div className="flex w-full flex-col gap-2">
-                    <h3 className="text-[18px] font-bold text-[#111827]">{step.title}</h3>
-                    <p className="text-[14px] leading-[1.5] text-[#4b5563]">{step.text}</p>
+                <Reveal delay={i * 0.12} className="flex flex-1 lg:min-w-0">
+                  <div className={`${CARD} flex flex-1 flex-col items-start gap-5 p-7 lg:min-w-0`}>
+                    <span
+                      className={`rounded-full px-3 py-1 text-[12px] font-bold leading-none ${step.badgeClass}`}
+                    >
+                      {step.badge}
+                    </span>
+                    <div className="flex w-full flex-col gap-2">
+                      <h3 className="text-[18px] font-bold text-[#111827]">{step.title}</h3>
+                      <p className="text-[14px] leading-[1.5] text-[#4b5563]">{step.text}</p>
+                    </div>
                   </div>
-                </div>
+                </Reveal>
 
                 {/* No arrow after the last step, and none on mobile */}
                 {i < STEPS.length - 1 && (
@@ -626,16 +654,18 @@ export default function HomePage() {
           />
 
           <div className="grid w-full grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {FEATURES.map(({ icon: Icon, tile, title, text }) => (
-              <div key={title} className={`${CARD} flex flex-col items-start gap-4 p-7`}>
-                <div className={`flex size-10 shrink-0 items-center justify-center rounded-[12px] ${tile}`}>
-                  <Icon className="size-5" />
+            {FEATURES.map(({ icon: Icon, tile, title, text }, i) => (
+              <Reveal key={title} delay={(i % 3) * 0.1} className="h-full">
+                <div className={`${CARD} flex h-full flex-col items-start gap-4 p-7`}>
+                  <div className={`flex size-10 shrink-0 items-center justify-center rounded-[12px] ${tile}`}>
+                    <Icon className="size-5" />
+                  </div>
+                  <div className="flex w-full flex-col gap-2">
+                    <h3 className="text-[18px] font-bold text-[#111827]">{title}</h3>
+                    <p className="text-[14px] leading-[1.5] text-[#4b5563]">{text}</p>
+                  </div>
                 </div>
-                <div className="flex w-full flex-col gap-2">
-                  <h3 className="text-[18px] font-bold text-[#111827]">{title}</h3>
-                  <p className="text-[14px] leading-[1.5] text-[#4b5563]">{text}</p>
-                </div>
-              </div>
+              </Reveal>
             ))}
           </div>
 
@@ -649,21 +679,23 @@ export default function HomePage() {
             />
 
             <div className="grid w-full grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-              {PILLARS.map(({ icon: Icon, tile, badgeClass, weight, title, text }) => (
-                <div key={title} className={`${CARD} flex flex-col items-start gap-5 p-7`}>
-                  <div className="flex w-full items-center justify-between">
-                    <div className={`flex size-10 shrink-0 items-center justify-center rounded-[12px] ${tile}`}>
-                      <Icon className="size-5" />
+              {PILLARS.map(({ icon: Icon, tile, badgeClass, weight, title, text }, i) => (
+                <Reveal key={title} delay={(i % 4) * 0.1} className="h-full">
+                  <div className={`${CARD} flex h-full flex-col items-start gap-5 p-7`}>
+                    <div className="flex w-full items-center justify-between">
+                      <div className={`flex size-10 shrink-0 items-center justify-center rounded-[12px] ${tile}`}>
+                        <Icon className="size-5" />
+                      </div>
+                      <span className={`rounded-full px-[10px] py-1 text-[12px] font-bold leading-none ${badgeClass}`}>
+                        {weight}
+                      </span>
                     </div>
-                    <span className={`rounded-full px-[10px] py-1 text-[12px] font-bold leading-none ${badgeClass}`}>
-                      {weight}
-                    </span>
+                    <div className="flex w-full flex-col gap-2">
+                      <h3 className="text-[20px] font-bold text-[#111827]">{title}</h3>
+                      <p className="text-[14px] leading-[1.5] text-[#4b5563]">{text}</p>
+                    </div>
                   </div>
-                  <div className="flex w-full flex-col gap-2">
-                    <h3 className="text-[20px] font-bold text-[#111827]">{title}</h3>
-                    <p className="text-[14px] leading-[1.5] text-[#4b5563]">{text}</p>
-                  </div>
-                </div>
+                </Reveal>
               ))}
             </div>
           </div>
@@ -689,9 +721,10 @@ export default function HomePage() {
         {/* ───────────── Contact ───────────── */}
         <section
           id="contact"
-          className="flex scroll-mt-28 flex-col gap-12 px-6 py-16 sm:px-10 lg:flex-row lg:gap-20 lg:px-[140px] lg:py-[100px]"
+          className="mx-auto flex w-full max-w-[1400px] scroll-mt-28 flex-col gap-10 px-6 py-16 sm:px-10 lg:flex-row lg:items-start lg:gap-12 lg:px-12 lg:py-[100px] xl:gap-20 xl:px-[100px]"
         >
-          <div className="flex w-full flex-col gap-9 lg:w-[500px] lg:shrink-0">
+          {/* CHANGED: this column's <div> is now a <Reveal> carrying the same classes */}
+          <Reveal className="flex w-full flex-col gap-9 lg:min-w-0 lg:flex-1">
             <div className="flex flex-col gap-5">
               <div className="h-[3px] w-12 rounded-[2px] bg-[linear-gradient(90deg,#7c3aed_0%,#06b6d4_100%)]" />
               <h2 className="text-[40px] font-extrabold leading-[1.1] text-[#111827] sm:text-[52px]">
@@ -732,9 +765,12 @@ export default function HomePage() {
                 </div>
               </div>
             </div>
-          </div>
+          </Reveal>
 
-          <ContactForm email={CONTACT_EMAIL} />
+          {/* CHANGED: form is wrapped in <Reveal>; the wrapper takes the flex sizing */}
+          <Reveal delay={0.15} className="w-full lg:min-w-0 lg:flex-[1.24]">
+            <ContactForm email={CONTACT_EMAIL} />
+          </Reveal>
         </section>
       </main>
     </div>
