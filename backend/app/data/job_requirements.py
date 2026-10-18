@@ -773,7 +773,7 @@ JOB_REQUIREMENTS = {
             "wireframing",
             "prototyping",
             "usability testing",
-            "design thinking"
+            "design thinking",
             "user personas",
         ],
         "optional_skills": [

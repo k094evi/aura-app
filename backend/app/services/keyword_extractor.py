@@ -35,7 +35,10 @@
 #   2. A lightweight single-document TF-IDF approximation surfaces other
 #      important domain terms from the experience/summary/certifications
 #      text (and falls back to the full raw text if that's too thin).
-#   3. Everything is deduplicated and capped at `top_n` (default 15).
+#   3. Known-skill vocabulary, tech-shaped tokens, certifications, acronyms
+#      and repeated phrases are mined from the WHOLE resume (incl. projects)
+#      to widen recall. Everything is alias-deduplicated and capped at
+#      `top_n` (default 40; only the first few are sent to JSearch).
 # ==============================================================================
 
 # app/services/keyword_extractor.py
@@ -52,6 +55,7 @@ import re
 import math
 import logging
 from collections import Counter
+from functools import lru_cache
 from typing import List, Optional, Set
 
 from app.models.schemas import ParsedResume
@@ -130,24 +134,40 @@ def _tokenize(text: str) -> List[str]:
 # ─────────────────────────────────────────────
 # SKILLS BLOCK PARSER
 # ─────────────────────────────────────────────
+# Terms whose "/" is part of the name and must NOT be split apart
+# ("CI/CD" is one skill, not "CI" + "CD"; "TCP/IP" is not "TCP" + "IP").
+_PROTECTED_SLASH_RE = re.compile(
+    r"\b(?:ci/cd|tcp/ip|ui/ux|ux/ui|i/o|a/b|pl/sql|ai/ml|ml/ai|ml/dl)\b", re.I
+)
+_SLASH_PLACEHOLDER = "\u2044"  # fraction slash, can't appear in normal resume text
+
+# "Programming Languages: Python, Java" -> "Python, Java" (drops the label that
+# otherwise gets glued onto the first skill as "Programming Languages: Python").
+_SKILL_LABEL_RE = re.compile(r"^[^:\n,]{2,40}:\s*", re.M)
+
+
 def _parse_skills_block(skills_block: str) -> List[str]:
     """
     Extracts skill phrases without destroying hyphenated technical terms.
-    Splits on newlines, commas, pipes, bullets, or dashes surrounded by spaces.
+    Splits on newlines, commas, pipes, bullets, slashes, or dashes surrounded
+    by spaces. Keeps "CI/CD"/"TCP/IP"-style terms whole and strips
+    "Category:" labels from the front of each line.
     """
-    # Split on commas, pipes, bullets, newlines, or spaced hyphens (' - ')
-    raw = re.split(r"[\n,|•\t\/]+|\s+[-–—]\s+", skills_block)
+    text = _SKILL_LABEL_RE.sub("", skills_block)
+    text = _PROTECTED_SLASH_RE.sub(lambda m: m.group(0).replace("/", _SLASH_PLACEHOLDER), text)
+
+    raw = re.split(r"[\n,;|•\t\/]+|\s+[-–—]\s+", text)
     skills = []
-    
+
     for item in raw:
-        cleaned = item.strip(" .–-•")
+        cleaned = item.replace(_SLASH_PLACEHOLDER, "/").strip(" .–-•")
         words = cleaned.lower().split()
-        
+
         # Reject empty items, single stop words, or phrases made only of stop words
         if cleaned and len(cleaned) > 1:
             if not all(w in STOP_WORDS for w in words):
                 skills.append(cleaned)
-                
+
     return skills
 
 
@@ -183,55 +203,559 @@ def _tfidf_keywords(text: str, top_n: int = 30) -> List[str]:
 
 
 # ─────────────────────────────────────────────
+# RECALL-ORIENTED RESUME EXTRACTION HELPERS
+# ─────────────────────────────────────────────
+# extract_keywords() used to read ONLY the skills block + a unigram TF-IDF
+# over experience/summary/certifications, capped at 15. That misses skills
+# that live in Projects (the biggest source for students), skills written
+# in prose ("built APIs with FastAPI"), multi-word skills ("machine
+# learning"), and anything not in the skills block. The tiers below add
+# those, while keeping the original skills-block-first ordering so the
+# first few keywords (the ones JobMatcher actually sends to JSearch) stay
+# the highest-signal ones.
+
+# Extra resume-side vocabulary on top of KNOWN_SKILL_TERMS (which is tuned
+# for job postings). Matched against the whole resume body, so a skill
+# mentioned anywhere counts even if it never made it into the skills block.
+EXTRA_RESUME_TERMS = {
+    # languages
+    "kotlin", "scala", "dart", "perl", "matlab", "powershell", "shell scripting",
+    "objective-c", "vb.net", "assembly", "sql server", "pl/sql", "t-sql",
+    # web / frameworks
+    "next.js", "nuxt", "svelte", "express.js", "spring boot", "spring", "laravel",
+    ".net", "asp.net", "flutter", "react native", "tailwind", "tailwind css",
+    "bootstrap", "redux", "jquery", "sass", "webpack", "vite", "nestjs", "symfony",
+    "codeigniter", "wordpress", "shopify", "responsive design", "web development",
+    "frontend", "front-end", "backend", "back-end", "full stack", "fullstack",
+    "restful api", "api", "json", "xml", "yaml", "websocket", "oauth", "jwt",
+    "microservices", "mvc", "oop", "object-oriented programming", "design patterns",
+    "data structures", "algorithms", "sdlc", "tdd", "orm", "sqlalchemy", "pydantic",
+    "uvicorn", "celery", "rabbitmq", "kafka", "redis", "nginx", "apache",
+    # mobile
+    "android", "ios", "android studio", "xcode", "swiftui", "jetpack compose",
+    # data / ml / ai
+    "spark", "hadoop", "airflow", "etl", "elt", "power query", "looker", "snowflake",
+    "bigquery", "redshift", "numpy", "matplotlib", "seaborn", "jupyter", "statistics",
+    "data visualization", "data modeling", "data warehouse", "data cleaning",
+    "data pipeline", "dbt", "keras", "opencv", "hugging face", "transformers", "llm",
+    "large language models", "rag", "langchain", "prompt engineering",
+    "computer vision", "generative ai", "mlops", "xgboost", "scikit-learn",
+    "natural language processing", "neural networks", "feature engineering",
+    "sentiment analysis", "text classification", "embeddings", "vector database",
+    "recommendation system", "time series", "regression", "classification",
+    # cloud / devops / infra
+    "ec2", "s3", "lambda", "cloudformation", "helm", "github actions", "gitlab ci",
+    "prometheus", "grafana", "serverless", "cloud computing", "infrastructure as code",
+    "containerization", "virtualization", "vmware", "virtualbox", "hyper-v",
+    "ubuntu", "windows", "macos", "git", "github", "gitlab", "bitbucket", "vercel",
+    "heroku", "netlify", "digitalocean",
+    # databases
+    "oracle", "sqlite", "supabase", "firebase", "dynamodb", "elasticsearch",
+    "stored procedures", "database design", "database administration", "mariadb",
+    "postgres", "query optimization", "indexing", "normalization",
+    # security
+    "nmap", "metasploit", "burp suite", "splunk", "nist", "iso 27001", "zero trust",
+    "iam", "ids/ips", "threat hunting", "digital forensics", "malware analysis",
+    "threat intelligence", "vulnerability management", "network security",
+    "information security", "security operations", "access control", "soc 2",
+    "gdpr", "data privacy", "cryptography", "ethical hacking", "kali linux",
+    "security+", "ceh", "oscp", "cysa+", "az-500", "sc-200",
+    # testing / qa
+    "selenium", "cypress", "playwright", "jest", "pytest", "junit", "postman",
+    "test automation", "unit testing", "integration testing", "manual testing",
+    "regression testing", "test cases", "bug tracking", "qa", "sdet", "load testing",
+    "jmeter", "performance testing", "uat",
+    # it support / systems / networking
+    "help desk", "service desk", "ticketing", "troubleshooting", "hardware",
+    "networking", "system administration", "office 365", "microsoft 365",
+    "group policy", "servicenow", "remote support", "backup and recovery",
+    "disaster recovery", "patch management", "endpoint management", "intune",
+    "sccm", "exchange", "sharepoint", "packet tracer", "gns3", "subnetting",
+    "wireless", "wi-fi", "cloud security", "iot",
+    # design
+    "adobe xd", "photoshop", "illustrator", "canva", "user research",
+    "usability testing", "design systems", "user experience", "user interface",
+    "information architecture", "user flows", "interaction design", "accessibility",
+    "wcag", "invision", "balsamiq", "after effects", "premiere pro",
+    # project / business / practice
+    "devsecops", "scrum master", "product management", "business analysis",
+    "requirements gathering", "process improvement", "technical documentation",
+    "stakeholder communication", "client communication", "presentation",
+    "ms office", "microsoft office", "word", "powerpoint", "google workspace",
+    "crm", "erp", "sap", "salesforce", "seo", "google analytics",
+    # degree fields (education block)
+    "computer science", "information technology", "information systems",
+    "software engineering", "computer engineering", "data science",
+    "cybersecurity", "electronics engineering", "business administration",
+    "multimedia arts",
+    # common role words worth searching on
+    "software developer", "web developer", "data analyst", "data engineer",
+    "system administrator", "network engineer", "qa engineer", "ui/ux designer",
+    "machine learning engineer", "devops engineer", "cloud engineer",
+    "technical support", "it support", "intern", "internship", "capstone",
+}
+
+# Surface-form aliases collapsed to ONE canonical key so "ReactJS", "React.js"
+# and "React" don't burn three keyword slots (and three JSearch queries).
+_CANONICAL_ALIASES = {
+    "reactjs": "react", "react.js": "react", "react js": "react",
+    "vuejs": "vue", "vue.js": "vue", "angularjs": "angular", "angular.js": "angular",
+    "nodejs": "node.js", "node": "node.js", "node js": "node.js",
+    "nextjs": "next.js", "expressjs": "express.js",
+    "postgres": "postgresql", "js": "javascript",
+    "k8s": "kubernetes", "ml": "machine learning", "nlp": "natural language processing",
+    "amazon web services": "aws", "google cloud": "gcp", "google cloud platform": "gcp",
+    "ms excel": "excel", "microsoft excel": "excel", "ms office": "microsoft office",
+    "sklearn": "scikit-learn", "scikit learn": "scikit-learn", "powerbi": "power bi",
+    "ci cd": "ci/cd", "cicd": "ci/cd", "front-end": "frontend", "back-end": "backend",
+    "full stack": "fullstack", "full-stack": "fullstack", "restful api": "rest api",
+    "restful apis": "rest api", "apis": "api", "oop": "object-oriented programming",
+    "ui ux": "ui/ux", "ux/ui": "ui/ux",
+}
+
+# Words that stay upper-case when a vocabulary hit is turned into display text.
+_DISPLAY_UPPER = {
+    "sql", "aws", "gcp", "css", "html", "api", "etl", "elt", "ci/cd", "tcp/ip",
+    "ui", "ux", "ui/ux", "ai", "ml", "nlp", "llm", "rag", "ios", "iam", "vpn",
+    "dns", "dhcp", "lan", "wan", "vlan", "bgp", "ospf", "mpls", "voip", "snmp",
+    "soc", "siem", "oop", "tdd", "mvc", "sdlc", "seo", "crm", "erp", "sap", "qa",
+    "sdet", "bi", "ccna", "ccnp", "ccie", "cissp", "pmp", "itil", "owasp", "rest",
+    "json", "xml", "yaml", "orm", "jwt", "oauth", "nist", "gdpr", "iot", "uat",
+    "bert", "ceh", "oscp", "wcag", "pl/sql", "t-sql", "ids/ips", "gns3",
+    "sccm", "ec2", "s3", "dbt", "xcode", "mlops", "devsecops", "ec2",
+}
+
+_TECH_ACRONYM_NOISE = {
+    "gpa", "usa", "uk", "ph", "pdf", "llc", "inc", "ltd", "cv", "bsit", "bscs",
+    "bsis", "bscpe", "shs", "am", "pm", "ii", "iii", "iv", "ceo", "cto", "hr",
+    "phd", "mba", "bs", "ba", "ms", "ma", "ncr", "jr", "sr", "etc", "usd", "php",
+    "gwa", "id", "tin", "sss", "ok", "no", "vs", "re", "ex",
+}
+# "PHP" is a real language but also the Philippine peso; the vocab/skills-block
+# tiers still catch it when it's a skill, so it's excluded from the loose
+# acronym tier only.
+
+_CAMEL_RE = re.compile(r"\b[A-Za-z]*[a-z][A-Z][A-Za-z0-9]*\b")
+_DOTTED_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9]*\.(?:js|py|net|io|ai)\b", re.I)
+_SYMBOL_RE = re.compile(r"\b[A-Za-z]+(?:\+\+|#)(?![A-Za-z0-9])")
+_ACRONYM_RE = re.compile(r"(?<![A-Za-z0-9/.])[A-Z][A-Z0-9]{1,5}(?![A-Za-z0-9/])")
+_CAMEL_NOISE = {"linkedin", "youtube", "facebook", "mcdonald", "whatsapp", "tiktok"}
+
+# Requirement-derived single words too generic to count as a resume keyword
+# ("testing", "security", "database" appear in nearly every IT resume).
+_REQ_GENERIC_SINGLE = {
+    "programming", "database", "testing", "security", "networking", "monitoring",
+    "privacy", "automation", "audit", "scripting", "scalability", "routing",
+    "switching", "troubleshooting", "replication", "governance",
+}
+
+_RUNTIME_VOCAB: set[str] = set()
+
+
+@lru_cache(maxsize=1)
+def _requirements_vocab() -> tuple:
+    """
+    (skills, certifications) from app/data/job_requirements.py - the single
+    source of truth for what each role needs - so the resume vocabulary grows
+    whenever a role or skill is added there, with no second list to maintain.
+    Returns empty sets if that module can't be imported.
+    """
+    try:
+        from app.data.job_requirements import JOB_REQUIREMENTS
+    except Exception as exc:  # missing module / bad data must never break extraction
+        logger.warning("job_requirements unavailable for resume vocabulary: %s", exc)
+        return frozenset(), frozenset()
+
+    skills: set[str] = set()
+    certs: set[str] = set()
+    for spec in JOB_REQUIREMENTS.values():
+        for key, target in (("required_skills", skills), ("optional_skills", skills),
+                            ("required_certifications", certs), ("optional_certifications", certs)):
+            for term in (spec.get(key) or []):
+                t = str(term).strip().lower()
+                if len(t) < 3:                       # drops "r"
+                    continue
+                if " " not in t and t in _REQ_GENERIC_SINGLE:
+                    continue
+                target.add(t)
+    return frozenset(skills), frozenset(certs)
+
+
+@lru_cache(maxsize=1)
+def _full_vocab() -> frozenset:
+    skills, certs = _requirements_vocab()
+    return frozenset(KNOWN_SKILL_TERMS | EXTRA_RESUME_TERMS | skills | certs | _RUNTIME_VOCAB)
+
+
+def register_extra_vocab(terms) -> int:
+    """
+    Add terms to the resume vocabulary at runtime - e.g. at app startup, the
+    skill_name values from the Supabase `certifications` table:
+
+        register_extra_vocab(r["skill_name"] for r in rows)
+
+    Returns how many new terms were added.
+    """
+    before = len(_RUNTIME_VOCAB)
+    for t in terms or []:
+        if isinstance(t, str) and len(t.strip()) >= 3:
+            _RUNTIME_VOCAB.add(t.strip().lower())
+    _full_vocab.cache_clear()
+    _vocab_regex.cache_clear()
+    return len(_RUNTIME_VOCAB) - before
+
+
+@lru_cache(maxsize=1)
+def _vocab_regex() -> "re.Pattern":
+    """Built lazily: KNOWN_SKILL_TERMS is defined further down this module, so
+    the combined resume vocabulary can't be assembled at import time here."""
+    vocab = _full_vocab()
+    return re.compile(
+        r"(?<![a-z0-9])(?:"
+        + "|".join(re.escape(t) for t in sorted(vocab, key=lambda t: (-len(t), t)))
+        + r")(?![a-z0-9])"
+    )
+
+
+def _canon(term: str) -> str:
+    key = re.sub(r"\s+", " ", term.strip().lower())
+    return _CANONICAL_ALIASES.get(key, key)
+
+
+_DISPLAY_WORD = {
+    "comptia": "CompTIA", "istqb": "ISTQB", "cncf": "CNCF", "iso": "ISO", "cism": "CISM",
+    "cysa+": "CySA+", "a+": "A+", "network+": "Network+", "security+": "Security+",
+    "mitre": "MITRE", "att&ck": "ATT&CK", "vpc": "VPC", "azure": "Azure", "aws": "AWS",
+    "sysops": "SysOps", "devops": "DevOps", "vue.js": "Vue.js", "ux": "UX", "ui": "UI",
+    "ai": "AI", "sentinel": "Sentinel", "nist": "NIST", "iam": "IAM", "ids/ips": "IDS/IPS",
+}
+
+_DISPLAY_OVERRIDE = {
+    "sqlalchemy": "SQLAlchemy", "pytest": "pytest", "github actions": "GitHub Actions",
+    "github": "GitHub", "gitlab": "GitLab", "gitlab ci": "GitLab CI", "numpy": "NumPy",
+    "devops": "DevOps", "postgresql": "PostgreSQL", "mysql": "MySQL", "mongodb": "MongoDB",
+    "nosql": "NoSQL", "fastapi": "FastAPI", "javascript": "JavaScript",
+    "typescript": "TypeScript", "tensorflow": "TensorFlow", "pytorch": "PyTorch",
+    "jquery": "jQuery", "nestjs": "NestJS", "graphql": "GraphQL", "dynamodb": "DynamoDB",
+    "bigquery": "BigQuery", "hugging face": "Hugging Face", "langchain": "LangChain",
+    "scikit-learn": "scikit-learn", "xgboost": "XGBoost", "opencv": "OpenCV",
+    "servicenow": "ServiceNow", "sharepoint": "SharePoint", "powershell": "PowerShell",
+    "wordpress": "WordPress", "macos": "macOS", "vmware": "VMware", "wi-fi": "Wi-Fi",
+    "fullstack": "Full Stack", "full stack": "Full Stack", "powerpoint": "PowerPoint",
+    "photoshop": "Photoshop", "jmeter": "JMeter", "rabbitmq": "RabbitMQ",
+    "elasticsearch": "Elasticsearch", "iot": "IoT", "comptia security+": "CompTIA Security+", "supabase": "Supabase", "uvicorn": "Uvicorn",
+}
+
+
+def _display(term: str) -> str:
+    if term in _DISPLAY_OVERRIDE:
+        return _DISPLAY_OVERRIDE[term]
+    return " ".join(
+        _DISPLAY_WORD.get(w) or (w.upper() if w in _DISPLAY_UPPER else w.capitalize())
+        for w in term.split(" ")
+    )
+
+
+class _KeywordCollector:
+    """Ordered, alias-aware, capped keyword list."""
+
+    def __init__(self, limit: int):
+        self.limit = limit
+        self.seen: set[str] = set()
+        self.items: List[str] = []
+
+    def full(self) -> bool:
+        return len(self.items) >= self.limit
+
+    def add(self, term: str) -> None:
+        term = term.strip(" .,;:-–•")
+        if not term or len(term) < 2 or self.full():
+            return
+        key = _canon(term)
+        if key in self.seen or key in STOP_WORDS:
+            return
+        self.seen.add(key)
+        self.items.append(term)
+
+
+def _vocab_hits(text: str) -> List[str]:
+    """Known skill terms found anywhere in `text`, most frequent first."""
+    lower = text.lower()
+    counts: Counter = Counter()
+    first_pos: dict[str, int] = {}
+    for m in _vocab_regex().finditer(lower):
+        term = m.group(0)
+        counts[term] += 1
+        first_pos.setdefault(term, m.start())
+    ordered = sorted(counts, key=lambda t: (-counts[t], first_pos[t]))
+    return [_display(t) for t in ordered]
+
+
+def _tech_shaped_tokens(text: str) -> List[str]:
+    """Original-case tokens that LOOK like technologies: PostgreSQL, FastAPI,
+    Next.js, C++, C#. Catches tools the vocabularies have never heard of."""
+    found: List[str] = []
+    for rx in (_CAMEL_RE, _DOTTED_RE, _SYMBOL_RE):
+        for m in rx.finditer(text):
+            tok = m.group(0)
+            if tok.lower() not in _CAMEL_NOISE:
+                found.append(tok)
+    return found
+
+
+def _acronym_tokens(text: str, skills_text: str) -> List[str]:
+    """Loose tier: ALL-CAPS tokens (SQL, AWS, REST, SIEM...). Kept if they sit
+    in the skills block or appear more than once, minus resume-noise acronyms."""
+    counts = Counter(m.group(0) for m in _ACRONYM_RE.finditer(text))
+    in_skills = {m.group(0) for m in _ACRONYM_RE.finditer(skills_text or "")}
+    out = [
+        a for a, c in counts.most_common()
+        if a.lower() not in _TECH_ACRONYM_NOISE and not a.isdigit()
+        and (a in in_skills or c >= 2)
+    ]
+    return out
+
+
+def _repeated_phrases(text: str, max_phrases: int = 12) -> List[str]:
+    """Two-word phrases that appear 2+ times ("machine learning", "rest api",
+    "data pipeline"), requiring neither word to be a stop word."""
+    pattern = r"[a-zA-Z0-9]+(?:[-./][a-zA-Z0-9]+)*[+\#]?"
+    counts: Counter = Counter()
+    for line in text.lower().split("\n"):
+        toks = [t.strip(".,;:/-") for t in re.findall(pattern, line)]
+        for a, b in zip(toks, toks[1:]):
+            if (len(a) > 1 and len(b) > 1 and a not in STOP_WORDS and b not in STOP_WORDS
+                    and not a.isnumeric() and not b.isnumeric()):
+                counts[f"{a} {b}"] += 1
+    return [p for p, c in counts.most_common() if c >= 2][:max_phrases]
+
+
+def _certification_names(certs_block: Optional[str], max_items: int = 8) -> List[str]:
+    if not certs_block:
+        return []
+    out = []
+    for line in certs_block.split("\n"):
+        line = line.strip(" -•\t")
+        if 3 <= len(line) <= 60 and 1 <= len(line.split()) <= 8:
+            out.append(line)
+    return out[:max_items]
+
+
+# ─────────────────────────────────────────────
+# SEMANTIC RESUME TIER, ALIAS VARIANTS, SEARCH-SKILL PICKER
+# ─────────────────────────────────────────────
+
+# Stricter than SEMANTIC_SKILL_MATCH_THRESHOLD (0.62, tuned for job postings):
+# a wrong skill credited to the RESUME is worse than a missed one, because it
+# can end up in a JSearch query. Retune against labelled resumes.
+RESUME_SEMANTIC_THRESHOLD = 0.75
+RESUME_SEMANTIC_CANDIDATES = 25   # how many TF-IDF candidates to check (cost bound)
+RESUME_SEMANTIC_MAX_ADDED = 8     # cap on semantically-inferred keywords per resume
+RESUME_SEMANTIC_MIN_LEN = 4
+
+
+def _semantic_resume_terms(candidates: List[str], seen_keys: set) -> List[str]:
+    """
+    Maps resume words that are NOT literal skill terms onto the known skill
+    they mean ("containerization" -> Docker). Returns display-ready known
+    terms to add. No-ops (returns []) if the embedding model is unavailable.
+    """
+    try:
+        if not embedding_service.is_available():
+            return []
+    except Exception as exc:
+        logger.warning("Embedding model unavailable for resume keywords: %s", exc)
+        return []
+
+    added: List[str] = []
+    added_keys: set[str] = set()
+    checked = 0
+    for cand in candidates:
+        key = cand.lower()
+        if len(key) < RESUME_SEMANTIC_MIN_LEN or key in STOP_WORDS or _canon(key) in seen_keys:
+            continue
+        if checked >= RESUME_SEMANTIC_CANDIDATES:
+            break
+        checked += 1
+        known, score = _closest_known_skill_scored(key)
+        if score < 0:          # model errored: stop instead of failing on every candidate
+            break
+        if known is None or score < RESUME_SEMANTIC_THRESHOLD:
+            continue
+        ck = _canon(known)
+        if ck in seen_keys or ck in added_keys:
+            continue
+        logger.info("Semantic resume keyword: %r ~ %r (%.2f)", cand, known, score)
+        added_keys.add(ck)
+        added.append(_display(known))
+        if len(added) >= RESUME_SEMANTIC_MAX_ADDED:
+            break
+    return added
+
+
+def alias_variants(skill: str) -> set:
+    """
+    All lower-case surface forms we treat as the same skill as `skill`
+    ("React" -> {"react", "reactjs", "react.js", "react js"}). Used by
+    job_scorer so a resume's "ReactJS" matches a posting's "React.js".
+    """
+    key = _canon(skill)
+    variants = {skill.strip().lower(), key}
+    variants.update(a for a, c in _CANONICAL_ALIASES.items() if c == key)
+    return {v for v in variants if v}
+
+
+# Terms that are real skills but make poor JSearch queries on their own or
+# combined with a role ("Backend Developer Git"), plus degree/role words.
+_WEAK_QUERY_TERMS = {
+    "microsoft office", "ms office", "microsoft 365", "office 365", "google workspace",
+    "problem solving", "communication", "teamwork", "git", "github", "gitlab",
+    "bitbucket", "json", "xml", "yaml", "api", "word", "powerpoint", "windows",
+    "macos", "ubuntu", "presentation", "stakeholder communication",
+    "client communication", "technical documentation", "intern", "internship",
+    "capstone", "computer science", "information technology", "information systems",
+    "software engineering", "computer engineering", "electronics engineering",
+    "business administration", "multimedia arts", "hardware", "wireless", "wi-fi",
+    "troubleshooting", "ticketing", "remote support",
+    "backend", "frontend", "full stack", "fullstack", "web development", "networking",
+}
+_ROLE_WORD_RE = re.compile(
+    r"\b(developer|engineer|analyst|administrator|designer|architect|specialist|"
+    r"technician|manager|intern|tester)\b", re.I
+)
+
+
+def pick_search_skills(keywords: List[str], n: int = 4) -> List[str]:
+    """
+    Picks the `n` best JSearch-query skills from a ranked keyword list:
+    recognised technologies first (in rank order), skipping generic tools,
+    degree names and role words. If fewer than `n` are recognised, tops up
+    from the first 15 keywords that look like short skill phrases.
+    """
+    vocab = _full_vocab()
+    certs = _requirements_vocab()[1]
+    picked: List[str] = []
+    picked_keys: set[str] = set()
+
+    def _ok_shape(kw: str) -> bool:
+        words = kw.split()
+        return 1 <= len(words) <= 2 and len(kw) <= 25 and not _ROLE_WORD_RE.search(kw)
+
+    def _take(kw: str) -> None:
+        key = _canon(kw)
+        if key in picked_keys or key in _WEAK_QUERY_TERMS or kw.strip().lower() in _WEAK_QUERY_TERMS:
+            return
+        if key in certs or re.search(r"\b(?:certified|certificate|certification)\b", key):
+            return
+        picked_keys.add(key)
+        picked.append(kw)
+
+    for kw in keywords:
+        if len(picked) >= n:
+            return picked
+        if _ok_shape(kw) and (_canon(kw) in vocab or kw.lower() in vocab):
+            _take(kw)
+
+    for kw in keywords[:15]:
+        if len(picked) >= n:
+            break
+        if _ok_shape(kw) and kw.lower() not in STOP_WORDS and not kw.isnumeric():
+            _take(kw)
+    return picked
+
+
+# ─────────────────────────────────────────────
 # PUBLIC API
 # ─────────────────────────────────────────────
 
-def extract_keywords(resume: ParsedResume, top_n: int = 15) -> List[str]:
+DEFAULT_TOP_N = 40
+
+
+def extract_keywords(resume: ParsedResume, top_n: int = DEFAULT_TOP_N) -> List[str]:
     """
     PUBLIC ENTRY POINT — this is the function other files (e.g. the route/
     controller that orchestrates the parse -> keywords -> jobs -> enrich
     flow) actually call.
 
-    Returns a ranked list of keywords to use as Jsearch search terms.
+    Returns a ranked list of keywords. Only the FIRST few are used as JSearch
+    queries (JobMatcher.max_keywords_queried), so ordering is deliberate —
+    highest-signal first — while the long tail gives job scoring/matching
+    more vocabulary to work with.
 
     Priority order:
-      1. Skills block terms (explicit, high signal)
-      2. TF-IDF keywords from experience + summary blocks
-      3. Fallback to full raw_text TF-IDF
+      1. Skills block terms (explicit, high signal), as written
+      2. Known skill terms found ANYWHERE in the resume (projects,
+         experience, summary, certifications) — frequency ranked
+      3. Technology-shaped tokens (PostgreSQL, FastAPI, Next.js, C#)
+      4. Certification / training names
+      5. ALL-CAPS acronyms (skills block, or repeated)
+      6. Repeated two-word phrases ("machine learning")
+      7. Semantic: reworded skills mapped onto known ones (needs the
+         embedding model; silently skipped when unavailable)
+      8. TF-IDF unigrams over experience + summary + projects + certs
+      9. Fallback TF-IDF over full raw_text when still thin
 
+    Aliases ("ReactJS" / "React.js" / "React") share one slot.
     Returns at most `top_n` keywords, deduplicated.
     """
-    seen = set()
-    keywords: List[str] = []
+    kw = _KeywordCollector(top_n)
 
-    # ── Tier 1: skills block ──────────────────
+    # Everything except the contact block (names/addresses/emails are noise).
+    body = "\n".join(filter(None, [
+        resume.summary_block, resume.experience_block, resume.education_block,
+        resume.skills_block, resume.projects_block, resume.certifications_block,
+    ])) or resume.raw_text or ""
+
+    # ── 1. skills block ───────────────────────
     if resume.skills_block:
         for skill in _parse_skills_block(resume.skills_block):
-            key = skill.lower()
-            if key not in seen:
-                seen.add(key)
-                keywords.append(skill)
+            # Sentence fragments ("we are a motivated team player...") aren't skills.
+            if len(skill) <= 40 and len(skill.split()) <= 5:
+                kw.add(skill)
 
-    # ── Tier 2: TF-IDF from experience + summary ──
+    # ── 2. vocabulary hits anywhere in the resume ──
+    for term in _vocab_hits(body):
+        kw.add(term)
+
+    # ── 3. technology-shaped tokens ───────────
+    for term in _tech_shaped_tokens(body):
+        kw.add(term)
+
+    # ── 4. certification names ────────────────
+    for name in _certification_names(resume.certifications_block):
+        kw.add(name)
+
+    # ── 5. acronyms ───────────────────────────
+    for term in _acronym_tokens(body, resume.skills_block or ""):
+        kw.add(term)
+
+    # ── 6. repeated two-word phrases ──────────
+    for phrase in _repeated_phrases(body):
+        kw.add(phrase)
+
+    # TF-IDF candidates are computed once and shared by tiers 7 and 8.
     rich_text = " ".join(filter(None, [
         resume.experience_block,
         resume.summary_block,
+        resume.projects_block,
         resume.certifications_block,
     ]))
-    if rich_text:
-        for term in _tfidf_keywords(rich_text, top_n=20):
-            if term not in seen:
-                seen.add(term)
-                keywords.append(term)
+    tfidf_terms = _tfidf_keywords(rich_text, top_n=40) if rich_text else []
 
-    # ── Tier 3: fallback to full raw_text ────
-    if len(keywords) < 5:
-        for term in _tfidf_keywords(resume.raw_text, top_n=20):
-            if term not in seen:
-                seen.add(term)
-                keywords.append(term)
+    # ── 7. semantic: map reworded skills onto known ones (best-effort) ──
+    for term in _semantic_resume_terms(tfidf_terms, kw.seen):
+        kw.add(term)
 
-    return keywords[:top_n]
+    # ── 8. TF-IDF unigrams (now includes projects) ──
+    for term in tfidf_terms:
+        kw.add(term)
+
+    # ── 9. fallback to full raw_text ──────────
+    if len(kw.items) < 5:
+        for term in _tfidf_keywords(resume.raw_text, top_n=30):
+            kw.add(term)
+
+    return kw.items[:top_n]
 
 
 # ─────────────────────────────────────────────
@@ -354,41 +878,39 @@ SEMANTIC_SKILL_MATCH_THRESHOLD = 0.62
 SEMANTIC_CANDIDATE_POOL_SIZE = 40
 
 
-def _closest_known_skill(candidate: str) -> Optional[str]:
-    """
-    Returns the KNOWN_SKILL_TERMS entry `candidate` is semantically
-    closest to, if that similarity clears SEMANTIC_SKILL_MATCH_THRESHOLD
-    — otherwise None.
-
-    This is the embedding-similarity upgrade this file's KNOWN_SKILL_TERMS
-    vocabulary always needed: instead of ONLY ever growing by hand, a
-    candidate term that means the same thing as an existing entry (e.g.
-    "containerization" vs. "docker"/"kubernetes", "React framework" vs.
-    "react", "IaC" vs. "terraform") gets credited too, without needing to
-    list every synonym/rewording by hand.
-
-    Uses embedding_service.cached_semantic_similarity(), which caches
-    each individual term's embedding — so across many postings analyzed
-    in the same running process, the ~150 KNOWN_SKILL_TERMS embeddings
-    are each computed once (the first time they're compared against
-    anything) and reused after that; only the small number of NEW
-    candidate terms per posting cost a fresh embedding call.
-
-    Fails soft: any error talking to the embedding model (not installed,
-    model failed to load, etc.) is logged and treated as "no semantic
-    match" — callers always still get the exact-match/statistical tiers
-    they'd have gotten before this function existed.
-    """
+def _closest_known_skill_scored(candidate: str) -> tuple:
+    """(closest KNOWN_SKILL_TERMS entry, cosine score). Fails soft to (None, -1.0)
+    - a negative score means "the embedding model errored", not "no match"."""
     best_term, best_score = None, 0.0
     for known in _KNOWN_SKILL_TERMS_SORTED:
         try:
             score = embedding_service.cached_semantic_similarity(candidate, known)
         except Exception as exc:
             logger.warning("Semantic skill match failed for '%s': %s", candidate, exc)
-            return None
+            return None, -1.0
         if score > best_score:
             best_term, best_score = known, score
-    return best_term if best_score >= SEMANTIC_SKILL_MATCH_THRESHOLD else None
+    return best_term, best_score
+
+
+def _closest_known_skill(candidate: str, threshold: Optional[float] = None) -> Optional[str]:
+    """
+    Returns the KNOWN_SKILL_TERMS entry `candidate` is semantically
+    closest to, if that similarity clears the threshold (default
+    SEMANTIC_SKILL_MATCH_THRESHOLD) - otherwise None.
+
+    This is the embedding-similarity upgrade this file's KNOWN_SKILL_TERMS
+    vocabulary always needed: a candidate term that means the same thing
+    as an existing entry ("containerization" vs. "docker", "IaC" vs.
+    "terraform") gets credited too, without listing every synonym by hand.
+
+    Uses embedding_service.cached_semantic_similarity(), which caches each
+    individual term's embedding. Fails soft: any error talking to the
+    embedding model is logged and treated as "no semantic match".
+    """
+    best_term, best_score = _closest_known_skill_scored(candidate)
+    limit = SEMANTIC_SKILL_MATCH_THRESHOLD if threshold is None else threshold
+    return best_term if best_score >= limit else None
 
 
 def extract_skill_terms_from_posting(

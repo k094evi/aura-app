@@ -24,6 +24,7 @@
 import logging
 import os
 import urllib.parse
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
@@ -50,6 +51,7 @@ from app.models.auth_schemas import (
     MFAChallengeRequest,
 )
 from app.services import auth_service
+from app.extensions.supabase_client import supabase_admin
 from app.dependencies.auth import bearer_scheme, get_authenticated_user, get_current_user
 
 # All routes in this file are grouped under prefix "/auth" and tagged
@@ -219,10 +221,15 @@ def get_oauth_url(provider: str):
         )
 
     redirect_to = f"{FRONTEND_URL}/oauth-callback"
-    query = urllib.parse.urlencode({
+    params = {
         "provider": provider,
         "redirect_to": redirect_to,
-    })
+    }
+    if provider == "google":
+        # Always show Google's account chooser instead of silently reusing the
+        # Google account that is already signed in on this browser.
+        params["prompt"] = "select_account"
+    query = urllib.parse.urlencode(params)
     # This is Supabase GoTrue's own OAuth kickoff endpoint — hitting it
     # (via a real browser redirect) is what actually starts the provider's
     # login flow. We build it directly rather than going through the
@@ -230,6 +237,81 @@ def get_oauth_url(provider: str):
     # pure URL construction from public config.
     url = f"{settings.SUPABASE_URL}/auth/v1/authorize?{query}"
     return OAuthUrlResponse(url=url)
+
+
+# ----------------------------------------------------------------------------
+# POST /auth/oauth/precheck
+# Called by the frontend's /oauth-callback page ONLY when the OAuth flow
+# started from the SIGN-IN page.
+#
+# Supabase auto-creates an account the first time a Google/GitHub identity
+# signs in. For "sign in" that is wrong: a person with no account should be
+# sent to sign-up (email prefilled, email-code verification) instead of being
+# logged in silently. So if the account was created moments ago by this very
+# OAuth round-trip, it is deleted here and the frontend redirects to /signup.
+#
+# Safety guards before deleting anything:
+#   - the token must be valid (verified by Supabase, not trusted from client)
+#   - the account must have been created within NEW_OAUTH_USER_WINDOW_SECONDS
+#   - the account must have no email/password identity (OAuth-only)
+# Returning users never match these, so they are never touched.
+# ----------------------------------------------------------------------------
+NEW_OAUTH_USER_WINDOW_SECONDS = 30
+
+
+def _as_utc(value) -> datetime | None:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    return None
+
+
+@router.post("/oauth/precheck")
+def oauth_precheck(authorization: str | None = Header(default=None)):
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Missing sign-in token.")
+    token = authorization[7:].strip()
+
+    try:
+        sb_user = supabase_admin.auth.get_user(token).user
+    except Exception:
+        sb_user = None
+    if sb_user is None:
+        raise HTTPException(status_code=401, detail="This sign-in link is invalid or has expired.")
+
+    created_at = _as_utc(getattr(sb_user, "created_at", None))
+    app_meta = getattr(sb_user, "app_metadata", None) or {}
+    providers = app_meta.get("providers") or [app_meta.get("provider")]
+    oauth_only = "email" not in providers
+
+    is_new = (
+        created_at is not None
+        and oauth_only
+        and (datetime.now(timezone.utc) - created_at).total_seconds() <= NEW_OAUTH_USER_WINDOW_SECONDS
+    )
+    if not is_new:
+        return {"is_new_user": False}
+
+    meta = getattr(sb_user, "user_metadata", None) or {}
+    result = {
+        "is_new_user": True,
+        "email": sb_user.email,
+        "full_name": meta.get("full_name") or meta.get("name") or "",
+        "provider": app_meta.get("provider") or "",
+    }
+
+    try:
+        supabase_admin.auth.admin.delete_user(sb_user.id)
+    except Exception:
+        logger.exception("Could not remove auto-created OAuth user %s", sb_user.id)
+        raise HTTPException(status_code=500, detail="Could not complete sign-in. Please try again.")
+
+    return result
 
 
 # ----------------------------------------------------------------------------

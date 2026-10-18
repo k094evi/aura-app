@@ -7,10 +7,17 @@
 // If email confirmation is OFF in Supabase (Auth > Providers > Email),
 // /api/auth/signup returns a session immediately and the OTP step is
 // skipped entirely.
+//
+// CHANGED:
+//  - Name fields only accept letters (+ spaces, hyphens, apostrophes, periods).
+//  - Email/password show "Invalid email", "Invalid password", or both.
+//  - Google / GitHub buttons are on this page.
+//  - Arriving from a Google/GitHub sign-in with no account
+//    (/signup?email=...&name=...&provider=...) prefills the form.
 
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
@@ -21,11 +28,22 @@ import OtpVerification from './OtpVerification';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Letters (any language, incl. accents) separated by single spaces, hyphens,
+// apostrophes or periods. No digits or other symbols.
+const NAME_ALLOWED_CHARS_RE = /[^\p{L}\p{M} '’.-]/gu;
+const NAME_RE = /^[\p{L}\p{M}]+(?:[ '’.-][\p{L}\p{M}]+)*\.?$/u;
+const NAME_MAX_LENGTH = 50;
+const NAME_FORMAT_MESSAGE = 'Letters only (spaces, hyphens and apostrophes are allowed)';
+
+// Must match the key the OAuth callback page reads.
+const OAUTH_INTENT_KEY = 'aura_oauth_intent';
+
 // ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
 const BTN_MOTION =
   'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:hover:translate-y-0';
 
 type Step = 'form' | 'otp';
+type Provider = 'google' | 'github';
 
 const inputWrapperClass = (hasError: boolean) =>
   [
@@ -34,6 +52,14 @@ const inputWrapperClass = (hasError: boolean) =>
       ? 'border-[#ef4444] focus-within:ring-2 focus-within:ring-[#ef4444]/15'
       : 'border-[#e5e7eb] focus-within:border-[#7c3aed] focus-within:ring-2 focus-within:ring-[#7c3aed]/15',
   ].join(' ');
+
+const validateName = (label: string, value: string): string | null => {
+  const v = value.trim();
+  if (!v) return `${label} is required`;
+  if (v.length > NAME_MAX_LENGTH) return `${label} is too long`;
+  if (!NAME_RE.test(v)) return NAME_FORMAT_MESSAGE;
+  return null;
+};
 
 async function resendSignupOtp(email: string) {
   const res = await fetch('/api/auth/resend-signup-otp', {
@@ -45,6 +71,37 @@ async function resendSignupOtp(email: string) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.detail || 'Could not resend the code. Please try again.');
   }
+}
+
+function GoogleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-[18px]" aria-hidden="true">
+      <path
+        fill="#4285F4"
+        d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.46a5.52 5.52 0 0 1-2.4 3.62v3h3.88c2.27-2.09 3.58-5.17 3.58-8.81z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 24c3.24 0 5.96-1.07 7.94-2.91l-3.88-3c-1.07.72-2.45 1.15-4.06 1.15-3.12 0-5.77-2.11-6.71-4.94H1.28v3.09A12 12 0 0 0 12 24z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.29 14.3a7.2 7.2 0 0 1 0-4.6V6.61H1.28a12 12 0 0 0 0 10.78l4.01-3.09z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 4.77c1.76 0 3.34.61 4.58 1.8l3.43-3.43C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.28 6.61L5.29 9.7C6.23 6.88 8.88 4.77 12 4.77z"
+      />
+    </svg>
+  );
+}
+
+function GitHubIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-[18px]" aria-hidden="true" fill="#111827">
+      <path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.19 1.76 1.19 1.03 1.76 2.69 1.25 3.35.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.78 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.06.78 2.13v3.16c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z" />
+    </svg>
+  );
 }
 
 export default function SignUp() {
@@ -64,22 +121,92 @@ export default function SignUp() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<Provider | null>(null);
   const router = useRouter();
 
+  // Prefill from the "no account found" redirect after a Google/GitHub sign-in.
+  // Read from window.location (not useSearchParams) so this component needs no
+  // Suspense boundary.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const prefillEmail = (params.get('email') || '').trim();
+    const prefillName = (params.get('name') || '').replace(NAME_ALLOWED_CHARS_RE, ' ').trim();
+    const provider = params.get('provider');
+
+    if (prefillEmail && EMAIL_RE.test(prefillEmail)) setEmail(prefillEmail);
+
+    if (prefillName) {
+      const parts = prefillName.split(/\s+/).filter(Boolean);
+      if (parts.length === 1) {
+        setFirstName(parts[0].slice(0, NAME_MAX_LENGTH));
+      } else if (parts.length > 1) {
+        setFirstName(parts.slice(0, -1).join(' ').slice(0, NAME_MAX_LENGTH));
+        setLastName(parts[parts.length - 1].slice(0, NAME_MAX_LENGTH));
+      }
+    }
+
+    if (prefillEmail) {
+      const via = provider === 'github' ? 'GitHub' : provider === 'google' ? 'Google' : null;
+      const fromSignIn = params.get('intent') !== 'signup';
+      setNotice(
+        (fromSignIn
+          ? `We couldn't find an account for this ${via ?? ''} email. `.replace('  ', ' ')
+          : '') +
+          'Complete the form below to create your account. We will send a verification code to your email.'
+      );
+    }
+
+    // Clean the address bar so the email is not left in the URL / history.
+    if (window.location.search) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+
+  const handleNameChange = (
+    value: string,
+    setValue: (v: string) => void,
+    setFieldError: (v: string | null) => void
+  ) => {
+    const cleaned = value.replace(NAME_ALLOWED_CHARS_RE, '').slice(0, NAME_MAX_LENGTH);
+    setValue(cleaned);
+    // Show the format hint when characters were rejected, otherwise clear it.
+    setFieldError(cleaned !== value && value.length <= NAME_MAX_LENGTH ? NAME_FORMAT_MESSAGE : null);
+    if (error) setError(null);
+  };
+
+  const handleOAuth = async (provider: Provider) => {
+    if (oauthLoading || isSubmitting) return;
+    setError(null);
+    setOauthLoading(provider);
+    try {
+      const res = await fetch(`/api/auth/oauth/${provider}/url`, { cache: 'no-store' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) {
+        throw new Error(data.detail || 'Could not start sign-up with that provider. Please try again.');
+      }
+      // Tells /oauth-callback this came from the sign-up page.
+      sessionStorage.setItem(OAUTH_INTENT_KEY, 'signup');
+      window.location.href = data.url;
+    } catch (err: any) {
+      setError(err.message || 'Something went wrong. Please try again.');
+      setOauthLoading(null);
+    }
+  };
+
   const handleSubmit = async () => {
-    const nextFirstNameError = !firstName.trim() ? 'First name is required' : null;
-    const nextMiddleNameError = !middleName.trim() ? 'Middle name is required' : null;
-    const nextLastNameError = !lastName.trim() ? 'Last name is required' : null;
-    const nextEmailError = !email
-      ? 'Email is required'
-      : !EMAIL_RE.test(email)
-        ? 'Invalid email address'
-        : null;
-    const nextPasswordError = !password
-      ? 'Password is required'
-      : getPasswordPolicyError(password);
+    const nextFirstNameError = validateName('First name', firstName);
+    const nextMiddleNameError = validateName('Middle name', middleName);
+    const nextLastNameError = validateName('Last name', lastName);
+
+    const emailInvalid = !email.trim() || !EMAIL_RE.test(email.trim());
+    const passwordPolicyError = password ? getPasswordPolicyError(password) : null;
+    const passwordInvalid = !password || !!passwordPolicyError;
+
+    const nextEmailError = !email.trim() ? 'Email is required' : emailInvalid ? 'Invalid email' : null;
+    const nextPasswordError = !password ? 'Password is required' : passwordPolicyError ? 'Invalid password' : null;
     const nextConfirmError = !confirm
       ? 'Please confirm your password'
       : confirm !== password
@@ -92,7 +219,9 @@ export default function SignUp() {
     setEmailError(nextEmailError);
     setPasswordError(nextPasswordError);
     setConfirmError(nextConfirmError);
-    setError(null);
+
+    // When both are wrong, say so once at the top as well.
+    setError(emailInvalid && passwordInvalid ? 'Invalid email and password' : null);
 
     if (
       nextFirstNameError ||
@@ -117,7 +246,7 @@ export default function SignUp() {
       const res = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, full_name: fullName }),
+        body: JSON.stringify({ email: email.trim(), password, full_name: fullName }),
       });
       const data = await res.json().catch(() => ({}));
 
@@ -146,7 +275,7 @@ export default function SignUp() {
     const res = await fetch('/api/auth/verify-signup-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, token: code }),
+      body: JSON.stringify({ email: email.trim(), token: code }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -164,6 +293,43 @@ export default function SignUp() {
           <div className="flex flex-col items-center gap-[6px] text-center">
             <h1 className="text-[28px] font-extrabold leading-tight text-[#111827]">Create Account</h1>
             <p className="text-[14px] text-[#4b5563]">Sign up for your AURA account</p>
+          </div>
+
+          {notice && (
+            <p
+              role="status"
+              className="rounded-[10px] border border-[#ddd6fe] bg-[#f5f3ff] px-3 py-2 text-[13px] leading-[1.45] text-[#5b21b6]"
+            >
+              {notice}
+            </p>
+          )}
+
+          {/* Google / GitHub sign-up */}
+          <div className="flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => handleOAuth('google')}
+              disabled={!!oauthLoading || isSubmitting}
+              className={`flex w-full items-center justify-center gap-3 rounded-full border border-[#e5e7eb] bg-white px-6 py-[12px] text-[14px] font-semibold text-[#111827] ${BTN_MOTION} hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              {oauthLoading === 'google' ? <Loader2 className="size-[18px] animate-spin" /> : <GoogleIcon />}
+              Continue with Google
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOAuth('github')}
+              disabled={!!oauthLoading || isSubmitting}
+              className={`flex w-full items-center justify-center gap-3 rounded-full border border-[#e5e7eb] bg-white px-6 py-[12px] text-[14px] font-semibold text-[#111827] ${BTN_MOTION} hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              {oauthLoading === 'github' ? <Loader2 className="size-[18px] animate-spin" /> : <GitHubIcon />}
+              Continue with GitHub
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3 text-[12px] font-medium text-[#9ca3af]">
+            <span className="h-px flex-1 bg-[#e5e7eb]" />
+            or sign up with email
+            <span className="h-px flex-1 bg-[#e5e7eb]" />
           </div>
 
           <form
@@ -186,12 +352,9 @@ export default function SignUp() {
                     type="text"
                     autoComplete="given-name"
                     placeholder="Enter your first name"
+                    maxLength={NAME_MAX_LENGTH}
                     value={firstName}
-                    onChange={(e) => {
-                      setFirstName(e.target.value);
-                      if (firstNameError) setFirstNameError(null);
-                      if (error) setError(null);
-                    }}
+                    onChange={(e) => handleNameChange(e.target.value, setFirstName, setFirstNameError)}
                     aria-invalid={!!firstNameError}
                     className="min-w-0 flex-1 bg-transparent text-[14px] text-[#111827] outline-none placeholder:text-[#9ca3af]"
                   />
@@ -210,12 +373,9 @@ export default function SignUp() {
                     type="text"
                     autoComplete="additional-name"
                     placeholder="Enter your middle name"
+                    maxLength={NAME_MAX_LENGTH}
                     value={middleName}
-                    onChange={(e) => {
-                      setMiddleName(e.target.value);
-                      if (middleNameError) setMiddleNameError(null);
-                      if (error) setError(null);
-                    }}
+                    onChange={(e) => handleNameChange(e.target.value, setMiddleName, setMiddleNameError)}
                     aria-invalid={!!middleNameError}
                     className="min-w-0 flex-1 bg-transparent text-[14px] text-[#111827] outline-none placeholder:text-[#9ca3af]"
                   />
@@ -234,12 +394,9 @@ export default function SignUp() {
                     type="text"
                     autoComplete="family-name"
                     placeholder="Enter your last name"
+                    maxLength={NAME_MAX_LENGTH}
                     value={lastName}
-                    onChange={(e) => {
-                      setLastName(e.target.value);
-                      if (lastNameError) setLastNameError(null);
-                      if (error) setError(null);
-                    }}
+                    onChange={(e) => handleNameChange(e.target.value, setLastName, setLastNameError)}
                     aria-invalid={!!lastNameError}
                     className="min-w-0 flex-1 bg-transparent text-[14px] text-[#111827] outline-none placeholder:text-[#9ca3af]"
                   />
@@ -339,7 +496,7 @@ export default function SignUp() {
             {/* CHANGED: `transition` -> BTN_MOTION (hover lift) */}
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !!oauthLoading}
               className={`flex w-full items-center justify-center gap-2 rounded-full ${GRADIENT_BG} px-8 py-[14px] text-[15px] font-bold text-white shadow-[0_2px_3px_rgba(124,58,237,0.1),0_8px_12px_rgba(124,58,237,0.25)] ${BTN_MOTION} hover:brightness-105 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60`}
             >
               {isSubmitting ? (
@@ -365,10 +522,10 @@ export default function SignUp() {
       {step === 'otp' && (
         <OtpVerification
           title="Verify Your Email"
-          email={email}
+          email={email.trim()}
           submitLabel="Verify & Create Account"
           onVerify={handleVerifyOtp}
-          onResend={() => resendSignupOtp(email)}
+          onResend={() => resendSignupOtp(email.trim())}
           backLabel="Use a different email"
           onBack={() => setStep('form')}
         />

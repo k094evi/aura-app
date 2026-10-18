@@ -1509,6 +1509,7 @@ async def handle_analyze(
     target_companies: str,
     job_description: str = "",
     user_id: str | None = None,
+    freelance_only: bool = False,
 ) -> dict:
 
     # ==========================================================================
@@ -1646,6 +1647,7 @@ async def handle_analyze(
             target_job=target_job,
             target_job_description=job_description,
             target_companies=target_companies_list,
+            freelance_only=freelance_only,
         )
 
     except ValueError as e:

@@ -95,6 +95,7 @@ from typing import Dict, List, Optional
 from app.models.schemas import ParsedResume
 from app.services.jsearch_client import JobListing
 from app.services import embedding_service
+from app.services.keyword_extractor import _parse_skills_block, alias_variants
 
 logger = logging.getLogger("aura")
 
@@ -165,6 +166,40 @@ def _skill_tokens(skills_block: str) -> List[str]:
     return [p.strip().lower() for p in parts if p.strip() and len(p.strip()) > 1]
 
 
+def _skill_pattern(skill: str) -> "re.Pattern":
+    """
+    Word-boundary regex for one resume skill, covering its known aliases.
+
+    Replaces a bare `skill in job_text` substring test, which treated short
+    skills as matches inside unrelated words ("ai" in "maintain", "ui" in
+    "build", "cd" in "medical") and missed "ReactJS" vs "React.js".
+    """
+    alts = []
+    for v in sorted(alias_variants(skill), key=len, reverse=True):
+        e = re.escape(v).replace(r"\ ", r"[\s\-]+").replace(r"\-", r"[\s\-]?")
+        if v.isalpha() and len(v) >= 4:
+            e += "s?"
+        alts.append(e)
+    return re.compile(r"(?<![a-z0-9])(?:" + "|".join(alts) + r")(?![a-z0-9])")
+
+
+def _resume_skill_list(skills_block: str) -> List[str]:
+    """Skills from the skills block: labels stripped ("Languages: Python" ->
+    "Python"), CI/CD kept whole, sentence fragments dropped (>4 words), and
+    aliases collapsed so "React" + "ReactJS" count once."""
+    out, seen = [], set()
+    for item in _parse_skills_block(skills_block or ""):
+        s = item.lower().strip()
+        if len(s) < 2 or len(s) > 40 or len(s.split()) > 4:
+            continue
+        variants = alias_variants(s)
+        if seen & variants:
+            continue
+        seen |= variants
+        out.append(s)
+    return out
+
+
 _TITLE_STOPWORDS = {"and", "the", "for", "of", "senior", "junior", "lead", "sr", "jr", "i", "ii", "iii"}
 
 
@@ -194,9 +229,16 @@ class JobScorer:
         keywords: List[str],
         target_description: Optional[str] = None,
         target_job: str = "",
+        search_terms: Optional[List[str]] = None,
     ):
         self.resume   = resume
         self.keywords = [kw.lower() for kw in keywords]
+
+        # The queries actually sent to JSearch (role + skill combos, company
+        # queries...). Used as the denominator of the API-match component so
+        # it measures "queries that returned this job" rather than comparing
+        # against keywords that were never searched. None = old behaviour.
+        self.search_terms = list(search_terms) if search_terms else None
 
         # The (IT) job title the user picked on the upload form. Used by
         # _title_score so listings whose title matches it rank first.
@@ -205,7 +247,8 @@ class JobScorer:
         # Pre-compute resume token sets once so each per-job scoring
         # call below doesn't have to redo this work.
         self.resume_tokens  = _normalize(resume.raw_text)
-        self.skills_list    = _skill_tokens(resume.skills_block or "")
+        self.skills_list    = _resume_skill_list(resume.skills_block or "")
+        self._skill_patterns = [(s, _skill_pattern(s)) for s in self.skills_list]
         self.skills_tokens  = _normalize(resume.skills_block or "")
         self.summary_tokens = _normalize(resume.summary_block or "")
 
@@ -334,9 +377,9 @@ class JobScorer:
             return 0.0, []
 
         job_text = (job.title + " " + job.description).lower()
-        # Simple substring check — is this skill phrase present anywhere
-        # in the combined title+description text?
-        matched = [s for s in self.skills_list if s in job_text]
+        # Word-boundary, alias-aware check (see _skill_pattern) — is this
+        # skill, or a known spelling of it, in the title+description?
+        matched = [s for s, pat in self._skill_patterns if pat.search(job_text)]
         ratio = len(matched) / max(len(self.skills_list), 1)
         score = min(ratio * 30, 30.0)
         return round(score, 2), matched
@@ -393,11 +436,12 @@ class JobScorer:
         10 pts — how many of the queried keywords matched this job via jsearch.
         (keywords_matched is populated by the jsearch during dedup.)
         """
-        if not self.keywords:
+        if not self.keywords and not self.search_terms:
             return 0.0
-        # Denominator is capped at the first 5 keywords, so searches
-        # with many keywords don't unfairly dilute this component.
-        ratio = len(job.keywords_matched) / max(len(self.keywords[:5]), 1)
+        # Denominator is capped at 5, so searches with many queries don't
+        # unfairly dilute this component. Prefer the real query list.
+        n_queries = len(self.search_terms) if self.search_terms else len(self.keywords)
+        ratio = len(job.keywords_matched) / max(min(n_queries, 5), 1)
         return round(min(ratio * 10, 10.0), 2)
 
     def _title_score(self, job: JobListing) -> float:

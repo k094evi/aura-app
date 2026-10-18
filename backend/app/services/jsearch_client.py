@@ -2,9 +2,21 @@
 """
 JSearch API client (via RapidAPI) for fetching job listings.
 Endpoint: /search-v2
+
+Freelance support
+-----------------
+JSearch has no native "freelance" employment type (it only reports
+FULLTIME / PARTTIME / CONTRACTOR / INTERN), so freelance output is built from
+three pieces:
+  1. fetch_jobs(..., freelance_only=True) biases each query with the word
+     "freelance" so Google-for-Jobs surfaces freelance postings.
+  2. _parse_job() labels a posting "Freelance" when its title or full
+     description says so (this wins over a CONTRACTOR tag).
+  3. In freelance mode, anything not labelled "Freelance" is dropped.
 """
 
 import os
+import re
 import time
 import threading
 import logging
@@ -44,6 +56,18 @@ COUNTRY_CODE = "ph"
 # (search-v2 has been observed to wrap results this way for
 # some queries/plans, unlike the plain /search endpoint.)
 _NESTED_LIST_KEYS = ("jobs", "results", "data", "items")
+
+# Matches "freelance", "freelancer(s)", "freelancing", "free-lance", "free lance".
+_FREELANCE_RE = re.compile(r"\bfree[\s-]?lanc(?:e|er|ers|ing)\b", re.IGNORECASE)
+
+
+def _is_freelance_posting(raw: dict, title: str) -> bool:
+    """True when the posting itself calls the role freelance (title or full
+    description). Checked on the FULL raw description, not the 500-char cut."""
+    if _FREELANCE_RE.search(title or ""):
+        return True
+    return bool(_FREELANCE_RE.search(raw.get("job_description") or ""))
+
 
 def _job_type_from_api(raw: dict) -> Optional[str]:
     """
@@ -235,10 +259,16 @@ class JSearchClient:
         url = raw.get("job_apply_link") or raw.get("job_google_link") or ""
         title = raw.get("job_title", "").strip()
 
-        # Prefer the employment type JSearch reports for the posting; only when
-        # it gives none (or one outside the four supported values) classify the
-        # FULL raw posting text (description below is cut to 500 chars).
-        job_type = _job_type_from_api(raw) or classify_job_type(raw, title)
+        # JSearch has no "freelance" employment type (a freelance gig usually
+        # comes tagged CONTRACTOR), so a posting that calls itself freelance
+        # in its title/description is labelled "Freelance" first. Otherwise
+        # prefer the employment type JSearch reports; only when it gives none
+        # (or one outside the four supported values) classify the FULL raw
+        # posting text (description below is cut to 500 chars).
+        if _is_freelance_posting(raw, title):
+            job_type = "Freelance"
+        else:
+            job_type = _job_type_from_api(raw) or classify_job_type(raw, title)
 
         return JobListing(
             job_id      = raw.get("job_id", ""),
@@ -264,6 +294,7 @@ class JSearchClient:
         keywords:            List[str],
         results_per_keyword: int = DEFAULT_RESULTS,
         max_keywords:        int = MAX_KEYWORDS,
+        freelance_only:      bool = False,
     ) -> List[JobListing]:
         """
         Queries JSearch for each keyword, scoped to COUNTRY_CODE via the
@@ -274,6 +305,10 @@ class JSearchClient:
         get both local and remote-eligible results per keyword, instead
         of burning a second full query slot per keyword the way the old
         text-suffix rotation did.
+
+        freelance_only=True prefixes each query with "freelance" and returns
+        only postings labelled "Freelance" (see _parse_job). Default False
+        leaves existing callers unchanged.
         """
         seen: dict[str, JobListing] = {}
         top_kw = keywords[:max_keywords]
@@ -286,7 +321,7 @@ class JSearchClient:
         # waiting on this loop to finish. Firing all requests at once via
         # a thread pool collapses that to roughly the slowest single call.
         queries = [
-            (kw, kw, i % 2 == 1)  # alternate: on-site, remote, on-site, remote...
+            (kw, f"freelance {kw}" if freelance_only else kw, i % 2 == 1)  # alternate: on-site, remote, ...
             for i, kw in enumerate(top_kw)
         ]
 
@@ -298,7 +333,7 @@ class JSearchClient:
 
             for future in as_completed(future_to_kw):
                 kw = future_to_kw[future]
-                logger.info("Querying JSearch: '%s'", kw)
+                logger.info("Querying JSearch: '%s'%s", kw, " [freelance]" if freelance_only else "")
                 try:
                     results = future.result()
                 except Exception as exc:
@@ -323,8 +358,14 @@ class JSearchClient:
                         if kw not in seen[jid].keywords_matched:
                             seen[jid].keywords_matched.append(kw)
                     else:
-                        seen[jid] = self._parse_job(raw, kw)
+                        job = self._parse_job(raw, kw)
+                        if freelance_only and job.job_type != "Freelance":
+                            continue
+                        seen[jid] = job
 
         jobs = list(seen.values())
-        logger.info("Fetched %d unique jobs from JSearch", len(jobs))
+        logger.info(
+            "Fetched %d unique %sjobs from JSearch",
+            len(jobs), "freelance " if freelance_only else "",
+        )
         return jobs

@@ -1,10 +1,15 @@
 // src/app/api/auth/me/route.ts
+//
+// GET  /api/auth/me  -> who am I (proxies FastAPI GET /api/auth/me)
+// POST /api/auth/me  -> OAuth "new user?" check (proxies FastAPI
+//                       POST /api/auth/oauth/precheck). Lives in this file so
+//                       no extra route folder is needed.
 
 import { NextRequest, NextResponse } from 'next/server';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
 
-export async function GET(req: NextRequest) {
+async function proxy(req: NextRequest, method: 'GET' | 'POST', backendPath: string, tag: string) {
   const authHeader = req.headers.get('authorization');
 
   if (!authHeader) {
@@ -13,12 +18,13 @@ export async function GET(req: NextRequest) {
 
   let backendRes: Response;
   try {
-    backendRes = await fetch(`${BACKEND_URL}/api/auth/me`, {
-      method: 'GET',
+    backendRes = await fetch(`${BACKEND_URL}${backendPath}`, {
+      method,
       headers: { Authorization: authHeader },
+      cache: 'no-store',
     });
   } catch (err) {
-    console.error('[api/auth/me] proxy error:', err);
+    console.error(`[${tag}] proxy error:`, err);
     return NextResponse.json(
       {
         detail:
@@ -30,4 +36,12 @@ export async function GET(req: NextRequest) {
 
   const data = await backendRes.json().catch(() => ({}));
   return NextResponse.json(data, { status: backendRes.status });
+}
+
+export async function GET(req: NextRequest) {
+  return proxy(req, 'GET', '/api/auth/me', 'api/auth/me');
+}
+
+export async function POST(req: NextRequest) {
+  return proxy(req, 'POST', '/api/auth/oauth/precheck', 'api/auth/me (precheck)');
 }

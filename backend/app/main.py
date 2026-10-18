@@ -136,6 +136,7 @@ async def analyze_resume(
     file: UploadFile = File(...),
     target_job: str = Form(default=""),
     target_companies: str = Form(default="[]"),
+    freelance_only: bool = Form(default=False),
     user: AuthUser = Depends(get_current_user),
 ):
     """
@@ -151,6 +152,9 @@ async def analyze_resume(
       the user is interested in (comes in as a raw string since this
       is a multipart form field, not JSON body — gets parsed inside
       handle_analyze).
+    - `freelance_only`: optional flag (form field, "true"/"false"). When
+      true, JSearch is queried for freelance postings only — see
+      JSearchClient.fetch_jobs(freelance_only=...).
     - `user`: injected by the `get_current_user` dependency, which
       runs BEFORE this function body — so unauthenticated requests
       never reach handle_analyze at all. `user.id` is now passed
@@ -159,7 +163,13 @@ async def analyze_resume(
     All actual logic is delegated to `handle_analyze` in
     analyze_controller.py; this function is just the HTTP-layer glue.
     """
-    return await handle_analyze(file, target_job, target_companies, user_id=user.id)
+    return await handle_analyze(
+        file,
+        target_job,
+        target_companies,
+        user_id=user.id,
+        freelance_only=freelance_only,
+    )
 
 
 @app.get("/health")

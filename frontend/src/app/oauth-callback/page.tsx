@@ -1,4 +1,8 @@
 // src/app/oauth-callback/page.tsx
+//
+// CHANGED: when the Google/GitHub email has no account yet (from the sign-in OR
+// sign-up page), redirect to /signup?email=... instead of logging in, so the
+// new user fills in the form and verifies their email with a code.
 
 'use client';
 
@@ -29,7 +33,13 @@ export default function OAuthCallbackPage() {
       const params = new URLSearchParams(hash);
       const access_token = params.get('access_token');
       const refresh_token = params.get('refresh_token');
-      const oauthError = params.get('error_description') || params.get('error');
+      // Supabase reports provider/sign-up failures in the hash OR the query string.
+      const query = new URLSearchParams(window.location.search);
+      const oauthError =
+        params.get('error_description') ||
+        params.get('error') ||
+        query.get('error_description') ||
+        query.get('error');
 
       // Remove the tokens from the address bar / browser history right away.
       window.history.replaceState(null, '', window.location.pathname);
@@ -40,11 +50,55 @@ export default function OAuthCallbackPage() {
       }
 
       if (!access_token) {
+        // Logs which URL parts arrived (names only, no values) to help debugging.
+        const hashKeys = Array.from(params.keys()).join(', ') || 'none';
+        const queryKeys = Array.from(query.keys()).join(', ') || 'none';
+        console.error('[oauth-callback] no access_token. hash keys:', hashKeys, '| query keys:', queryKeys);
         setError('This sign-in link is missing or no longer valid.');
         return;
       }
 
+      // Which page started this OAuth flow ('signin' | 'signup'). Set by the
+      // Google/GitHub buttons right before they redirect to the provider.
+      let intent: string | null = null;
       try {
+        intent = window.sessionStorage.getItem('aura_oauth_intent');
+        window.sessionStorage.removeItem('aura_oauth_intent');
+      } catch {
+        // Storage unavailable: fall through with no intent.
+      }
+
+      try {
+        // 0. Sign-in with no existing account: do NOT log them in. The backend
+        //    removes the account Supabase just auto-created and returns the
+        //    email so we can send them to sign-up with it prefilled.
+        // Applies to sign-in AND sign-up: a brand-new Google/GitHub user must
+        // finish the sign-up form and verify their email with a code first.
+        {
+          const checkRes = await fetch('/api/auth/me', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${access_token}` },
+            cache: 'no-store',
+          });
+          const check = await checkRes.json().catch(() => ({}));
+          if (!checkRes.ok) {
+            throw new Error(
+              check.detail ||
+                `Could not verify your account (error ${checkRes.status}). Please try again.`
+            );
+          }
+          if (check.is_new_user) {
+            const qs = new URLSearchParams({
+              email: check.email || '',
+              name: check.full_name || '',
+              provider: check.provider || '',
+              intent: intent === 'signup' ? 'signup' : 'signin',
+            });
+            router.replace(`/signup?${qs.toString()}`);
+            return;
+          }
+        }
+
         // 1. Confirm the token with our backend and fetch the profile.
         //    Supabase has already found-or-created the account for this
         //    Google/GitHub identity; a returning user gets the same account.

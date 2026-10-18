@@ -1,6 +1,15 @@
 // src/app/signin/page.tsx
 // Sign-in page: email/password login plus Google and GitHub OAuth.
 // Talks to the backend via /api/auth/signin and /api/auth/oauth/:provider/url.
+//
+// CHANGED:
+//  - Shows "Invalid email", "Invalid password", or "Invalid email and password".
+//  - Wrong credentials from the server show "Invalid email or password" on both
+//    fields (the server never says which one was wrong, so account existence
+//    is not leaked).
+//  - Google/GitHub buttons mark the flow as a sign-in. /oauth-callback uses that
+//    to send a Google/GitHub email with no account to /signup (email prefilled,
+//    email verification code) instead of logging in.
 
 'use client';
 
@@ -24,6 +33,9 @@ const dmSans = DM_Sans({
 // Deliberately loose check ("something@something.tld"); it only catches typos.
 // The backend is the real authority on whether the credentials are valid.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Must match the key the OAuth callback page reads.
+const OAUTH_INTENT_KEY = 'aura_oauth_intent';
 
 // ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
 const BTN_MOTION =
@@ -57,26 +69,31 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  // True after the server rejected the credentials: both fields are marked red.
+  const [credentialsRejected, setCredentialsRejected] = useState(false);
   const router = useRouter();
 
   // Disables every submit-type control while any sign-in attempt is running,
   // so the user can't start email and OAuth sign-in at the same time.
   const busy = isSubmitting || oauthProvider !== null;
 
-  const handleSubmit = async () => {
-    // Field-level validation (matches the error states in the Figma design)
-    const nextEmailError = !email
-      ? 'Email is required'
-      : !EMAIL_RE.test(email)
-        ? 'Invalid email address'
-        : null;
-    const nextPasswordError = !password ? 'Password is required' : null;
-
-    setEmailError(nextEmailError);
-    setPasswordError(nextPasswordError);
+  const clearErrors = () => {
     setError(null);
+    setCredentialsRejected(false);
+  };
 
-    if (nextEmailError || nextPasswordError) {
+  const handleSubmit = async () => {
+    // Field-level validation
+    const emailInvalid = !email.trim() || !EMAIL_RE.test(email.trim());
+    const passwordInvalid = !password;
+
+    setEmailError(emailInvalid ? 'Invalid email' : null);
+    setPasswordError(passwordInvalid ? 'Invalid password' : null);
+    setCredentialsRejected(false);
+    // When both are wrong, say so once at the top as well.
+    setError(emailInvalid && passwordInvalid ? 'Invalid email and password' : null);
+
+    if (emailInvalid || passwordInvalid) {
       return;
     }
 
@@ -86,18 +103,22 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/signin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: email.trim(), password }),
       });
 
       // The body may not be JSON on some failures; fall back to an empty object.
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        // 400/401 = the backend rejected the credentials ("Invalid login
-        // credentials"). Show the friendlier message from the Figma design
-        // on the password field instead of the raw backend text.
+        // 400/401 = the backend rejected the credentials. It does not say
+        // whether the email or the password was wrong, so neither do we.
         if (res.status === 400 || res.status === 401) {
-          setPasswordError('Incorrect password');
+          if (typeof data.detail === 'string' && /not confirmed/i.test(data.detail)) {
+            setError('Please verify your email before signing in.');
+          } else {
+            setCredentialsRejected(true);
+            setError('Invalid email or password');
+          }
           setIsSubmitting(false);
           return;
         }
@@ -125,7 +146,7 @@ export default function LoginPage() {
   // Once the user approves, Supabase redirects back to /oauth-callback with
   // a session in the URL fragment.
   const handleOAuth = async (provider: 'google' | 'github') => {
-    setError(null);
+    clearErrors();
     setOauthProvider(provider);
     try {
       const res = await fetch(`/api/auth/oauth/${provider}/url`);
@@ -133,6 +154,14 @@ export default function LoginPage() {
 
       if (!res.ok || !data.url) {
         throw new Error(data.detail || `Could not start ${provider} sign-in. Please try again.`);
+      }
+
+      // Tells /oauth-callback this came from the SIGN-IN page, so an email with
+      // no account is sent to sign-up instead of being logged in.
+      try {
+        window.sessionStorage.setItem(OAUTH_INTENT_KEY, 'signin');
+      } catch {
+        // Storage unavailable: callback falls back to its default behaviour.
       }
 
       window.location.href = data.url;
@@ -212,7 +241,7 @@ export default function LoginPage() {
                   <label htmlFor="signin-email" className="text-[13px] font-semibold text-[#4b5563]">
                     Email
                   </label>
-                  <div className={inputWrapperClass(!!emailError)}>
+                  <div className={inputWrapperClass(!!emailError || credentialsRejected)}>
                     <input
                       id="signin-email"
                       type="email"
@@ -223,9 +252,9 @@ export default function LoginPage() {
                       onChange={(e) => {
                         setEmail(e.target.value);
                         if (emailError) setEmailError(null);
-                        if (error) setError(null);
+                        clearErrors();
                       }}
-                      aria-invalid={!!emailError}
+                      aria-invalid={!!emailError || credentialsRejected}
                       aria-describedby={emailError ? 'signin-email-error' : undefined}
                       className="min-w-0 flex-1 bg-transparent text-[14px] text-[#111827] outline-none placeholder:text-[#9ca3af]"
                     />
@@ -242,7 +271,7 @@ export default function LoginPage() {
                   <label htmlFor="signin-password" className="text-[13px] font-semibold text-[#4b5563]">
                     Password
                   </label>
-                  <div className={inputWrapperClass(!!passwordError)}>
+                  <div className={inputWrapperClass(!!passwordError || credentialsRejected)}>
                     <input
                       id="signin-password"
                       type={showPassword ? 'text' : 'password'}
@@ -252,9 +281,9 @@ export default function LoginPage() {
                       onChange={(e) => {
                         setPassword(e.target.value);
                         if (passwordError) setPasswordError(null);
-                        if (error) setError(null);
+                        clearErrors();
                       }}
-                      aria-invalid={!!passwordError}
+                      aria-invalid={!!passwordError || credentialsRejected}
                       aria-describedby={passwordError ? 'signin-password-error' : undefined}
                       className="min-w-0 flex-1 bg-transparent text-[14px] text-[#111827] outline-none placeholder:text-[#9ca3af]"
                     />
@@ -274,7 +303,7 @@ export default function LoginPage() {
                   )}
                 </div>
 
-                {/* API / OAuth error (anything that isn't tied to a single field) */}
+                {/* API / OAuth / combined error (anything that isn't tied to a single field) */}
                 {error && (
                   <p role="alert" className="text-[12px] font-medium text-[#ef4444]">
                     {error}

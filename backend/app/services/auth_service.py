@@ -87,6 +87,12 @@ def sign_up(email: str, password: str, full_name: Optional[str] = None) -> AuthR
     if not result.user:
         raise ValueError("Could not create account. Please try again.")
 
+    # Supabase hides "email already registered" by returning a user with no
+    # identities instead of an error. Surface it so the person knows to sign in.
+    identities = getattr(result.user, "identities", None)
+    if identities is not None and len(identities) == 0:
+        raise ValueError("An account with this email already exists. Please sign in instead.")
+
     # Supabase returns no session when email confirmation is required
     # (this is the default for new Supabase projects).
     if not result.session:
