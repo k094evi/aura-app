@@ -136,16 +136,59 @@ def sign_in(email: str, password: str) -> AuthResponse:
     )
 
 
+def find_user_by_email(email: str):
+    """
+    Looks an account up by email using the admin API. Returns the Supabase
+    user, or None when no account has that email.
+    """
+    target = email.strip().lower()
+    per_page = 200
+    for page in range(1, 51):
+        users = supabase_admin.auth.admin.list_users(page=page, per_page=per_page)
+        if not users:
+            break
+        for user in users:
+            if (getattr(user, "email", None) or "").lower() == target:
+                return user
+        if len(users) < per_page:
+            break
+    return None
+
+
 def request_password_reset(email: str, redirect_to: str) -> None:
     """
-    Sends the reset email. Deliberately swallows/logs errors rather than
-    raising — the API layer always reports success either way, so we
-    don't leak whether a given email has an account (account enumeration).
+    Sends the reset email (with the 6-digit code) ONLY to an existing account.
+
+    Raises ValueError with a user-facing message when:
+      - no account exists for the email,
+      - the account has no password (signed up with Google/GitHub only),
+      - Supabase could not send the email (e.g. rate limit, SMTP problem).
     """
+    try:
+        user = find_user_by_email(email)
+    except Exception as exc:
+        logger.warning("Account lookup failed for %s: %s", email, exc)
+        raise ValueError("Could not process your request. Please try again.") from exc
+
+    if user is None:
+        raise ValueError("No account was found with that email address.")
+
+    app_meta = getattr(user, "app_metadata", None) or {}
+    providers = app_meta.get("providers") or [app_meta.get("provider")]
+    if "email" not in providers:
+        raise ValueError(
+            "This account signs in with Google or GitHub, so it has no password to reset."
+        )
+
     try:
         _anon_client().auth.reset_password_email(email, {"redirect_to": redirect_to})
     except Exception as exc:
-        logger.warning("Password reset request failed for %s: %s", email, exc)
+        logger.warning("Password reset email failed for %s: %s", email, exc)
+        if "rate limit" in str(exc).lower() or "too many" in str(exc).lower():
+            raise ValueError(
+                "Too many reset emails were requested. Please wait a few minutes and try again."
+            ) from exc
+        raise ValueError("Could not send the reset code. Please try again later.") from exc
 
 
 def reset_password(access_token: str, refresh_token: str, new_password: str) -> None:

@@ -114,20 +114,18 @@ def signin(payload: SignInRequest):
 # Kicks off the "forgot password" flow by asking auth_service to send a
 # reset email containing a link back to FRONTEND_URL/reset-password.
 #
-# Security note: the response message is IDENTICAL whether or not the
-# email actually belongs to a registered account. This prevents an
-# attacker from using this endpoint to discover which emails are
-# registered in the system (user enumeration).
+# CHANGED: an email with no account now gets a clear error instead of a
+# fake "code sent" message, and no code is sent.
 # ----------------------------------------------------------------------------
 @router.post("/forgot-password", response_model=MessageResponse)
 def forgot_password(payload: ForgotPasswordRequest):
     redirect_to = f"{FRONTEND_URL}/reset-password"
-    auth_service.request_password_reset(payload.email, redirect_to)
-    # Same message regardless of whether the email has an account —
-    # avoids leaking which addresses are registered.
-    return MessageResponse(
-        message="If an account exists for that email, a password reset link has been sent."
-    )
+    try:
+        auth_service.request_password_reset(payload.email, redirect_to)
+    except ValueError as e:
+        # No account / Google-only account / email could not be sent.
+        raise HTTPException(status_code=400, detail=str(e))
+    return MessageResponse(message="A 6-digit reset code has been sent to your email.")
 
 
 # ----------------------------------------------------------------------------

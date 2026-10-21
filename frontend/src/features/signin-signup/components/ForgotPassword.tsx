@@ -9,7 +9,15 @@ import AuthShell, { GRADIENT_BG } from './AuthShell';
 import OtpVerification from './OtpVerification';
 import ResetPassword from './ResetPassword';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Strict email check (no quotes, no "=====@gmail.com", no double dots).
+const EMAIL_RE =
+  /^[A-Za-z0-9](?:[A-Za-z0-9._%+-]*[A-Za-z0-9])?@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
+const isValidEmail = (value: string) => EMAIL_RE.test(value) && !value.includes('..');
+
+// FastAPI sends `detail` as a string for our errors but as a list of objects for
+// validation errors (which printed "[object Object]"). Always return a string.
+const detailMessage = (detail: unknown, fallback: string) =>
+  typeof detail === 'string' && detail.trim() ? detail : fallback;
 
 // ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
 const BTN_MOTION =
@@ -21,11 +29,11 @@ async function requestResetCode(email: string) {
   const res = await fetch('/api/auth/forgot-password', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ email: email.trim() }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail || 'Something went wrong. Please try again.');
+    throw new Error(detailMessage(data.detail, 'Something went wrong. Please try again.'));
   }
 }
 
@@ -38,7 +46,7 @@ export default function ForgotPassword() {
   const [tokens, setTokens] = useState<{ access: string; refresh: string } | null>(null);
 
   const handleSendCode = async () => {
-    const nextEmailError = !email ? 'Email is required' : !EMAIL_RE.test(email) ? 'Invalid email address' : null;
+    const nextEmailError = !email ? 'Email is required' : !isValidEmail(email.trim()) ? 'Invalid email address' : null;
     setEmailError(nextEmailError);
     setError(null);
     if (nextEmailError) return;
@@ -58,10 +66,10 @@ export default function ForgotPassword() {
     const res = await fetch('/api/auth/verify-reset-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, token: code }),
+      body: JSON.stringify({ email: email.trim(), token: code }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.detail || 'Invalid or expired code. Please try again.');
+    if (!res.ok) throw new Error(detailMessage(data.detail, 'Invalid or expired code. Please try again.'));
     setTokens({ access: data.access_token, refresh: data.refresh_token });
     setStep('reset');
   };
@@ -157,7 +165,7 @@ export default function ForgotPassword() {
       {step === 'otp' && (
         <OtpVerification
           title="Verify Your Identity"
-          email={email}
+          email={email.trim()}
           submitLabel="Verify Code"
           onVerify={handleVerifyOtp}
           onResend={() => requestResetCode(email)}

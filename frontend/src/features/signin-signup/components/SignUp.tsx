@@ -9,7 +9,7 @@
 // skipped entirely.
 //
 // CHANGED:
-//  - Name fields only accept letters (+ spaces, hyphens, apostrophes, periods).
+//  - Name fields only accept Latin letters (+ spaces, hyphens, apostrophes).
 //  - Email/password show "Invalid email", "Invalid password", or both.
 //  - Google / GitHub buttons are on this page.
 //  - Arriving from a Google/GitHub sign-in with no account
@@ -26,12 +26,23 @@ import { getPasswordPolicyError, PASSWORD_POLICY_MESSAGE } from '@/lib/passwordP
 import AuthShell, { GRADIENT_BG } from './AuthShell';
 import OtpVerification from './OtpVerification';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Strict email check: local part is letters/digits with . _ % + - between them
+// (no "=====@gmail.com", no leading/trailing/double dots); domain has real
+// labels and a letters-only TLD of 2+ characters.
+const EMAIL_RE =
+  /^[A-Za-z0-9](?:[A-Za-z0-9._%+-]*[A-Za-z0-9])?@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
+const isValidEmail = (value: string) => EMAIL_RE.test(value) && !value.includes('..');
 
-// Letters (any language, incl. accents) separated by single spaces, hyphens,
-// apostrophes or periods. No digits or other symbols.
-const NAME_ALLOWED_CHARS_RE = /[^\p{L}\p{M} '’.-]/gu;
-const NAME_RE = /^[\p{L}\p{M}]+(?:[ '’.-][\p{L}\p{M}]+)*\.?$/u;
+// FastAPI sends `detail` as a string for our errors but as a list of objects for
+// validation errors (which printed "[object Object]"). Always return a string.
+const detailMessage = (detail: unknown, fallback: string) =>
+  typeof detail === 'string' && detail.trim() ? detail : fallback;
+
+// Names: Latin letters only (accents such as ñ and é are fine), in words
+// separated by ONE space, hyphen or apostrophe. No digits, periods or other
+// symbols, and no non-Latin scripts.
+const NAME_ALLOWED_CHARS_RE = /[^\p{Script=Latin}\p{M} '’-]/gu;
+const NAME_RE = /^[\p{Script=Latin}\p{M}]+(?:[ '’-][\p{Script=Latin}\p{M}]+)*$/u;
 const NAME_MAX_LENGTH = 50;
 const NAME_FORMAT_MESSAGE = 'Letters only (spaces, hyphens and apostrophes are allowed)';
 
@@ -69,7 +80,7 @@ async function resendSignupOtp(email: string) {
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail || 'Could not resend the code. Please try again.');
+    throw new Error(detailMessage(data.detail, 'Could not resend the code. Please try again.'));
   }
 }
 
@@ -122,6 +133,8 @@ export default function SignUp() {
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // True when the email came from a Google/GitHub sign-in (shown read-only).
+  const [emailLocked, setEmailLocked] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<Provider | null>(null);
@@ -136,7 +149,7 @@ export default function SignUp() {
     const prefillName = (params.get('name') || '').replace(NAME_ALLOWED_CHARS_RE, ' ').trim();
     const provider = params.get('provider');
 
-    if (prefillEmail && EMAIL_RE.test(prefillEmail)) setEmail(prefillEmail);
+    if (prefillEmail && isValidEmail(prefillEmail)) setEmail(prefillEmail);
 
     if (prefillName) {
       const parts = prefillName.split(/\s+/).filter(Boolean);
@@ -149,13 +162,14 @@ export default function SignUp() {
     }
 
     if (prefillEmail) {
-      const via = provider === 'github' ? 'GitHub' : provider === 'google' ? 'Google' : null;
+      const via = provider === 'github' ? 'GitHub' : provider === 'google' ? 'Google' : 'your account';
       const fromSignIn = params.get('intent') !== 'signup';
+      setEmailLocked(isValidEmail(prefillEmail));
       setNotice(
         (fromSignIn
-          ? `We couldn't find an account for this ${via ?? ''} email. `.replace('  ', ' ')
-          : '') +
-          'Complete the form below to create your account. We will send a verification code to your email.'
+          ? `No Aura account exists yet for the email on ${via === 'your account' ? via : `your ${via} account`}. `
+          : `You chose ${via === 'your account' ? 'to sign up' : `to sign up with ${via}`}. `) +
+          `Complete the form below to create your account. We will send a 6-digit verification code to ${prefillEmail}.`
       );
     }
 
@@ -170,10 +184,15 @@ export default function SignUp() {
     setValue: (v: string) => void,
     setFieldError: (v: string | null) => void
   ) => {
-    const cleaned = value.replace(NAME_ALLOWED_CHARS_RE, '').slice(0, NAME_MAX_LENGTH);
+    const stripped = value.replace(NAME_ALLOWED_CHARS_RE, '');
+    // No leading separator and no two separators in a row ("' '" -> "'").
+    const cleaned = stripped
+      .replace(/^[ '’-]+/, '')
+      .replace(/([ '’-])[ '’-]+/g, '$1')
+      .slice(0, NAME_MAX_LENGTH);
     setValue(cleaned);
-    // Show the format hint when characters were rejected, otherwise clear it.
-    setFieldError(cleaned !== value && value.length <= NAME_MAX_LENGTH ? NAME_FORMAT_MESSAGE : null);
+    // Show the format hint when disallowed characters were typed/pasted.
+    setFieldError(stripped !== value ? NAME_FORMAT_MESSAGE : null);
     if (error) setError(null);
   };
 
@@ -185,7 +204,7 @@ export default function SignUp() {
       const res = await fetch(`/api/auth/oauth/${provider}/url`, { cache: 'no-store' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.url) {
-        throw new Error(data.detail || 'Could not start sign-up with that provider. Please try again.');
+        throw new Error(detailMessage(data.detail, 'Could not start sign-up with that provider. Please try again.'));
       }
       // Tells /oauth-callback this came from the sign-up page.
       sessionStorage.setItem(OAUTH_INTENT_KEY, 'signup');
@@ -201,7 +220,7 @@ export default function SignUp() {
     const nextMiddleNameError = validateName('Middle name', middleName);
     const nextLastNameError = validateName('Last name', lastName);
 
-    const emailInvalid = !email.trim() || !EMAIL_RE.test(email.trim());
+    const emailInvalid = !email.trim() || !isValidEmail(email.trim());
     const passwordPolicyError = password ? getPasswordPolicyError(password) : null;
     const passwordInvalid = !password || !!passwordPolicyError;
 
@@ -251,7 +270,7 @@ export default function SignUp() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        throw new Error(data.detail || 'Could not create your account. Please try again.');
+        throw new Error(detailMessage(data.detail, 'Could not create your account. Please try again.'));
       }
 
       if (data.email_confirmation_required) {
@@ -279,7 +298,7 @@ export default function SignUp() {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      throw new Error(data.detail || 'Invalid or expired code. Please try again.');
+      throw new Error(detailMessage(data.detail, 'Invalid or expired code. Please try again.'));
     }
 
     saveSession(data.access_token, data.refresh_token, data.user);
@@ -412,6 +431,7 @@ export default function SignUp() {
                 <div className={inputWrapperClass(!!emailError)}>
                   <input
                     id="signup-email"
+                    readOnly={emailLocked}
                     type="email"
                     autoComplete="email"
                     placeholder="Enter your email"
@@ -426,6 +446,15 @@ export default function SignUp() {
                   />
                 </div>
                 {emailError && <p className="text-[12px] font-medium text-[#ef4444]">{emailError}</p>}
+                {emailLocked && (
+                  <button
+                    type="button"
+                    onClick={() => setEmailLocked(false)}
+                    className="self-start text-[12px] font-semibold text-[#7c3aed] hover:underline"
+                  >
+                    Use a different email
+                  </button>
+                )}
               </div>
 
               {/* Password */}

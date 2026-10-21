@@ -30,9 +30,16 @@ const dmSans = DM_Sans({
   display: 'swap',
 });
 
-// Deliberately loose check ("something@something.tld"); it only catches typos.
+// Strict email check (no "=====@gmail.com", no double dots, real domain + TLD).
 // The backend is the real authority on whether the credentials are valid.
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_RE =
+  /^[A-Za-z0-9](?:[A-Za-z0-9._%+-]*[A-Za-z0-9])?@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
+const isValidEmail = (value: string) => EMAIL_RE.test(value) && !value.includes('..');
+
+// FastAPI sends `detail` as a string for our errors but as a list of objects for
+// validation errors (which printed "[object Object]"). Always return a string.
+const detailMessage = (detail: unknown, fallback: string) =>
+  typeof detail === 'string' && detail.trim() ? detail : fallback;
 
 // Must match the key the OAuth callback page reads.
 const OAUTH_INTENT_KEY = 'aura_oauth_intent';
@@ -84,7 +91,7 @@ export default function LoginPage() {
 
   const handleSubmit = async () => {
     // Field-level validation
-    const emailInvalid = !email.trim() || !EMAIL_RE.test(email.trim());
+    const emailInvalid = !email.trim() || !isValidEmail(email.trim());
     const passwordInvalid = !password;
 
     setEmailError(emailInvalid ? 'Invalid email' : null);
@@ -122,7 +129,7 @@ export default function LoginPage() {
           setIsSubmitting(false);
           return;
         }
-        throw new Error(data.detail || 'Sign in failed. Please try again.');
+        throw new Error(detailMessage(data.detail, 'Sign in failed. Please try again.'));
       }
 
       // Persist the session so subsequent authenticated calls (e.g.
