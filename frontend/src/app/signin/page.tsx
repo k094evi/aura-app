@@ -68,7 +68,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   // NOTE: not sent to the backend or read anywhere yet, so it only affects the checkbox UI.
-  const [remember, setRemember] = useState(true);
+  const [remember, setRemember] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Which OAuth button was clicked (drives its spinner); null when none is in flight.
   const [oauthProvider, setOauthProvider] = useState<'google' | 'github' | null>(null);

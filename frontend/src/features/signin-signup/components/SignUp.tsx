@@ -10,8 +10,9 @@
 //
 // CHANGED:
 //  - Name fields only accept Latin letters (+ spaces, hyphens, apostrophes).
-//  - Email/password show "Invalid email", "Invalid password", or both.
-//  - Google / GitHub buttons are on this page.
+//  - Email/password show "Invalid email" or "Invalid password" on their own fields.
+//  - Google / GitHub buttons are on this page, below the form (same layout
+//    as the sign-in page: "or continue with" divider, two buttons side by side).
 //  - Arriving from a Google/GitHub sign-in with no account
 //    (/signup?email=...&name=...&provider=...) prefills the form.
 
@@ -52,6 +53,9 @@ const OAUTH_INTENT_KEY = 'aura_oauth_intent';
 // ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
 const BTN_MOTION =
   'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:hover:translate-y-0';
+
+// Google and GitHub buttons share identical styling (same as the sign-in page).
+const OAUTH_BUTTON_CLASS = `flex min-w-0 flex-1 items-center justify-center gap-2 rounded-[10px] border border-[#e5e7eb] bg-white px-4 py-3 text-[14px] font-semibold text-[#4b5563] shadow-[0_1px_1px_rgba(17,24,39,0.02)] ${BTN_MOTION} hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-60`;
 
 type Step = 'form' | 'otp';
 type Provider = 'google' | 'github';
@@ -222,7 +226,6 @@ export default function SignUp() {
 
     const emailInvalid = !email.trim() || !isValidEmail(email.trim());
     const passwordPolicyError = password ? getPasswordPolicyError(password) : null;
-    const passwordInvalid = !password || !!passwordPolicyError;
 
     const nextEmailError = !email.trim() ? 'Email is required' : emailInvalid ? 'Invalid email' : null;
     const nextPasswordError = !password ? 'Password is required' : passwordPolicyError ? 'Invalid password' : null;
@@ -239,8 +242,8 @@ export default function SignUp() {
     setPasswordError(nextPasswordError);
     setConfirmError(nextConfirmError);
 
-    // When both are wrong, say so once at the top as well.
-    setError(emailInvalid && passwordInvalid ? 'Invalid email and password' : null);
+    // Field errors above are enough; no extra form-level message.
+    setError(null);
 
     if (
       nextFirstNameError ||
@@ -322,34 +325,6 @@ export default function SignUp() {
               {notice}
             </p>
           )}
-
-          {/* Google / GitHub sign-up */}
-          <div className="flex flex-col gap-3">
-            <button
-              type="button"
-              onClick={() => handleOAuth('google')}
-              disabled={!!oauthLoading || isSubmitting}
-              className={`flex w-full items-center justify-center gap-3 rounded-full border border-[#e5e7eb] bg-white px-6 py-[12px] text-[14px] font-semibold text-[#111827] ${BTN_MOTION} hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-60`}
-            >
-              {oauthLoading === 'google' ? <Loader2 className="size-[18px] animate-spin" /> : <GoogleIcon />}
-              Continue with Google
-            </button>
-            <button
-              type="button"
-              onClick={() => handleOAuth('github')}
-              disabled={!!oauthLoading || isSubmitting}
-              className={`flex w-full items-center justify-center gap-3 rounded-full border border-[#e5e7eb] bg-white px-6 py-[12px] text-[14px] font-semibold text-[#111827] ${BTN_MOTION} hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-60`}
-            >
-              {oauthLoading === 'github' ? <Loader2 className="size-[18px] animate-spin" /> : <GitHubIcon />}
-              Continue with GitHub
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3 text-[12px] font-medium text-[#9ca3af]">
-            <span className="h-px flex-1 bg-[#e5e7eb]" />
-            or sign up with email
-            <span className="h-px flex-1 bg-[#e5e7eb]" />
-          </div>
 
           <form
             noValidate
@@ -538,6 +513,35 @@ export default function SignUp() {
               )}
             </button>
           </form>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-[#e5e7eb]" />
+            <span className="text-[12px] font-medium text-[#9ca3af]">or continue with</span>
+            <div className="h-px flex-1 bg-[#e5e7eb]" />
+          </div>
+
+          {/* Google / GitHub sign-up, side by side like the sign-in page */}
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => handleOAuth('google')}
+              disabled={!!oauthLoading || isSubmitting}
+              className={OAUTH_BUTTON_CLASS}
+            >
+              {oauthLoading === 'google' ? <Loader2 className="size-[18px] animate-spin" /> : <GoogleIcon />}
+              Google
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOAuth('github')}
+              disabled={!!oauthLoading || isSubmitting}
+              className={OAUTH_BUTTON_CLASS}
+            >
+              {oauthLoading === 'github' ? <Loader2 className="size-[18px] animate-spin" /> : <GitHubIcon />}
+              GitHub
+            </button>
+          </div>
 
           <p className="text-center text-[14px] text-[#4b5563]">
             Already have an account?{' '}
