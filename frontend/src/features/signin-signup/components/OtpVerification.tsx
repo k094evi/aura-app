@@ -9,7 +9,9 @@ const BTN_MOTION =
   'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:hover:translate-y-0';
 
 const OTP_LENGTH = 6;
-const RESEND_SECONDS = 30;
+// Supabase only allows one OTP email per user every 60 seconds, so the Resend
+// button unlocks after the same 60 seconds.
+const RESEND_SECONDS = 120;
 
 interface OtpVerificationProps {
   title: string;
@@ -163,7 +165,7 @@ export default function OtpVerification({
         </p>
         {secondsLeft > 0 && (
           <span className="text-[12px] font-semibold text-emerald-500">
-            Resend available in 0:{secondsLeft.toString().padStart(2, '0')}
+            Resend available in {Math.floor(secondsLeft / 60)}:{(secondsLeft % 60).toString().padStart(2, '0')}
           </span>
         )}
       </div>

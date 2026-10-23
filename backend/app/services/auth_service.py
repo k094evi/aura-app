@@ -195,12 +195,58 @@ def reset_password(access_token: str, refresh_token: str, new_password: str) -> 
     try:
         client = _user_client(access_token, refresh_token)
         client.auth.update_user({"password": new_password})
+        return
     except Exception as exc:
         logger.warning("Password reset (update) failed: %s", exc)
+        detail = f"{getattr(exc, 'code', '')} {exc}".lower()
+        if "same_password" in detail or "different from the old password" in detail:
+            raise ValueError(
+                "Your new password must be different from your old password."
+            ) from exc
+        if "aal2" in detail:
+            # The account has two-factor authentication on, and Supabase refuses
+            # password changes from the email-code (aal1) session. Handled below.
+            _reset_password_mfa_account(access_token, new_password)
+            return
         raise ValueError(
             "This reset link is invalid or has expired. Please request a new one."
         ) from exc
-        
+
+
+def _reset_password_mfa_account(access_token: str, new_password: str) -> None:
+    """
+    Password reset for accounts with 2FA. The person already proved they own the
+    email by entering the reset code. Changing the password does NOT log anyone
+    in: signing in still requires the authenticator code (see /mfa-challenge).
+    """
+    try:
+        user = supabase_admin.auth.get_user(access_token).user
+    except Exception as exc:
+        logger.warning("Reset token check failed: %s", exc)
+        raise ValueError(
+            "This reset link is invalid or has expired. Please request a new one."
+        ) from exc
+    if user is None or not user.email:
+        raise ValueError("This reset link is invalid or has expired. Please request a new one.")
+
+    # The admin API does not reject re-using the old password, so check it here:
+    # if the new password already signs in, it is the same as the old one.
+    same_as_old = False
+    try:
+        _anon_client().auth.sign_in_with_password({"email": user.email, "password": new_password})
+        same_as_old = True
+    except Exception:
+        pass
+    if same_as_old:
+        raise ValueError("Your new password must be different from your old password.")
+
+    try:
+        supabase_admin.auth.admin.update_user_by_id(user.id, {"password": new_password})
+    except Exception as exc:
+        logger.warning("Admin password update failed for %s: %s", user.id, exc)
+        raise ValueError("Could not update your password. Please try again.") from exc
+
+
 _INVALID_CODE = "Invalid or expired code. Please try again."
 
 

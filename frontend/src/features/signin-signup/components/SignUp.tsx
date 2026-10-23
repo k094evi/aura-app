@@ -10,9 +10,8 @@
 //
 // CHANGED:
 //  - Name fields only accept Latin letters (+ spaces, hyphens, apostrophes).
-//  - Email/password show "Invalid email" or "Invalid password" on their own fields.
-//  - Google / GitHub buttons are on this page, below the form (same layout
-//    as the sign-in page: "or continue with" divider, two buttons side by side).
+//  - Email/password show "Invalid email", "Invalid password", or both.
+//  - Google / GitHub buttons are on this page (below the form).
 //  - Arriving from a Google/GitHub sign-in with no account
 //    (/signup?email=...&name=...&provider=...) prefills the form.
 
@@ -41,9 +40,13 @@ const detailMessage = (detail: unknown, fallback: string) =>
 
 // Names: Latin letters only (accents such as ñ and é are fine), in words
 // separated by ONE space, hyphen or apostrophe. No digits, periods or other
-// symbols, and no non-Latin scripts.
-const NAME_ALLOWED_CHARS_RE = /[^\p{Script=Latin}\p{M} '’-]/gu;
-const NAME_RE = /^[\p{Script=Latin}\p{M}]+(?:[ '’-][\p{Script=Latin}\p{M}]+)*$/u;
+// symbols, and no non-Latin scripts (Japanese, Baybayin, ...). Combining marks
+// are only allowed from the Latin accent block (U+0300-U+036F), so Baybayin's
+// pamudpod (U+1714) and similar marks are rejected.
+const LATIN_LETTER = 'A-Za-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u024F';
+const NAME_ALLOWED_CHARS_RE = new RegExp(`[^${LATIN_LETTER}\\u0300-\\u036F '’-]`, 'g');
+const NAME_WORD = `[${LATIN_LETTER}][\\u0300-\\u036F]*`;
+const NAME_RE = new RegExp(`^(?:${NAME_WORD})+(?:[ '’-](?:${NAME_WORD})+)*$`);
 const NAME_MAX_LENGTH = 50;
 const NAME_FORMAT_MESSAGE = 'Letters only (spaces, hyphens and apostrophes are allowed)';
 
@@ -53,9 +56,6 @@ const OAUTH_INTENT_KEY = 'aura_oauth_intent';
 // ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
 const BTN_MOTION =
   'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:hover:translate-y-0';
-
-// Google and GitHub buttons share identical styling (same as the sign-in page).
-const OAUTH_BUTTON_CLASS = `flex min-w-0 flex-1 items-center justify-center gap-2 rounded-[10px] border border-[#e5e7eb] bg-white px-4 py-3 text-[14px] font-semibold text-[#4b5563] shadow-[0_1px_1px_rgba(17,24,39,0.02)] ${BTN_MOTION} hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-60`;
 
 type Step = 'form' | 'otp';
 type Provider = 'google' | 'github';
@@ -191,7 +191,7 @@ export default function SignUp() {
     const stripped = value.replace(NAME_ALLOWED_CHARS_RE, '');
     // No leading separator and no two separators in a row ("' '" -> "'").
     const cleaned = stripped
-      .replace(/^[ '’-]+/, '')
+      .replace(/^[ '’\-\u0300-\u036F]+/, '')
       .replace(/([ '’-])[ '’-]+/g, '$1')
       .slice(0, NAME_MAX_LENGTH);
     setValue(cleaned);
@@ -226,6 +226,7 @@ export default function SignUp() {
 
     const emailInvalid = !email.trim() || !isValidEmail(email.trim());
     const passwordPolicyError = password ? getPasswordPolicyError(password) : null;
+    const passwordInvalid = !password || !!passwordPolicyError;
 
     const nextEmailError = !email.trim() ? 'Email is required' : emailInvalid ? 'Invalid email' : null;
     const nextPasswordError = !password ? 'Password is required' : passwordPolicyError ? 'Invalid password' : null;
@@ -242,8 +243,17 @@ export default function SignUp() {
     setPasswordError(nextPasswordError);
     setConfirmError(nextConfirmError);
 
-    // Field errors above are enough; no extra form-level message.
-    setError(null);
+    // Top message: empty form -> ask to fill it in; both filled but both bad ->
+    // "Invalid email and password". Otherwise the field messages are enough.
+    const allEmpty =
+      !firstName.trim() && !middleName.trim() && !lastName.trim() && !email.trim() && !password && !confirm;
+    setError(
+      allEmpty
+        ? 'Please fill in all required fields'
+        : email.trim() && password && emailInvalid && passwordInvalid
+          ? 'Invalid email and password'
+          : null
+    );
 
     if (
       nextFirstNameError ||
@@ -514,32 +524,31 @@ export default function SignUp() {
             </button>
           </form>
 
-          {/* Divider */}
-          <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-[#e5e7eb]" />
-            <span className="text-[12px] font-medium text-[#9ca3af]">or continue with</span>
-            <div className="h-px flex-1 bg-[#e5e7eb]" />
+          <div className="flex items-center gap-3 text-[12px] font-medium text-[#9ca3af]">
+            <span className="h-px flex-1 bg-[#e5e7eb]" />
+            or continue with
+            <span className="h-px flex-1 bg-[#e5e7eb]" />
           </div>
 
-          {/* Google / GitHub sign-up, side by side like the sign-in page */}
-          <div className="flex gap-3">
+          {/* Google / GitHub sign-up */}
+          <div className="flex flex-col gap-3">
             <button
               type="button"
               onClick={() => handleOAuth('google')}
               disabled={!!oauthLoading || isSubmitting}
-              className={OAUTH_BUTTON_CLASS}
+              className={`flex w-full items-center justify-center gap-3 rounded-full border border-[#e5e7eb] bg-white px-6 py-[12px] text-[14px] font-semibold text-[#111827] ${BTN_MOTION} hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-60`}
             >
               {oauthLoading === 'google' ? <Loader2 className="size-[18px] animate-spin" /> : <GoogleIcon />}
-              Google
+              Continue with Google
             </button>
             <button
               type="button"
               onClick={() => handleOAuth('github')}
               disabled={!!oauthLoading || isSubmitting}
-              className={OAUTH_BUTTON_CLASS}
+              className={`flex w-full items-center justify-center gap-3 rounded-full border border-[#e5e7eb] bg-white px-6 py-[12px] text-[14px] font-semibold text-[#111827] ${BTN_MOTION} hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-60`}
             >
               {oauthLoading === 'github' ? <Loader2 className="size-[18px] animate-spin" /> : <GitHubIcon />}
-              GitHub
+              Continue with GitHub
             </button>
           </div>
 

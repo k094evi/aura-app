@@ -94,11 +94,11 @@ export default function LoginPage() {
     const emailInvalid = !email.trim() || !isValidEmail(email.trim());
     const passwordInvalid = !password;
 
-    setEmailError(emailInvalid ? 'Invalid email' : null);
-    setPasswordError(passwordInvalid ? 'Invalid password' : null);
+    setEmailError(!email.trim() ? 'Email is required' : emailInvalid ? 'Invalid email' : null);
+    setPasswordError(passwordInvalid ? 'Password is required' : null);
     setCredentialsRejected(false);
-    // When both are wrong, say so once at the top as well.
-    setError(emailInvalid && passwordInvalid ? 'Invalid email and password' : null);
+    // Both fields empty -> one message at the top as well.
+    setError(!email.trim() && !password ? 'Please enter your email and password' : null);
 
     if (emailInvalid || passwordInvalid) {
       return;
