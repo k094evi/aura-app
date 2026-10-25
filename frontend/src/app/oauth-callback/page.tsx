@@ -1,8 +1,5 @@
 // src/app/oauth-callback/page.tsx
 //
-// CHANGED: when the Google/GitHub email has no account yet (from the sign-in OR
-// sign-up page), redirect to /signup?email=... instead of logging in, so the
-// new user fills in the form and verifies their email with a code.
 
 'use client';
 
@@ -58,47 +55,7 @@ export default function OAuthCallbackPage() {
         return;
       }
 
-      // Which page started this OAuth flow ('signin' | 'signup'). Set by the
-      // Google/GitHub buttons right before they redirect to the provider.
-      let intent: string | null = null;
       try {
-        intent = window.sessionStorage.getItem('aura_oauth_intent');
-        window.sessionStorage.removeItem('aura_oauth_intent');
-      } catch {
-        // Storage unavailable: fall through with no intent.
-      }
-
-      try {
-        // 0. Sign-in with no existing account: do NOT log them in. The backend
-        //    removes the account Supabase just auto-created and returns the
-        //    email so we can send them to sign-up with it prefilled.
-        // Applies to sign-in AND sign-up: a brand-new Google/GitHub user must
-        // finish the sign-up form and verify their email with a code first.
-        {
-          const checkRes = await fetch('/api/auth/me', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${access_token}` },
-            cache: 'no-store',
-          });
-          const check = await checkRes.json().catch(() => ({}));
-          if (!checkRes.ok) {
-            throw new Error(
-              check.detail ||
-                `Could not verify your account (error ${checkRes.status}). Please try again.`
-            );
-          }
-          if (check.is_new_user) {
-            const qs = new URLSearchParams({
-              email: check.email || '',
-              name: check.full_name || '',
-              provider: check.provider || '',
-              intent: intent === 'signup' ? 'signup' : 'signin',
-            });
-            router.replace(`/signup?${qs.toString()}`);
-            return;
-          }
-        }
-
         // 1. Confirm the token with our backend and fetch the profile.
         //    Supabase has already found-or-created the account for this
         //    Google/GitHub identity; a returning user gets the same account.

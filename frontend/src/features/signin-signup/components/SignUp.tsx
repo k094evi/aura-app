@@ -47,11 +47,8 @@ const LATIN_LETTER = 'A-Za-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u024F';
 const NAME_ALLOWED_CHARS_RE = new RegExp(`[^${LATIN_LETTER}\\u0300-\\u036F '’-]`, 'g');
 const NAME_WORD = `[${LATIN_LETTER}][\\u0300-\\u036F]*`;
 const NAME_RE = new RegExp(`^(?:${NAME_WORD})+(?:[ '’-](?:${NAME_WORD})+)*$`);
-const NAME_MAX_LENGTH = 50;
+const NAME_MAX_LENGTH = 20;
 const NAME_FORMAT_MESSAGE = 'Letters only (spaces, hyphens and apostrophes are allowed)';
-
-// Must match the key the OAuth callback page reads.
-const OAUTH_INTENT_KEY = 'aura_oauth_intent';
 
 // ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
 const BTN_MOTION =
@@ -210,8 +207,6 @@ export default function SignUp() {
       if (!res.ok || !data.url) {
         throw new Error(detailMessage(data.detail, 'Could not start sign-up with that provider. Please try again.'));
       }
-      // Tells /oauth-callback this came from the sign-up page.
-      sessionStorage.setItem(OAUTH_INTENT_KEY, 'signup');
       window.location.href = data.url;
     } catch (err: any) {
       setError(err.message || 'Something went wrong. Please try again.');

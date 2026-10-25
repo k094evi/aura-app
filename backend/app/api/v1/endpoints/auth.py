@@ -26,6 +26,7 @@ import os
 import urllib.parse
 from datetime import datetime, timezone
 
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
@@ -223,8 +224,8 @@ def get_oauth_url(provider: str):
         "provider": provider,
         "redirect_to": redirect_to,
     }
-    if provider == "google":
-        # Always show Google's account chooser instead of silently reusing the
+    if provider in ("google", "github"):
+        # Always show the provider's account chooser instead of silently reusing the
         # Google account that is already signed in on this browser.
         params["prompt"] = "select_account"
     query = urllib.parse.urlencode(params)
@@ -388,9 +389,15 @@ def verify_settings_email_change(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+class SetOrChangePasswordRequest(BaseModel):
+    """current_password is optional: Google/GitHub accounts with no password yet leave it out."""
+    new_password: str
+    current_password: str | None = None
+
+
 @router.post("/settings/password")
 def change_settings_password(
-    payload: ChangePasswordRequest,
+    payload: SetOrChangePasswordRequest,
     user: AuthUser = Depends(get_current_user),
 ):
     try:

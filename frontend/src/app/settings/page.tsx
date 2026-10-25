@@ -81,6 +81,8 @@ export default function SettingsPage() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordUpdated, setPasswordUpdated] = useState(false);
+  // True when the success message is for a FIRST password (Google/GitHub account).
+  const [passwordJustSet, setPasswordJustSet] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
 
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
@@ -149,9 +151,12 @@ export default function SettingsPage() {
   const isOAuthAccount = Boolean(
     account?.providers.some((provider) => provider === 'google' || provider === 'github')
   );
-  const canUsePassword = Boolean(
-    account?.email && (account.providers.includes('email') || !isOAuthAccount)
+  // Google/GitHub account that has not set a password yet: it can set one here
+  // (no current password needed) and then also sign in with email + password.
+  const hasNoPassword = Boolean(
+    account?.email && isOAuthAccount && !account.providers.includes('email')
   );
+  const canUsePassword = Boolean(account?.email);
   const passwordAvailableAt = getPasswordAvailableAt(account?.password_changed_at);
   const passwordLocked = Boolean(passwordAvailableAt && passwordAvailableAt.getTime() > currentTime);
 
@@ -226,8 +231,8 @@ export default function SettingsPage() {
   const handleUpdatePassword = async () => {
     if (passwordSaving) return;
     setPasswordUpdated(false);
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      setPasswordError('Fill in all three fields.');
+    if ((!hasNoPassword && !currentPassword) || !newPassword || !confirmPassword) {
+      setPasswordError(hasNoPassword ? 'Fill in both fields.' : 'Fill in all three fields.');
       return;
     }
     const newPasswordPolicyError = getPasswordPolicyError(newPassword);
@@ -247,17 +252,30 @@ export default function SettingsPage() {
     setPasswordSaving(true);
     setPasswordError(null);
     try {
-      const result = await settingsRequest<{ password_changed_at: string }>(
+      const wasFirstPassword = hasNoPassword;
+      const result = await settingsRequest<{ password_changed_at: string | null }>(
         'password',
         'POST',
-        { current_password: currentPassword, new_password: newPassword }
+        wasFirstPassword
+          ? { new_password: newPassword }
+          : { current_password: currentPassword, new_password: newPassword }
       );
       setAccount((previous) =>
-        previous ? { ...previous, password_changed_at: result.password_changed_at } : previous
+        previous
+          ? {
+              ...previous,
+              // After setting a first password the account also has an email login.
+              providers: previous.providers.includes('email')
+                ? previous.providers
+                : [...previous.providers, 'email'],
+              password_changed_at: result.password_changed_at ?? previous.password_changed_at,
+            }
+          : previous
       );
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
+      setPasswordJustSet(wasFirstPassword);
       setPasswordUpdated(true);
     } catch (cause) {
       setPasswordError(cause instanceof Error ? cause.message : 'Could not update your password.');
@@ -444,7 +462,11 @@ export default function SettingsPage() {
                   {passwordError ? (
                     <p role="alert" className="text-xs font-semibold text-[#dc2626]">{passwordError}</p>
                   ) : passwordUpdated ? (
-                    <p role="status" className="text-xs font-semibold text-[#10b981]">Password updated. You can change it again in 60 days.</p>
+                    <p role="status" className="text-xs font-semibold text-[#10b981]">
+                      {passwordJustSet
+                        ? 'Password set. You can now sign in with your email and password.'
+                        : 'Password updated. You can change it again in 60 days.'}
+                    </p>
                   ) : passwordLocked && passwordAvailableAt ? (
                     <p className="text-xs text-[#9ca3af]">
                       Password changes are available again on {passwordAvailableAt.toLocaleDateString()}.
@@ -453,7 +475,9 @@ export default function SettingsPage() {
                     <p className="text-xs text-[#9ca3af]">Use a strong, unique password you don&apos;t use elsewhere.</p>
                   )}
                   <GradientButton onClick={handleUpdatePassword} disabled={passwordSaving || loading || passwordLocked}>
-                    {passwordSaving ? 'Updating…' : 'Update Password'}
+                    {passwordSaving
+                      ? hasNoPassword ? 'Saving…' : 'Updating…'
+                      : hasNoPassword ? 'Set Password' : 'Update Password'}
                   </GradientButton>
                 </div>
               ) : (
@@ -466,23 +490,29 @@ export default function SettingsPage() {
             }
           >
             <div className="flex flex-col gap-1">
-              <h3 className="text-sm font-bold text-[#111827]">Change Password</h3>
+              <h3 className="text-sm font-bold text-[#111827]">
+                {hasNoPassword ? 'Set a Password' : 'Change Password'}
+              </h3>
               <p className="text-xs text-[#667085]">
-                Verify your current password before choosing a new one.
+                {hasNoPassword
+                  ? 'Your account signs in with Google or GitHub. Set a password to also sign in with your email.'
+                  : 'Verify your current password before choosing a new one.'}
               </p>
             </div>
 
             {canUsePassword && (
               <>
-                <TextField
-                  label="Current Password"
-                  type="password"
-                  value={currentPassword}
-                  onChange={setCurrentPassword}
-                  placeholder="Enter current password"
-                  autoComplete="current-password"
-                  disabled={passwordLocked || passwordSaving}
-                />
+                {!hasNoPassword && (
+                  <TextField
+                    label="Current Password"
+                    type="password"
+                    value={currentPassword}
+                    onChange={setCurrentPassword}
+                    placeholder="Enter current password"
+                    autoComplete="current-password"
+                    disabled={passwordLocked || passwordSaving}
+                  />
+                )}
                 <TextField
                   label="New Password"
                   type="password"
@@ -506,7 +536,7 @@ export default function SettingsPage() {
             )}
             {account && !canUsePassword && (
               <p className="text-sm text-[#667085]">
-                Your password is managed by your Google or GitHub account.
+                Password settings need an email address on your account.
               </p>
             )}
 

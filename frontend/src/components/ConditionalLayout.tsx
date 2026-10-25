@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Navbar } from '@/components/NavBar';
 import { Footer } from '@/components/Footer';
+import SessionExpiryGuard from '@/components/SessionExpiryGuard';
 import { isAuthenticated as checkIsAuthenticated, clearSession } from '@/lib/auth';
 
 // Routes that use the authenticated (logged-in) Navbar
@@ -65,6 +66,8 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      {/* Signs the user out after inactivity / token expiry (with a warning first) */}
+      <SessionExpiryGuard />
       {/* Show Navbar unless on a hidden route */}
       {!hideNavFooter && !hideNavOnly && (
         <Navbar isAuthenticated={isAuthenticated} onLogout={handleLogout} />

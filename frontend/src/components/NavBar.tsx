@@ -3,7 +3,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
-import { LogOut, ChevronDown } from 'lucide-react';
+import { LogOut, ChevronDown, Menu, X } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
@@ -53,6 +53,9 @@ export const Navbar = ({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   // Ref used to detect clicks outside the dropdown
   const dropdownRef = useRef<HTMLDivElement>(null);
+  // Mobile / zoomed-in menu (the nav links collapse into it below the lg breakpoint)
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   // ADDED: respect the OS "reduce motion" setting (kept up here with the other hooks)
   const reduceMotion = useReducedMotion();
@@ -92,16 +95,36 @@ export const Navbar = ({
     .toUpperCase()
     .slice(0, 2);
 
-  // Close the dropdown when clicking outside of it
+  // Close the dropdown / menu when clicking outside of them
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (dropdownRef.current && !dropdownRef.current.contains(target)) {
         setIsDropdownOpen(false);
+      }
+      if (menuRef.current && !menuRef.current.contains(target)) {
+        setIsMenuOpen(false);
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Close both menus after navigating, and on Escape.
+  useEffect(() => {
+    setIsMenuOpen(false);
+    setIsDropdownOpen(false);
+  }, [pathname]);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsMenuOpen(false);
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
   }, []);
 
   // Scroll-spy for the home page: highlight Home / Features / FAQ / Contact Us
@@ -176,16 +199,18 @@ export const Navbar = ({
       transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       className="fixed top-6 inset-x-4 sm:inset-x-8 lg:inset-x-20 z-50 font-['DM_Sans',_sans-serif]"
     >
-      <div className="relative flex items-center justify-between gap-4 rounded-full border border-white bg-white/80 backdrop-blur-[10px] pl-6 pr-3.5 py-3.5 shadow-[0px_2px_8px_0px_rgba(31,41,55,0.04),0px_8px_32px_0px_rgba(31,41,55,0.06)]">
+      <div className="relative flex items-center justify-between gap-3 rounded-full border border-white bg-white/80 backdrop-blur-[10px] pl-5 pr-3 py-3 sm:pl-6 sm:pr-3.5 sm:py-3.5 shadow-[0px_2px_8px_0px_rgba(31,41,55,0.04),0px_8px_32px_0px_rgba(31,41,55,0.06)]">
         {/* Logo / brand link. The logo file lives in /public (Aura_LogoRaster.png). */}
         <Link href="/" className="flex items-center gap-2.5 shrink-0">
           <Image src="/Aura_LogoRaster.png" alt="" width={28} height={28} priority />
           <span className="text-[22px] font-bold tracking-tight text-[#111827]">Aura</span>
         </Link>
 
-        {/* Centered nav links (hidden until we know which set to show) */}
+        {/* Nav links in the middle on wide screens (lg and up). They sit in their own
+            flex cell, so a long account name can no longer overlap them. Below lg they
+            move into the hamburger menu. */}
         {sessionReady && (
-          <div className="hidden md:flex items-center gap-10 absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-sm">
+          <div className="hidden lg:flex min-w-0 flex-1 items-center justify-center gap-8 xl:gap-10 whitespace-nowrap text-sm">
             {navLinks.map((link) => {
               const isActive = isLinkActive(link.href);
               return (
@@ -207,69 +232,149 @@ export const Navbar = ({
 
         {!sessionReady ? (
           // Placeholder while the session is being checked, keeps the navbar height stable
-          <div className="h-10 w-40 shrink-0" aria-hidden="true" />
-        ) : isAuthenticated ? (
-          // Authenticated state: show user avatar with dropdown menu
-          <div className="relative shrink-0" ref={dropdownRef}>
-            <button
-              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-              className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-full hover:bg-black/[0.03] transition-colors"
-            >
-              {/* Avatar showing user initials */}
-              <div className="w-8 h-8 bg-gradient-to-r from-[#7c3aed] to-[#06b6d4] rounded-full flex items-center justify-center">
-                <span className="text-white text-xs font-bold">{initials}</span>
+          <div className="h-10 w-24 shrink-0" aria-hidden="true" />
+        ) : (
+          <div className="flex min-w-0 shrink items-center gap-2 sm:gap-3" ref={menuRef}>
+            {isAuthenticated ? (
+              // Authenticated state: show user avatar with dropdown menu
+              <div className="relative min-w-0 shrink" ref={dropdownRef}>
+                <button
+                  onClick={() => {
+                    setIsDropdownOpen(!isDropdownOpen);
+                    setIsMenuOpen(false);
+                  }}
+                  aria-haspopup="menu"
+                  aria-expanded={isDropdownOpen}
+                  title={userName}
+                  className="flex max-w-full min-w-0 items-center gap-2 pl-2 pr-1 py-1 rounded-full hover:bg-black/[0.03] transition-colors"
+                >
+                  {/* Avatar showing user initials */}
+                  <div className="w-8 h-8 shrink-0 bg-gradient-to-r from-[#7c3aed] to-[#06b6d4] rounded-full flex items-center justify-center">
+                    <span className="text-white text-xs font-bold">{initials}</span>
+                  </div>
+                  {/* Long names are cut with "..." instead of stretching the bar */}
+                  <span className="hidden sm:block min-w-0 max-w-[9rem] md:max-w-[12rem] truncate text-sm font-semibold text-[#111827]">
+                    {userName}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 shrink-0 text-[#9ca3af] transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Animated dropdown menu with user info and account actions */}
+                <AnimatePresence>
+                  {isDropdownOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.2 }}
+                      role="menu"
+                      className="absolute right-0 mt-3 w-60 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-[0px_15px_40px_0px_rgba(17,24,39,0.12)] border border-white/80 overflow-hidden"
+                    >
+                      {/* User info header: the name wraps over at most 2 lines */}
+                      <div className="p-3 border-b border-[#f3f4f6] bg-[#faf9ff]">
+                        <p className="line-clamp-2 break-words [overflow-wrap:anywhere] text-sm font-bold text-[#111827]">
+                          {userName}
+                        </p>
+                        <p className="truncate text-xs text-[#9ca3af]">{userEmail}</p>
+                      </div>
+
+                      {/* Logout action */}
+                      <div className="py-2">
+                        <button
+                          onClick={() => {
+                            setIsDropdownOpen(false);
+                            setHasSession(false);
+                            onLogout?.();
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-red-50 transition-colors flex items-center gap-3"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          Log Out
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-              <span className="hidden sm:inline text-sm font-semibold text-[#111827]">{userName}</span>
-              <ChevronDown className={`w-4 h-4 text-[#9ca3af] transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+            ) : (
+              // Unauthenticated state: Sign In / Get Started (inside the menu on phones)
+              <div className="hidden sm:flex items-center gap-4 shrink-0">
+                <Link href="/signin" className="text-sm font-semibold text-[#4b5563] hover:text-[#111827] transition-colors">
+                  Sign In
+                </Link>
+                <Link
+                  href="/signup"
+                  className={`px-[22px] py-[11px] bg-[#111827] text-white rounded-full text-sm font-semibold hover:opacity-90 ${BTN_MOTION} drop-shadow-[0px_4px_6px_rgba(17,24,39,0.1)]`}
+                >
+                  Get Started
+                </Link>
+              </div>
+            )}
+
+            {/* Hamburger: shown below lg, where the centered links no longer fit */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsMenuOpen(!isMenuOpen);
+                setIsDropdownOpen(false);
+              }}
+              aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={isMenuOpen}
+              className="lg:hidden flex size-10 shrink-0 items-center justify-center rounded-full text-[#111827] hover:bg-black/[0.05] transition-colors"
+            >
+              {isMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
             </button>
 
-            {/* Animated dropdown menu with user info and account actions */}
+            {/* Mobile / zoomed-in menu panel */}
             <AnimatePresence>
-              {isDropdownOpen && (
+              {isMenuOpen && (
                 <motion.div
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   transition={{ duration: 0.2 }}
-                  className="absolute right-0 mt-3 w-56 bg-white rounded-2xl shadow-[0px_15px_40px_0px_rgba(17,24,39,0.12)] border border-white/80 overflow-hidden"
+                  className="lg:hidden absolute inset-x-0 top-full mt-3 max-h-[calc(100vh-7rem)] overflow-y-auto rounded-3xl border border-white/80 bg-white p-2 shadow-[0px_15px_40px_0px_rgba(17,24,39,0.12)]"
                 >
-                  {/* User info header */}
-                  <div className="p-3 border-b border-[#f3f4f6] bg-[#faf9ff]">
-                    <p className="text-sm font-bold text-[#111827]">{userName}</p>
-                    <p className="text-xs text-[#9ca3af]">{userEmail}</p>
-                  </div>
-
-                  {/* Logout action */}
-                  <div className="py-2">
-                    <button
-                      onClick={() => {
-                        setIsDropdownOpen(false);
-                        setHasSession(false);
-                        onLogout?.();
-                      }}
-                      className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-red-50 transition-colors flex items-center gap-3"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      Log Out
-                    </button>
-                  </div>
+                  <nav className="flex flex-col" aria-label="Main">
+                    {navLinks.map((link) => {
+                      const isActive = isLinkActive(link.href);
+                      return (
+                        <Link
+                          key={link.href}
+                          href={link.href}
+                          onClick={() => setIsMenuOpen(false)}
+                          className={`rounded-2xl px-4 py-3 text-[15px] ${
+                            isActive
+                              ? 'bg-[#f5f3ff] font-semibold text-[#6d28d9]'
+                              : 'font-medium text-[#374151] hover:bg-[#f9fafb]'
+                          }`}
+                        >
+                          {link.label}
+                        </Link>
+                      );
+                    })}
+                    {!isAuthenticated && (
+                      <div className="mt-2 flex gap-2 border-t border-[#f3f4f6] p-2 sm:hidden">
+                        <Link
+                          href="/signin"
+                          onClick={() => setIsMenuOpen(false)}
+                          className="flex-1 rounded-full border border-[#e5e7eb] px-4 py-2.5 text-center text-sm font-semibold text-[#374151]"
+                        >
+                          Sign In
+                        </Link>
+                        <Link
+                          href="/signup"
+                          onClick={() => setIsMenuOpen(false)}
+                          className="flex-1 rounded-full bg-[#111827] px-4 py-2.5 text-center text-sm font-semibold text-white"
+                        >
+                          Get Started
+                        </Link>
+                      </div>
+                    )}
+                  </nav>
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
-        ) : (
-          // Unauthenticated state: show Sign In / Get Started links
-          <div className="flex items-center gap-4 shrink-0">
-            <Link href="/signin" className="text-sm font-semibold text-[#4b5563] hover:text-[#111827] transition-colors">
-              Sign In
-            </Link>
-            {/* CHANGED: `transition-opacity` -> BTN_MOTION (hover lift) */}
-            <Link
-              href="/signup"
-              className={`px-[22px] py-[11px] bg-[#111827] text-white rounded-full text-sm font-semibold hover:opacity-90 ${BTN_MOTION} drop-shadow-[0px_4px_6px_rgba(17,24,39,0.1)]`}
-            >
-              Get Started
-            </Link>
           </div>
         )}
       </div>

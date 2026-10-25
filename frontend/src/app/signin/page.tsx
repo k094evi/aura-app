@@ -7,13 +7,11 @@
 //  - Wrong credentials from the server show "Invalid email or password" on both
 //    fields (the server never says which one was wrong, so account existence
 //    is not leaked).
-//  - Google/GitHub buttons mark the flow as a sign-in. /oauth-callback uses that
-//    to send a Google/GitHub email with no account to /signup (email prefilled,
-//    email verification code) instead of logging in.
+//  - Shows a notice when you were signed out because the session expired.
 
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -40,9 +38,6 @@ const isValidEmail = (value: string) => EMAIL_RE.test(value) && !value.includes(
 // validation errors (which printed "[object Object]"). Always return a string.
 const detailMessage = (detail: unknown, fallback: string) =>
   typeof detail === 'string' && detail.trim() ? detail : fallback;
-
-// Must match the key the OAuth callback page reads.
-const OAUTH_INTENT_KEY = 'aura_oauth_intent';
 
 // ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
 const BTN_MOTION =
@@ -78,7 +73,17 @@ export default function LoginPage() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   // True after the server rejected the credentials: both fields are marked red.
   const [credentialsRejected, setCredentialsRejected] = useState(false);
+  // Shown when the session guard sent you here (?reason=expired).
+  const [notice, setNotice] = useState<string | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('reason') === 'expired') {
+      setNotice('Your session has expired. Please sign in again.');
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
 
   // Disables every submit-type control while any sign-in attempt is running,
   // so the user can't start email and OAuth sign-in at the same time.
@@ -163,14 +168,6 @@ export default function LoginPage() {
         throw new Error(data.detail || `Could not start ${provider} sign-in. Please try again.`);
       }
 
-      // Tells /oauth-callback this came from the SIGN-IN page, so an email with
-      // no account is sent to sign-up instead of being logged in.
-      try {
-        window.sessionStorage.setItem(OAUTH_INTENT_KEY, 'signin');
-      } catch {
-        // Storage unavailable: callback falls back to its default behaviour.
-      }
-
       window.location.href = data.url;
     } catch (err: any) {
       setError(err.message || 'Something went wrong. Please try again.');
@@ -232,6 +229,15 @@ export default function LoginPage() {
               <h1 className="text-[28px] font-extrabold leading-tight text-[#111827]">Welcome Back</h1>
               <p className="text-[14px] text-[#4b5563]">Sign in to your AURA account</p>
             </div>
+
+            {notice && (
+              <p
+                role="status"
+                className="rounded-[10px] border border-[#ddd6fe] bg-[#f5f3ff] px-3 py-2 text-center text-[13px] leading-[1.45] text-[#5b21b6]"
+              >
+                {notice}
+              </p>
+            )}
 
             {/* noValidate: use our own error messages instead of the browser's popups */}
             <form

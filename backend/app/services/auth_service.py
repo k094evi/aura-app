@@ -56,7 +56,10 @@ def _extract_user(user_obj, full_name: Optional[str] = None) -> AuthUser:
             or metadata.get("name")
             or metadata.get("user_name")
         ),
-        providers=sorted({provider for provider in providers if provider}),
+        providers=sorted(
+            {provider for provider in providers if provider}
+            | ({"email"} if app_metadata.get("has_password") else set())
+        ),
         password_changed_at=app_metadata.get("password_changed_at"),
         mfa_enabled=bool(app_metadata.get("mfa_enabled", False))
         or _has_verified_factor(user_obj),
@@ -175,7 +178,7 @@ def request_password_reset(email: str, redirect_to: str) -> None:
 
     app_meta = getattr(user, "app_metadata", None) or {}
     providers = app_meta.get("providers") or [app_meta.get("provider")]
-    if "email" not in providers:
+    if "email" not in providers and not app_meta.get("has_password"):
         raise ValueError(
             "This account signs in with Google or GitHub, so it has no password to reset."
         )
@@ -388,11 +391,59 @@ def _password_available_at(password_changed_at: str | None) -> datetime | None:
     return changed_at + timedelta(days=60)
 
 
+def _password_policy_error(password: str) -> str | None:
+    if len(password) < 8:
+        return "Password must be at least 8 characters."
+    if not any(c.islower() for c in password):
+        return "Password must include a lowercase letter."
+    if not any(c.isupper() for c in password):
+        return "Password must include an uppercase letter."
+    if not any(c.isdigit() for c in password):
+        return "Password must include a number."
+    if all(c.isalnum() for c in password):
+        return "Password must include a symbol."
+    return None
+
+
+def _set_first_password(user: AuthUser, new_password: str) -> dict:
+    """
+    For accounts created with Google/GitHub that have no password yet: sets one
+    so the person can also sign in with their email + password. No current
+    password is asked because there isn't one. The caller is already signed in
+    (valid access token, and 2FA-verified when 2FA is on).
+    """
+    policy_error = _password_policy_error(new_password)
+    if policy_error:
+        raise ValueError(policy_error)
+    try:
+        admin_user = supabase_admin.auth.admin.get_user_by_id(user.id).user
+        app_metadata = dict(getattr(admin_user, "app_metadata", None) or {})
+        app_metadata["has_password"] = True
+        supabase_admin.auth.admin.update_user_by_id(
+            user.id,
+            {"password": new_password, "app_metadata": app_metadata},
+        )
+    except Exception as exc:
+        logger.warning("Setting first password failed for user %s: %s", user.id, exc)
+        raise ValueError("Could not set your password. Please try again.") from exc
+    return {
+        "message": "Password set. You can now sign in with your email and password.",
+        "password_changed_at": None,
+        "password_available_at": None,
+    }
+
+
 def change_password(
     user: AuthUser,
-    current_password: str,
+    current_password: Optional[str],
     new_password: str,
 ) -> dict:
+    # Google/GitHub account with no password yet: set one, no current password.
+    if "email" not in user.providers:
+        return _set_first_password(user, new_password)
+    if not current_password:
+        raise ValueError("Enter your current password.")
+
     now = datetime.now(timezone.utc)
     available_at = _password_available_at(user.password_changed_at)
     if available_at and now < available_at:
