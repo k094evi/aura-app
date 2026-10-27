@@ -37,6 +37,22 @@ const COLOR = {
   white: [255, 255, 255] as [number, number, number],
 };
 
+// Spam-click guard shared by every Export PDF button: a second export within
+// this window is ignored, so mashing the button downloads only one file.
+const EXPORT_COOLDOWN_MS = 3000;
+let lastExportAt = 0;
+
+// Longest slice of the display name used in the downloaded file's name.
+const FILE_NAME_SLUG_MAX = 40;
+
+// Shortens text with "..." so it fits in maxWidth points (uses the current font).
+function fitText(doc: jsPDF, text: string, maxWidth: number): string {
+  if (doc.getTextWidth(text) <= maxWidth) return text;
+  let end = text.length;
+  while (end > 1 && doc.getTextWidth(`${text.slice(0, end)}...`) > maxWidth) end -= 1;
+  return `${text.slice(0, end)}...`;
+}
+
 /**
  * Builds and downloads an executive-grade PDF analysis report.
  */
@@ -45,6 +61,10 @@ export function generateReportPDF(
   user?: SupabaseUser | null,
   customFileName?: string
 ): void {
+  const now = Date.now();
+  if (now - lastExportAt < EXPORT_COOLDOWN_MS) return;
+  lastExportAt = now;
+
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   let y = MARGIN;
 
@@ -65,7 +85,8 @@ export function generateReportPDF(
     ? user.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]+/g, '-')
     : 'user';
 
-  const fileName = customFileName || `${nameSlug}-aura-resume_report.pdf`;
+  const shortSlug = nameSlug.slice(0, FILE_NAME_SLUG_MAX).replace(/-+$/g, '') || 'user';
+  const fileName = customFileName || `${shortSlug}-aura-resume_report.pdf`;
 
   // ── Helper: Page Overflow Guard ───────────────────────
   const ensureSpace = (needed: number) => {
@@ -105,15 +126,18 @@ export function generateReportPDF(
     day: 'numeric',
   });
 
+  // The title takes the left ~270pt; the name/email are cut with "..." to fit the rest.
+  const detailsMaxWidth = CONTENT_WIDTH - 280;
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(...COLOR.slate900);
-  doc.text(candidateName, PAGE_WIDTH - MARGIN, y + 8, { align: 'right' });
+  doc.text(fitText(doc, candidateName, detailsMaxWidth), PAGE_WIDTH - MARGIN, y + 8, { align: 'right' });
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(...COLOR.slate500);
-  doc.text(candidateEmail, PAGE_WIDTH - MARGIN, y + 20, { align: 'right' });
+  doc.text(fitText(doc, candidateEmail, detailsMaxWidth), PAGE_WIDTH - MARGIN, y + 20, { align: 'right' });
   doc.text(`Generated: ${reportDate}`, PAGE_WIDTH - MARGIN, y + 31, { align: 'right' });
 
   y += 48;

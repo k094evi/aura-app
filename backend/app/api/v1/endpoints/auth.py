@@ -83,13 +83,28 @@ SUPPORTED_OAUTH_PROVIDERS = {"google", "github"}
 # Errors: 400 if auth_service raises ValueError (e.g. email already taken,
 #         weak password, etc.)
 # ----------------------------------------------------------------------------
+class SignUpWithNamesRequest(SignUpRequest):
+    """SignUpRequest plus the separate name fields from the sign-up form."""
+    first_name: str | None = None
+    middle_name: str | None = None
+    last_name: str | None = None
+
+
 @router.post("/signup", response_model=AuthResponse)
-def signup(payload: SignUpRequest):
+def signup(payload: SignUpWithNamesRequest):
+    name_parts = None
+    if payload.first_name is not None or payload.last_name is not None:
+        name_parts = {
+            "first": payload.first_name,
+            "middle": payload.middle_name,
+            "last": payload.last_name,
+        }
     try:
         return auth_service.sign_up(
             email=payload.email,
             password=payload.password,
             full_name=payload.full_name,
+            name_parts=name_parts,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -342,20 +357,56 @@ def _required_refresh_token(refresh_token: str | None) -> str:
     return refresh_token
 
 
-@router.get("/settings/account", response_model=AuthUser)
+class AccountResponse(AuthUser):
+    """AuthUser plus the separate name parts shown in Settings."""
+    first_name: str = ""
+    middle_name: str = ""
+    last_name: str = ""
+
+
+class UpdateNameRequest(BaseModel):
+    first_name: str | None = None
+    middle_name: str | None = None
+    last_name: str | None = None
+    full_name: str | None = None  # older single-field form, still accepted
+
+
+def _account_response(user: AuthUser) -> AccountResponse:
+    parts = auth_service.get_name_parts(user.id, user.full_name)
+    data = user.model_dump() if hasattr(user, "model_dump") else user.dict()
+    return AccountResponse(
+        **data,
+        first_name=parts["first"],
+        middle_name=parts["middle"],
+        last_name=parts["last"],
+    )
+
+
+@router.get("/settings/account", response_model=AccountResponse)
 def get_settings_account(user: AuthUser = Depends(get_current_user)):
-    return user
+    return _account_response(user)
 
 
-@router.patch("/settings/account", response_model=AuthUser)
+@router.patch("/settings/account", response_model=AccountResponse)
 def patch_settings_account(
-    payload: UpdateProfileRequest,
+    payload: UpdateNameRequest,
     user: AuthUser = Depends(get_current_user),
 ):
     try:
-        return auth_service.update_profile(user.id, payload.full_name)
+        if payload.first_name is not None or payload.last_name is not None:
+            updated = auth_service.update_profile(
+                user.id,
+                name_parts={
+                    "first": payload.first_name,
+                    "middle": payload.middle_name,
+                    "last": payload.last_name,
+                },
+            )
+        else:
+            updated = auth_service.update_profile(user.id, full_name=payload.full_name)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _account_response(updated)
 
 
 @router.post("/settings/email/request", response_model=MessageResponse)

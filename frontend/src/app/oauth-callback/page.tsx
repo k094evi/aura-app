@@ -5,9 +5,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Brain, Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { saveSession } from '@/lib/auth';
+import AuthShell, { GRADIENT_BG } from '@/features/signin-signup/components/AuthShell';
 
 export default function OAuthCallbackPage() {
   const [error, setError] = useState<string | null>(null);
@@ -94,35 +95,32 @@ export default function OAuthCallbackPage() {
   }, [router]);
 
   return (
-    <div className="bg-gray-50 flex flex-col items-center justify-center px-4 py-10 min-h-screen">
-      <Link href="/" className="flex items-center gap-2 mb-8">
-        <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center">
-          <Brain className="text-white w-7 h-7" />
+    <AuthShell>
+      {error ? (
+        <div className="flex flex-col items-center gap-5 text-center">
+          <div className="flex size-14 items-center justify-center rounded-full bg-red-50">
+            <AlertCircle className="size-8 text-[#ef4444]" />
+          </div>
+          <div className="flex flex-col items-center gap-[6px]">
+            <h1 className="text-[28px] font-extrabold leading-tight text-[#111827]">Sign-in failed</h1>
+            <p role="alert" className="text-[14px] leading-[1.45] text-[#4b5563]">{error}</p>
+          </div>
+          <Link
+            href="/signin"
+            className={`flex w-full items-center justify-center rounded-full ${GRADIENT_BG} px-8 py-[14px] text-[15px] font-bold text-white shadow-[0_8px_24px_rgba(124,58,237,0.25)] transition hover:brightness-105`}
+          >
+            Back to Sign In
+          </Link>
         </div>
-        <span className="text-2xl font-bold tracking-tight text-gray-900">Aura</span>
-      </Link>
-
-      <div className="bg-white rounded-2xl shadow-lg w-full max-w-[470px] px-10 py-10 text-center">
-        {error ? (
-          <>
-            <AlertCircle className="w-14 h-14 text-red-400 mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Sign-in failed</h1>
-            <p className="text-gray-500 text-[0.95rem] leading-relaxed mb-6">{error}</p>
-            <Link
-              href="/signin"
-              className="inline-block px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors"
-            >
-              Back to Sign In
-            </Link>
-          </>
-        ) : (
-          <>
-            <Loader2 className="w-10 h-10 text-indigo-600 mx-auto mb-4 animate-spin" />
-            <h1 className="text-xl font-bold text-gray-900 mb-2">Finishing sign-in…</h1>
-            <p className="text-gray-500 text-sm">Just a moment while we confirm your account.</p>
-          </>
-        )}
-      </div>
-    </div>
+      ) : (
+        <div className="flex flex-col items-center gap-5 py-4 text-center">
+          <Loader2 className="size-10 animate-spin text-[#7c3aed]" />
+          <div className="flex flex-col items-center gap-[6px]">
+            <h1 className="text-[24px] font-extrabold leading-tight text-[#111827]">Finishing sign-in…</h1>
+            <p className="text-[14px] text-[#4b5563]">Just a moment while we confirm your account.</p>
+          </div>
+        </div>
+      )}
+    </AuthShell>
   );
 }

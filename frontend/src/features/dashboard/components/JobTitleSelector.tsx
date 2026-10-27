@@ -82,6 +82,11 @@ export default function JobTitleSelector({
     const el = wrapperRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
+    // Field scrolled out of view: close the menu instead of leaving it stuck on screen.
+    if (rect.bottom < 0 || rect.top > window.innerHeight) {
+      close();
+      return;
+    }
     setMenuRect({ top: rect.bottom + 8, left: rect.left, width: rect.width });
   };
 
@@ -174,6 +179,7 @@ export default function JobTitleSelector({
           autoComplete="off"
           name={`${id}-field`}
           value={value}
+          maxLength={60}
           onChange={(e) => {
             setShowAll(false);
             onChange(e.target.value);

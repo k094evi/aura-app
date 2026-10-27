@@ -28,6 +28,12 @@ type Option = { kind: 'company' | 'custom'; name: string };
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
+// Limits for what can be added.
+const MAX_COMPANIES = 10;
+const MAX_COMPANY_LENGTH = 40;
+// A company name starts with a letter or number, then letters, numbers, spaces and . & ' -
+const COMPANY_NAME_RE = /^[\p{L}\p{N}][\p{L}\p{N} .&'’\-]*$/u;
+
 export default function CompanySelector({
   selectedCompanies,
   onSelectionChange,
@@ -60,7 +66,10 @@ export default function CompanySelector({
 
   // Offer to add a typed name that is not already in the list or the selection
   const exists = IT_COMPANIES.some((c) => same(c, q)) || selectedCompanies.some((c) => same(c, q));
-  const canAddCustom = q.length > 0 && !exists;
+  const limitReached = selectedCompanies.length >= MAX_COMPANIES;
+  const validCustom = q.length <= MAX_COMPANY_LENGTH && COMPANY_NAME_RE.test(q);
+  const invalidName = q.length > 0 && !exists && !validCustom;
+  const canAddCustom = q.length > 0 && !exists && validCustom && !limitReached;
 
   const options: Option[] = [
     ...matches.map((name) => ({ kind: 'company' as const, name })),
@@ -83,6 +92,11 @@ export default function CompanySelector({
     const el = fieldRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
+    // Field scrolled out of view: close the menu instead of leaving it stuck on screen.
+    if (rect.bottom < 0 || rect.top > window.innerHeight) {
+      close();
+      return;
+    }
     setMenuRect({ top: rect.bottom + 8, left: rect.left, width: rect.width });
   };
 
@@ -114,20 +128,24 @@ export default function CompanySelector({
   // Multi-select: picking a company toggles it; the menu stays open
   const toggleCompany = (name: string) => {
     if (isSelected(name)) removeCompany(name);
-    else onSelectionChange([...selectedCompanies, name]);
+    else if (!limitReached) onSelectionChange([...selectedCompanies, name]);
   };
 
   const addCustom = (name: string) => {
     const value = name.trim();
-    if (!value || isSelected(value)) return;
+    if (!value || isSelected(value) || limitReached) return;
+    if (value.length > MAX_COMPANY_LENGTH || !COMPANY_NAME_RE.test(value)) return;
     // Use the list's own spelling when the typed text matches a reference company
     const canonical = IT_COMPANIES.find((c) => same(c, value)) ?? value;
     onSelectionChange([...selectedCompanies, canonical]);
   };
 
-  const choose = (option: Option) => {
+  const choose = (option: Option, viaKeyboard = false) => {
     if (option.kind === 'custom') addCustom(option.name);
-    else toggleCompany(option.name);
+    // Typing an already-selected company and pressing Enter keeps it (no duplicate, no removal).
+    else if (viaKeyboard && q && isSelected(option.name)) {
+      // already selected: nothing to do
+    } else toggleCompany(option.name);
     setQuery('');
     setActiveIndex(0);
     inputRef.current?.focus();
@@ -144,13 +162,15 @@ export default function CompanySelector({
       if (options.length > 0) setActiveIndex((active - 1 + options.length) % options.length);
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (isOpen && active >= 0) choose(options[active]);
+      if (isOpen && active >= 0) choose(options[active], true);
     } else if (e.key === ',') {
       // Comma commits whatever was typed as its own company
       e.preventDefault();
       if (q) {
         const exact = IT_COMPANIES.find((c) => same(c, q));
-        if (exact && !isSelected(exact)) onSelectionChange([...selectedCompanies, exact]);
+        if (exact && !isSelected(exact)) {
+          if (!limitReached) onSelectionChange([...selectedCompanies, exact]);
+        }
         else if (!exact) addCustom(q);
         setQuery('');
         setActiveIndex(0);
@@ -210,9 +230,12 @@ export default function CompanySelector({
           {selectedCompanies.map((company) => (
             <span
               key={company}
-              className="inline-flex items-center gap-1 rounded-lg border border-[#8b5cf6]/20 bg-[#8b5cf6]/10 px-[10px] py-[3px] text-[13px] font-medium text-[#7c3aed]"
+              className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-lg border border-[#8b5cf6]/20 bg-[#8b5cf6]/10 px-[10px] py-[3px] text-[13px] font-medium text-[#7c3aed]"
             >
-              {company}
+              {/* Long names are cut with "..." so the remove button is always visible */}
+              <span className="min-w-0 truncate" title={company}>
+                {company}
+              </span>
               <button
                 type="button"
                 aria-label={`Remove ${company}`}
@@ -221,7 +244,7 @@ export default function CompanySelector({
                   e.stopPropagation();
                   removeCompany(company);
                 }}
-                className="text-[#7c3aed]/60 hover:text-[#7c3aed] disabled:cursor-not-allowed"
+                className="shrink-0 text-[#7c3aed]/60 hover:text-[#7c3aed] disabled:cursor-not-allowed"
               >
                 <X className="size-3.5" />
               </button>
@@ -234,6 +257,7 @@ export default function CompanySelector({
             autoComplete="off"
             name="target-companies-field"
             value={query}
+            maxLength={MAX_COMPANY_LENGTH}
             disabled={disabled}
             placeholder={selectedCompanies.length === 0 ? placeholder : 'Add another…'}
             onChange={(e) => {
@@ -337,13 +361,20 @@ export default function CompanySelector({
                       );
                     })}
 
-                    {options.length === 0 && (
+                    {invalidName && (
+                      <p role="alert" className="px-4 py-2 text-[12px] font-medium text-[#ef4444]">
+                        Company names can only use letters, numbers, spaces and . &amp; &apos; -
+                      </p>
+                    )}
+                    {options.length === 0 && !invalidName && (
                       <p className="px-4 py-2 text-[13px] text-[#9ca3af]">No companies found</p>
                     )}
                   </div>
 
                   <p className="border-t border-[#f3f4f6] px-4 py-2 text-[11px] text-[#9ca3af]">
-                    Select several, or type a name and press Enter. Backspace removes the last one.
+                    {limitReached
+                      ? `Maximum of ${MAX_COMPANIES} companies reached. Remove one to add another.`
+                      : 'Select several, or type a name and press Enter. Backspace removes the last one.'}
                   </p>
                 </motion.div>
               )}

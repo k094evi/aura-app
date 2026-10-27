@@ -19,10 +19,37 @@ import { getPasswordPolicyError, PASSWORD_POLICY_MESSAGE } from '@/lib/passwordP
 // ADDED: scroll-in animation wrapper (BTN_MOTION now comes from SettingsUI).
 import Reveal from '@/components/reveal';
 
+// Name fields follow the sign-up rules: Latin letters (accents are fine), words
+// separated by ONE space, hyphen or apostrophe, at most 20 characters per field.
+const NAME_MAX_LENGTH = 20;
+const LATIN = 'A-Za-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u024F';
+const NAME_STRIP_RE = new RegExp(`[^${LATIN}\\u0300-\\u036F '’-]`, 'g');
+const NAME_WORD = `[${LATIN}][\\u0300-\\u036F]*`;
+const NAME_RE = new RegExp(`^(?:${NAME_WORD})+(?:[ '’-](?:${NAME_WORD})+)*$`);
+const NAME_FORMAT_MESSAGE = 'letters only (spaces, hyphens and apostrophes are allowed).';
+
+const cleanName = (value: string) =>
+  value
+    .replace(NAME_STRIP_RE, '')
+    .replace(/^[ '’\-]+/, '')
+    .replace(/([ '’-])[ '’-]+/g, '$1')
+    .slice(0, NAME_MAX_LENGTH);
+
+// Best guess when an account has no stored name parts (e.g. it signed up with Google).
+function splitName(full: string | null | undefined) {
+  const tokens = (full ?? '').split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return { first: '', middle: '', last: '' };
+  if (tokens.length === 1) return { first: tokens[0], middle: '', last: '' };
+  return { first: tokens.slice(0, -1).join(' '), middle: '', last: tokens[tokens.length - 1] };
+}
+
 type SettingsAccount = {
   id: string;
   email: string | null;
   full_name: string | null;
+  first_name?: string;
+  middle_name?: string;
+  last_name?: string;
   providers: string[];
   password_changed_at: string | null;
 };
@@ -59,7 +86,9 @@ function getPasswordAvailableAt(changedAt: string | null | undefined): Date | nu
 export default function SettingsPage() {
   const router = useRouter();
   const [account, setAccount] = useState<SettingsAccount | null>(null);
-  const [displayName, setDisplayName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [middleName, setMiddleName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -107,7 +136,12 @@ export default function SettingsPage() {
         const loadedAccount = await settingsRequest<SettingsAccount>('account');
         if (cancelled) return;
         setAccount(loadedAccount);
-        setDisplayName(loadedAccount.full_name ?? '');
+        // Older accounts may still hold very long names: cut each part to the 20-character limit.
+        const guess = splitName(loadedAccount.full_name);
+        const hasParts = Boolean(loadedAccount.first_name || loadedAccount.last_name);
+        setFirstName(cleanName(hasParts ? loadedAccount.first_name ?? '' : guess.first));
+        setMiddleName(cleanName(hasParts ? loadedAccount.middle_name ?? '' : guess.middle));
+        setLastName(cleanName(hasParts ? loadedAccount.last_name ?? '' : guess.last));
         setNewEmail(loadedAccount.email ?? '');
       } catch (cause) {
         if (!cancelled) {
@@ -162,13 +196,32 @@ export default function SettingsPage() {
 
   const handleSaveProfile = async () => {
     if (profileSaving) return;
+    setProfileSaved(false);
+    const parts = {
+      first_name: firstName.trim(),
+      middle_name: middleName.trim(),
+      last_name: lastName.trim(),
+    };
+    // First and last name are required; the middle name is optional.
+    const checks: Array<[string, string, boolean]> = [
+      ['First name', parts.first_name, true],
+      ['Middle name', parts.middle_name, false],
+      ['Last name', parts.last_name, true],
+    ];
+    for (const [label, value, required] of checks) {
+      if (!value && required) {
+        setProfileError(`${label} is required.`);
+        return;
+      }
+      if (value && (value.length > NAME_MAX_LENGTH || !NAME_RE.test(value))) {
+        setProfileError(`${label}: ${NAME_FORMAT_MESSAGE}`);
+        return;
+      }
+    }
     setProfileSaving(true);
     setProfileError(null);
-    setProfileSaved(false);
     try {
-      const updated = await settingsRequest<SettingsAccount>('account', 'PATCH', {
-        full_name: displayName,
-      });
+      const updated = await settingsRequest<SettingsAccount>('account', 'PATCH', parts);
       setAccount(updated);
       saveUser({
         id: updated.id,
@@ -375,11 +428,35 @@ export default function SettingsPage() {
             }
           >
             <TextField
-              label="Display Name"
-              value={displayName}
-              onChange={setDisplayName}
+              label="First Name"
+              value={firstName}
+              onChange={(value) => {
+                setFirstName(cleanName(value));
+                setProfileError(null);
+              }}
+              hint="Letters, spaces, hyphens and apostrophes only (up to 20 characters)."
+              autoComplete="given-name"
+              disabled={loading || !account}
+            />
+            <TextField
+              label="Middle Name (optional)"
+              value={middleName}
+              onChange={(value) => {
+                setMiddleName(cleanName(value));
+                setProfileError(null);
+              }}
+              autoComplete="additional-name"
+              disabled={loading || !account}
+            />
+            <TextField
+              label="Last Name"
+              value={lastName}
+              onChange={(value) => {
+                setLastName(cleanName(value));
+                setProfileError(null);
+              }}
               hint="This is how your name appears across the app."
-              autoComplete="name"
+              autoComplete="family-name"
               disabled={loading || !account}
             />
 

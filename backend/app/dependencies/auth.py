@@ -52,6 +52,20 @@ def _unauthorized() -> HTTPException:
     )
 
 
+def _service_unavailable() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Could not reach the sign-in service. Check your internet connection and try again.",
+    )
+
+
+def _is_network_error(exc: Exception) -> bool:
+    """True for connection/timeout problems (not for an invalid or expired token)."""
+    if isinstance(exc, (OSError, TimeoutError)):
+        return True
+    return type(exc).__module__.split(".")[0] in {"httpx", "httpcore", "socket", "urllib3", "requests"}
+
+
 def _has_verified_factor(user_obj) -> bool:
     """True if Supabase reports at least one verified MFA factor on the user."""
     for factor in getattr(user_obj, "factors", None) or []:
@@ -71,6 +85,10 @@ def _load_authenticated_user(token: str) -> AuthUser:
         result = supabase.auth.get_user(token)
     except Exception as exc:
         logger.warning("Token verification failed: %s", exc)
+        # No internet / Supabase unreachable is NOT an expired session: tell the user
+        # to check their connection instead of signing them out with a wrong message.
+        if _is_network_error(exc):
+            raise _service_unavailable() from exc
         raise _unauthorized() from exc
 
     if not result or not result.user:
@@ -83,7 +101,8 @@ def _load_authenticated_user(token: str) -> AuthUser:
 
     # Google sends "full_name"/"name"; GitHub sends "name"/"user_name".
     full_name = (
-        metadata.get("full_name")
+        app_metadata.get("display_name")  # the name chosen at sign-up / in Settings wins
+        or metadata.get("full_name")
         or metadata.get("name")
         or metadata.get("user_name")
     )

@@ -21,7 +21,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
-import { saveSession } from '@/lib/auth';
+import { getAssuranceLevel, getStoredUser, saveSession } from '@/lib/auth';
 import { getPasswordPolicyError, PASSWORD_POLICY_MESSAGE } from '@/lib/passwordPolicy';
 import AuthShell, { GRADIENT_BG } from './AuthShell';
 import OtpVerification from './OtpVerification';
@@ -140,6 +140,14 @@ export default function SignUp() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<Provider | null>(null);
   const router = useRouter();
+
+  // Already signed in? Skip this page (2FA-pending sessions go to the 2FA step).
+  useEffect(() => {
+    const stored = getStoredUser();
+    if (!stored) return;
+    const needsMfa = stored.mfa_enabled && getAssuranceLevel() !== 'aal2';
+    router.replace(needsMfa ? '/mfa-challenge' : '/dashboard');
+  }, [router]);
 
   // Prefill from the "no account found" redirect after a Google/GitHub sign-in.
   // Read from window.location (not useSearchParams) so this component needs no
@@ -273,7 +281,14 @@ export default function SignUp() {
       const res = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password, full_name: fullName }),
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          full_name: fullName,
+          first_name: firstName.trim(),
+          middle_name: middleName.trim(),
+          last_name: lastName.trim(),
+        }),
       });
       const data = await res.json().catch(() => ({}));
 

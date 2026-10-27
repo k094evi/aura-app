@@ -17,7 +17,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { DM_Sans } from 'next/font/google';
 import { ArrowLeft, Check, Eye, EyeOff, Loader2 } from 'lucide-react';
-import { saveSession } from '@/lib/auth';
+import { getAssuranceLevel, getStoredUser, saveSession } from '@/lib/auth';
 import { Footer } from '@/components/Footer';
 import Reveal from '@/components/reveal';
 
@@ -76,6 +76,14 @@ export default function LoginPage() {
   // Shown when the session guard sent you here (?reason=expired).
   const [notice, setNotice] = useState<string | null>(null);
   const router = useRouter();
+
+  // Already signed in? Skip this page (2FA-pending sessions go to the 2FA step).
+  useEffect(() => {
+    const stored = getStoredUser();
+    if (!stored) return;
+    const needsMfa = stored.mfa_enabled && getAssuranceLevel() !== 'aal2';
+    router.replace(needsMfa ? '/mfa-challenge' : '/dashboard');
+  }, [router]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

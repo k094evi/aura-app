@@ -146,7 +146,9 @@ function distinctValues(companies: CompanyMatch[], pick: (c: CompanyMatch) => st
 // Card showing the details for one company.
 // CHANGED: `index` is the card's position on the page; it drives the stagger delay.
 function CompanyCard({ company, index }: { company: CompanyMatch; index: number }) {
-  const matchPercent = Math.min(100, Math.max(0, company.match));
+  const matchPercent = Math.min(100, Math.max(0, Math.round(company.match)));
+  // The backend text can contain "Avg score 38.2/100": show whole numbers only.
+  const reasonText = company.reason.replace(/(\d+(?:\.\d+)?)\/100/g, (_m, n) => `${Math.round(parseFloat(n))}/100`);
   const reduceMotion = useReducedMotion();
   const delay = reduceMotion ? 0 : index * 0.12;
 
@@ -168,12 +170,12 @@ function CompanyCard({ company, index }: { company: CompanyMatch; index: number 
           >
             {company.company}
           </h3>
-          <p className="text-[13px] text-[#4b5563]">{company.reason}</p>
+          <p className="text-[13px] text-[#4b5563]">{reasonText}</p>
         </div>
 
         <div className="flex shrink-0 flex-col items-center justify-center gap-1 rounded-[10px] border-[1.5px] border-[#8b5cf6]/20 bg-[#8b5cf6]/10 px-3 py-2">
           <span className="text-[24px] font-extrabold leading-none text-[#8b5cf6]">
-            {company.match}%
+            {matchPercent}%
           </span>
           <span className="text-[10px] font-bold uppercase text-[#9ca3af]">Match Score</span>
         </div>
@@ -272,7 +274,9 @@ export default function CompanyMatchCarousel({ companies }: CompanyMatchCarousel
         return false;
 
       return true;
-    });
+    })
+      // Best match first, so the list is always in a consistent order.
+      .sort((a, b) => b.match - a.match);
   }, [companies, locationFilter, jobTypeFilter, experienceLevelFilter]);
 
   // The page and companies currently displayed, clamped to the valid range

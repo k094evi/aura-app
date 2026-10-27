@@ -9,6 +9,9 @@ import { getStoredUser } from '@/lib/auth';
 import { generateReportPDF } from '@/lib/exportReport';
 
 // ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
+// Export stays disabled this long after a click, so it can't be spam-clicked.
+const EXPORT_COOLDOWN_MS = 3000;
+
 const BTN_MOTION =
   'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:hover:translate-y-0';
 
@@ -25,8 +28,9 @@ export default function DashboardHeader({ result }: DashboardHeaderProps) {
   // Read the stored user on the client only (avoids a hydration mismatch)
   useEffect(() => {
     const stored = getStoredUser();
-    const name = stored?.full_name?.trim().split(' ')[0] ?? '';
-    setFirstName(name);
+    const name = stored?.full_name?.trim().split(/\s+/)[0] ?? '';
+    // Very long first names are cut so the heading can never push the button around.
+    setFirstName(name.length > 20 ? `${name.slice(0, 20)}…` : name);
   }, []);
 
   const handleExport = async () => {
@@ -37,15 +41,18 @@ export default function DashboardHeader({ result }: DashboardHeaderProps) {
     } catch (err) {
       console.error('Failed to generate report PDF:', err);
     } finally {
-      setIsExporting(false);
+      window.setTimeout(() => setIsExporting(false), EXPORT_COOLDOWN_MS);
     }
   };
 
   return (
     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
       {/* Greeting */}
-      <div className="flex flex-col gap-1">
-        <h1 className="text-[28px] font-extrabold leading-tight text-[#111827]">
+      <div className="flex min-w-0 flex-col gap-1">
+        <h1
+          className="truncate text-[28px] font-extrabold leading-tight text-[#111827]"
+          title={firstName ? `Welcome back, ${firstName}` : undefined}
+        >
           Welcome back{firstName ? `, ${firstName}` : ''}
         </h1>
         <p className="text-sm text-[#4b5563]">
@@ -61,7 +68,7 @@ export default function DashboardHeader({ result }: DashboardHeaderProps) {
         type="button"
         onClick={handleExport}
         disabled={!result || isExporting}
-        className={`flex items-center gap-2 self-start rounded-[12px] border-[1.5px] border-[#e3e5eb] bg-white/[0.72] px-5 py-3 text-sm font-medium text-[#454a54] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.05)] backdrop-blur-[12px] ${BTN_MOTION} hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-white/[0.72]`}
+        className={`flex shrink-0 items-center gap-2 self-start whitespace-nowrap rounded-[12px] border-[1.5px] border-[#e3e5eb] bg-white/[0.72] px-5 py-3 text-sm font-medium text-[#454a54] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.05)] backdrop-blur-[12px] ${BTN_MOTION} hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-white/[0.72]`}
       >
         {isExporting ? (
           <Loader2 className="size-[18px] animate-spin" />

@@ -267,9 +267,9 @@ export default function DashboardPage() {
   // no company matches (e.g. a very niche target job/company list).
   const topCompanyMatch =
     result && result.companies.length > 0
-      ? Math.max(...result.companies.map((c) => c.match))
+      ? Math.round(Math.max(...result.companies.map((c) => c.match)))
       : null;
-  const matchScoreValue = topCompanyMatch ?? (result ? result.ats_score : null);
+  const matchScoreValue = topCompanyMatch ?? (result ? Math.round(result.ats_score) : null);
   const matchScoreHint = topCompanyMatch !== null ? 'Top company fit' : 'Overall ATS score';
 
   // Total job openings actually found for the latest analysis (the same

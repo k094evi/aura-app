@@ -18,7 +18,14 @@ const LEGAL_ROUTES = ['/privacy', '/terms-of-service'];
 const NO_NAVBAR_FROM_VALUES = ['signup', 'signin', 'forgot-password', 'mfa-challenge'];
 // Auth pages that draw their own full-screen layout (AuthShell / sign-in page),
 // including their own footer, so the site-wide Navbar and Footer are hidden.
-const HIDDEN_ROUTES = ['/signup', '/signin', '/forgot-password', '/reset-password', '/mfa-challenge'];
+const HIDDEN_ROUTES = [
+  '/signup',
+  '/signin',
+  '/forgot-password',
+  '/reset-password',
+  '/mfa-challenge',
+  '/oauth-callback',
+];
 
 // Layout wrapper that conditionally shows/hides the Navbar and Footer
 // based on the current route, and drives the Navbar's authenticated

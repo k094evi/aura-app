@@ -95,7 +95,9 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
     const typedTitle = jobTitle.trim();
     const normalizedTitle = normalizeItJobTitle(typedTitle);
     if (typedTitle && !normalizedTitle) {
-      setFileError('Enter an IT job title, e.g. Backend Developer.');
+      // The job title field already shows "Enter an IT job title..." under itself,
+      // so don't repeat the same message under the drop zone.
+      setFileError(null);
       return;
     }
 

@@ -110,8 +110,25 @@ export default function SessionExpiryGuard() {
 
     tick();
     const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
+    // Browsers slow timers in background tabs: re-check the moment the tab is shown.
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', tick);
+    };
   }, [endSession]);
+
+  // While the warning is open, put it in the tab title too, so someone working
+  // in another tab/window notices it.
+  const warningActive = secondsLeft !== null;
+  useEffect(() => {
+    if (!warningActive) return;
+    const originalTitle = document.title;
+    document.title = '⚠ Session expiring — Aura';
+    return () => {
+      document.title = originalTitle;
+    };
+  }, [warningActive]);
 
   if (secondsLeft === null) return null;
 

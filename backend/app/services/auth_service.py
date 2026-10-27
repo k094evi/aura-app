@@ -8,6 +8,7 @@ where the API layer catches ValueError and returns it as a 400 detail.
 """
 
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -43,6 +44,82 @@ def _has_verified_factor(user_obj) -> bool:
     return False
 
 
+# ---- Display name rules (same as the sign-up form) -------------------------
+NAME_MAX_LENGTH = 20
+_LATIN = "A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F"
+_NAME_WORD = f"[{_LATIN}][\u0300-\u036F]*"
+_NAME_RE = re.compile(f"^(?:{_NAME_WORD})+(?:[ '\u2019-](?:{_NAME_WORD})+)*$")
+
+
+def _clean_name_parts(first: Optional[str], middle: Optional[str], last: Optional[str]) -> dict:
+    """Validates first/middle/last name. First and last are required; middle is optional."""
+    cleaned = {}
+    for key, value, required in (("first", first, True), ("middle", middle, False), ("last", last, True)):
+        text = (value or "").strip()
+        if not text:
+            if required:
+                raise ValueError(f"{key.capitalize()} name is required.")
+            cleaned[key] = ""
+            continue
+        if len(text) > NAME_MAX_LENGTH or not _NAME_RE.match(text):
+            raise ValueError(
+                f"{key.capitalize()} name may only contain letters, spaces, hyphens and "
+                f"apostrophes (up to {NAME_MAX_LENGTH} characters)."
+            )
+        cleaned[key] = text
+    return cleaned
+
+
+def _full_name_from_parts(parts: dict) -> str:
+    return " ".join(p for p in (parts["first"], parts["middle"], parts["last"]) if p)
+
+
+def _split_full_name(full_name: Optional[str]) -> dict:
+    """Best guess for accounts that never stored separate name parts (e.g. Google sign-ups)."""
+    tokens = (full_name or "").split()
+    if not tokens:
+        return {"first": "", "middle": "", "last": ""}
+    if len(tokens) == 1:
+        return {"first": tokens[0], "middle": "", "last": ""}
+    return {"first": " ".join(tokens[:-1]), "middle": "", "last": tokens[-1]}
+
+
+def _store_display_name(user_id: str, full_name: str, parts: Optional[dict]) -> None:
+    """
+    Saves the chosen name in app_metadata. Google/GitHub overwrite user_metadata's
+    name every time they sign in, but never touch app_metadata, so this is the
+    copy that sticks. Best effort: a failure here must not break sign-up.
+    """
+    try:
+        admin_user = supabase_admin.auth.admin.get_user_by_id(user_id).user
+        app_metadata = dict(getattr(admin_user, "app_metadata", None) or {})
+        app_metadata["display_name"] = full_name
+        if parts is not None:
+            app_metadata["name_parts"] = parts
+        supabase_admin.auth.admin.update_user_by_id(
+            user_id,
+            {"app_metadata": app_metadata, "user_metadata": {"full_name": full_name}},
+        )
+    except Exception as exc:
+        logger.warning("Could not store display name for user %s: %s", user_id, exc)
+
+
+def get_name_parts(user_id: str, full_name: Optional[str]) -> dict:
+    """First/middle/last for the Settings form (stored parts, else a best-guess split)."""
+    try:
+        admin_user = supabase_admin.auth.admin.get_user_by_id(user_id).user
+        stored = (getattr(admin_user, "app_metadata", None) or {}).get("name_parts")
+        if isinstance(stored, dict) and (stored.get("first") or stored.get("last")):
+            return {
+                "first": stored.get("first", "") or "",
+                "middle": stored.get("middle", "") or "",
+                "last": stored.get("last", "") or "",
+            }
+    except Exception as exc:
+        logger.warning("Could not read name parts for user %s: %s", user_id, exc)
+    return _split_full_name(full_name)
+
+
 def _extract_user(user_obj, full_name: Optional[str] = None) -> AuthUser:
     metadata = getattr(user_obj, "user_metadata", None) or {}
     app_metadata = getattr(user_obj, "app_metadata", None) or {}
@@ -51,7 +128,8 @@ def _extract_user(user_obj, full_name: Optional[str] = None) -> AuthUser:
         id=user_obj.id,
         email=user_obj.email,
         full_name=(
-            full_name
+            app_metadata.get("display_name")
+            or full_name
             or metadata.get("full_name")
             or metadata.get("name")
             or metadata.get("user_name")
@@ -76,7 +154,19 @@ def _friendly_auth_error(exc: Exception) -> str:
     return msg or "Something went wrong. Please try again."
 
 
-def sign_up(email: str, password: str, full_name: Optional[str] = None) -> AuthResponse:
+def sign_up(
+    email: str,
+    password: str,
+    full_name: Optional[str] = None,
+    name_parts: Optional[dict] = None,
+) -> AuthResponse:
+    parts = None
+    if name_parts is not None:
+        parts = _clean_name_parts(
+            name_parts.get("first"), name_parts.get("middle"), name_parts.get("last")
+        )
+        full_name = _full_name_from_parts(parts)
+
     try:
         result = _anon_client().auth.sign_up({
             "email": email,
@@ -95,6 +185,10 @@ def sign_up(email: str, password: str, full_name: Optional[str] = None) -> AuthR
     identities = getattr(result.user, "identities", None)
     if identities is not None and len(identities) == 0:
         raise ValueError("An account with this email already exists. Please sign in instead.")
+
+    # Keep the name typed on the sign-up form, even if Google/GitHub is used later.
+    if full_name:
+        _store_display_name(result.user.id, full_name, parts)
 
     # Supabase returns no session when email confirmation is required
     # (this is the default for new Supabase projects).
@@ -307,15 +401,33 @@ def _require_email_account(user: AuthUser) -> None:
         raise ValueError("This action is unavailable for accounts signed in with Google or GitHub.")
 
 
-def update_profile(user_id: str, full_name: str) -> AuthUser:
-    name = full_name.strip()
+def update_profile(
+    user_id: str,
+    full_name: Optional[str] = None,
+    name_parts: Optional[dict] = None,
+) -> AuthUser:
+    parts = None
+    if name_parts is not None:
+        parts = _clean_name_parts(
+            name_parts.get("first"), name_parts.get("middle"), name_parts.get("last")
+        )
+        name = _full_name_from_parts(parts)
+    else:
+        name = (full_name or "").strip()
     if not name:
         raise ValueError("Display name cannot be blank.")
 
     try:
+        admin_user = supabase_admin.auth.admin.get_user_by_id(user_id).user
+        app_metadata = dict(getattr(admin_user, "app_metadata", None) or {})
+        app_metadata["display_name"] = name
+        if parts is not None:
+            app_metadata["name_parts"] = parts
+        else:
+            app_metadata.pop("name_parts", None)
         result = supabase_admin.auth.admin.update_user_by_id(
             user_id,
-            {"user_metadata": {"full_name": name}},
+            {"user_metadata": {"full_name": name}, "app_metadata": app_metadata},
         )
     except Exception as exc:
         logger.warning("Profile update failed for user %s: %s", user_id, exc)
