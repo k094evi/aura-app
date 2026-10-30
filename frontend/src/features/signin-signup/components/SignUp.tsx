@@ -11,7 +11,7 @@
 // CHANGED:
 //  - Name fields only accept Latin letters (+ spaces, hyphens, apostrophes).
 //  - Email/password show "Invalid email", "Invalid password", or both.
-//  - Google / GitHub buttons are on this page (below the form).
+//  - Google / GitHub buttons are on this page.
 //  - Arriving from a Google/GitHub sign-in with no account
 //    (/signup?email=...&name=...&provider=...) prefills the form.
 
@@ -49,6 +49,10 @@ const NAME_WORD = `[${LATIN_LETTER}][\\u0300-\\u036F]*`;
 const NAME_RE = new RegExp(`^(?:${NAME_WORD})+(?:[ '’-](?:${NAME_WORD})+)*$`);
 const NAME_MAX_LENGTH = 20;
 const NAME_FORMAT_MESSAGE = 'Letters only (spaces, hyphens and apostrophes are allowed)';
+
+// The Terms / Privacy links open in the SAME tab, so the typed name and email are
+// kept for the trip (never the password) and restored when you come back.
+const DRAFT_KEY = 'aura_signup_draft';
 
 // ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
 const BTN_MOTION =
@@ -153,6 +157,21 @@ export default function SignUp() {
   // Read from window.location (not useSearchParams) so this component needs no
   // Suspense boundary.
   useEffect(() => {
+    // Coming back from the Terms / Privacy pages: restore what was typed.
+    try {
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const draft = JSON.parse(raw);
+        setFirstName(String(draft.firstName ?? ''));
+        setMiddleName(String(draft.middleName ?? ''));
+        setLastName(String(draft.lastName ?? ''));
+        setEmail(String(draft.email ?? ''));
+        sessionStorage.removeItem(DRAFT_KEY);
+      }
+    } catch {
+      // Ignore a missing or damaged draft.
+    }
+
     const params = new URLSearchParams(window.location.search);
     const prefillEmail = (params.get('email') || '').trim();
     const prefillName = (params.get('name') || '').replace(NAME_ALLOWED_CHARS_RE, ' ').trim();
@@ -187,6 +206,17 @@ export default function SignUp() {
       window.history.replaceState(null, '', window.location.pathname);
     }
   }, []);
+
+  const saveDraft = () => {
+    try {
+      sessionStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify({ firstName, middleName, lastName, email })
+      );
+    } catch {
+      // Storage unavailable: the form simply starts empty when you come back.
+    }
+  };
 
   const handleNameChange = (
     value: string,
@@ -345,6 +375,34 @@ export default function SignUp() {
               {notice}
             </p>
           )}
+
+          {/* Google / GitHub sign-up */}
+          <div className="flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => handleOAuth('google')}
+              disabled={!!oauthLoading || isSubmitting}
+              className={`flex w-full items-center justify-center gap-3 rounded-full border border-[#e5e7eb] bg-white px-6 py-[12px] text-[14px] font-semibold text-[#111827] ${BTN_MOTION} hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              {oauthLoading === 'google' ? <Loader2 className="size-[18px] animate-spin" /> : <GoogleIcon />}
+              Continue with Google
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOAuth('github')}
+              disabled={!!oauthLoading || isSubmitting}
+              className={`flex w-full items-center justify-center gap-3 rounded-full border border-[#e5e7eb] bg-white px-6 py-[12px] text-[14px] font-semibold text-[#111827] ${BTN_MOTION} hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              {oauthLoading === 'github' ? <Loader2 className="size-[18px] animate-spin" /> : <GitHubIcon />}
+              Continue with GitHub
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3 text-[12px] font-medium text-[#9ca3af]">
+            <span className="h-px flex-1 bg-[#e5e7eb]" />
+            or sign up with email
+            <span className="h-px flex-1 bg-[#e5e7eb]" />
+          </div>
 
           <form
             noValidate
@@ -517,6 +575,35 @@ export default function SignUp() {
               )}
             </div>
 
+            {/* Terms acknowledgement + Notice at Collection (also covers the Google/GitHub buttons) */}
+            <div className="flex flex-col gap-2 rounded-[10px] border border-[#e5e7eb] bg-white/60 px-3 py-3 text-[12px] leading-[1.5] text-[#4b5563]">
+              <p>
+                By creating an account, you confirm that you have read and agree to our{' '}
+                <Link
+                  href="/terms-of-service?from=signup"
+                  onClick={saveDraft}
+                  className="font-semibold text-[#7c3aed] hover:underline"
+                >
+                  Terms of Service
+                </Link>{' '}
+                and acknowledge our{' '}
+                <Link
+                  href="/privacy?from=signup"
+                  onClick={saveDraft}
+                  className="font-semibold text-[#7c3aed] hover:underline"
+                >
+                  Privacy Policy
+                </Link>
+                .
+              </p>
+              <p>
+                <span className="font-semibold text-[#111827]">Notice at Collection:</span> we collect
+                your name and email to create your account, and the resumes you upload (with your
+                target job and companies) to analyze them. See the Privacy Policy for how this
+                information is used, stored and shared, and your rights.
+              </p>
+            </div>
+
             {/* CHANGED: `transition` -> BTN_MOTION (hover lift) */}
             <button
               type="submit"
@@ -533,34 +620,6 @@ export default function SignUp() {
               )}
             </button>
           </form>
-
-          <div className="flex items-center gap-3 text-[12px] font-medium text-[#9ca3af]">
-            <span className="h-px flex-1 bg-[#e5e7eb]" />
-            or continue with
-            <span className="h-px flex-1 bg-[#e5e7eb]" />
-          </div>
-
-          {/* Google / GitHub sign-up */}
-          <div className="flex flex-col gap-3">
-            <button
-              type="button"
-              onClick={() => handleOAuth('google')}
-              disabled={!!oauthLoading || isSubmitting}
-              className={`flex w-full items-center justify-center gap-3 rounded-full border border-[#e5e7eb] bg-white px-6 py-[12px] text-[14px] font-semibold text-[#111827] ${BTN_MOTION} hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-60`}
-            >
-              {oauthLoading === 'google' ? <Loader2 className="size-[18px] animate-spin" /> : <GoogleIcon />}
-              Continue with Google
-            </button>
-            <button
-              type="button"
-              onClick={() => handleOAuth('github')}
-              disabled={!!oauthLoading || isSubmitting}
-              className={`flex w-full items-center justify-center gap-3 rounded-full border border-[#e5e7eb] bg-white px-6 py-[12px] text-[14px] font-semibold text-[#111827] ${BTN_MOTION} hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-60`}
-            >
-              {oauthLoading === 'github' ? <Loader2 className="size-[18px] animate-spin" /> : <GitHubIcon />}
-              Continue with GitHub
-            </button>
-          </div>
 
           <p className="text-center text-[14px] text-[#4b5563]">
             Already have an account?{' '}

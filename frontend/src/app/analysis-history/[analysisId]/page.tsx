@@ -19,7 +19,7 @@ import {
 import type { AnalysisResult } from '@/types/analysis';
 import { toResult } from '@/lib/analysisResult';
 import { getStoredUser } from '@/lib/auth';
-import { generateReportPDF } from '@/lib/exportReport';
+import { useExportPdf } from '@/lib/useExportPdf';
 
 type SavedAnalysis = AnalysisResult & {
   id?: string;
@@ -348,7 +348,8 @@ export default function AnalysisHistoryDetailPage() {
   const [analysis, setAnalysis] = useState<SavedAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [isExporting, setIsExporting] = useState(false);
+  // Shared by every Export PDF button: spinner -> download -> short cooldown.
+  const { isExporting, isBusy, exportPdf } = useExportPdf();
   const [firstName, setFirstName] = useState('');
 
   useEffect(() => {
@@ -469,18 +470,9 @@ export default function AnalysisHistoryDetailPage() {
     };
   }, [analysisId]);
 
-  const handleExport = async () => {
-    if (!analysis || isExporting) return;
-
-    setIsExporting(true);
-
-    try {
-      await generateReportPDF(analysis, getStoredUser());
-    } catch (err) {
-      console.error('Failed to generate report PDF:', err);
-    } finally {
-      setIsExporting(false);
-    }
+  const handleExport = () => {
+    if (!analysis) return;
+    void exportPdf(() => analysis, getStoredUser());
   };
 
   const view = useMemo(() => {
@@ -780,7 +772,7 @@ export default function AnalysisHistoryDetailPage() {
             <button
               type="button"
               onClick={handleExport}
-              disabled={isExporting}
+              disabled={!analysis || isBusy}
               className="flex items-center gap-2 self-start rounded-[12px] border-[1.5px] border-[#e3e5eb] bg-white/[0.72] px-5 py-3 text-sm font-medium text-[#454a54] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.05)] backdrop-blur-[12px] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-white/[0.72]"
             >
               {isExporting ? (

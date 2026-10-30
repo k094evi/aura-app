@@ -39,8 +39,32 @@ const COLOR = {
 
 // Spam-click guard shared by every Export PDF button: a second export within
 // this window is ignored, so mashing the button downloads only one file.
-const EXPORT_COOLDOWN_MS = 3000;
+const EXPORT_COOLDOWN_MS = 1000;
 let lastExportAt = 0;
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Shared export sequence. Do NOT call this (or generateReportPDF) directly from a
+ * button: use the `useExportPdf` hook so every Export PDF button behaves the same:
+ *   1. the button shows its loading state first (EXPORT_LOADING_MS),
+ *   2. THEN the PDF downloads and the loading state ends,
+ *   3. the button stays disabled, without a spinner, for EXPORT_AFTER_MS so it
+ *      can't be spam-clicked (that cooldown is handled by the hook).
+ */
+export const EXPORT_LOADING_MS = 800;
+export const EXPORT_AFTER_MS = 1200;
+
+export async function exportReportWithLoading(
+  result: AnalysisResult,
+  user?: SupabaseUser | null,
+  customFileName?: string
+): Promise<void> {
+  await wait(EXPORT_LOADING_MS);
+  generateReportPDF(result, user, customFileName);
+  // The post-download cooldown (EXPORT_AFTER_MS) now lives in useExportPdf, so
+  // the spinner stops at the same moment the file downloads.
+}
 
 // Longest slice of the display name used in the downloaded file's name.
 const FILE_NAME_SLUG_MAX = 40;

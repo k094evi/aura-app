@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { ArrowLeft } from 'lucide-react';
 import { Navbar } from '@/components/NavBar';
 import { Footer } from '@/components/Footer';
 import SessionExpiryGuard from '@/components/SessionExpiryGuard';
@@ -16,6 +18,13 @@ const AUTHENTICATED_FROM_VALUES = ['dashboard', 'profile', 'analysis-history', '
 const LEGAL_ROUTES = ['/privacy', '/terms-of-service'];
 // Legal pages opened from these pages keep the Navbar hidden (they have none)
 const NO_NAVBAR_FROM_VALUES = ['signup', 'signin', 'forgot-password', 'mfa-challenge'];
+// "Back" button shown on the Privacy Policy / Terms pages, by where the visitor came from.
+const LEGAL_BACK: Record<string, { href: string; label: string }> = {
+  signup: { href: '/signup', label: 'Back to Sign Up' },
+  signin: { href: '/signin', label: 'Back to Sign In' },
+  'forgot-password': { href: '/forgot-password', label: 'Back to Forgot Password' },
+  'mfa-challenge': { href: '/mfa-challenge', label: 'Back to Two-Factor Check' },
+};
 // Auth pages that draw their own full-screen layout (AuthShell / sign-in page),
 // including their own footer, so the site-wide Navbar and Footer are hidden.
 const HIDDEN_ROUTES = [
@@ -56,7 +65,10 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
   // Only hide the Navbar on legal pages when the user came from an auth page
   // (those pages have no Navbar). From the upload page or a direct visit,
   // signed-out users get the public Navbar.
-  const hideNavOnly = isLegalRoute && !!from && NO_NAVBAR_FROM_VALUES.includes(from);
+  // CHANGED: the Privacy Policy / Terms pages now always show the navigation bar,
+  // even when opened from the sign-in / sign-up pages, so there is a way back.
+  const hideNavOnly = false;
+  const legalBack = isLegalRoute && from ? LEGAL_BACK[from] : undefined;
 
   // Authenticated if the real session says so, or if it's a legal page
   // reached from an authenticated route.
@@ -79,7 +91,18 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
       {!hideNavFooter && !hideNavOnly && (
         <Navbar isAuthenticated={isAuthenticated} onLogout={handleLogout} />
       )}
-      <main className="min-h-screen">{children}</main>
+      <main className="relative min-h-screen">
+        {legalBack && (
+          <Link
+            href={legalBack.href}
+            className="absolute left-4 top-28 z-30 flex items-center gap-2 rounded-full border border-white/80 bg-white/70 px-3 py-2 font-['DM_Sans',_sans-serif] text-[14px] font-medium text-[#374151] backdrop-blur-[8px] transition hover:bg-white sm:left-20"
+          >
+            <ArrowLeft className="size-4" />
+            {legalBack.label}
+          </Link>
+        )}
+        {children}
+      </main>
       {/* Show Footer unless on a hidden route */}
       {!hideNavFooter && <Footer />}
     </>

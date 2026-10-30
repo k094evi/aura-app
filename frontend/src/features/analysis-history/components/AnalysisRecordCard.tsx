@@ -1,11 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
 import { Download, FileText, Loader2 } from 'lucide-react';
 
 import type { AnalysisResult } from '@/types/analysis';
-import { generateReportPDF } from '@/lib/exportReport';
+import { useExportPdf } from '@/lib/useExportPdf';
 import { getStoredUser } from '@/lib/auth';
 
 // ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
@@ -102,52 +101,40 @@ export default function AnalysisRecordCard({
   const status = STATUS_STYLES[record.status];
   const fileIcon = fileIconStyle(record.filename);
 
-  // Prevent multiple PDF exports at the same time.
-  const [isExporting, setIsExporting] = useState(false);
+  // Shared by every Export PDF button: spinner -> download -> short cooldown.
+  const { isExporting, isBusy, exportPdf } = useExportPdf();
 
-  // Fetch the complete saved analysis and generate the same PDF
+  // Fetch the complete saved analysis; the hook then generates the same PDF
   // used by the DashboardHeader.
-  const handleExport = async () => {
-    if (isExporting) return;
-
-    setIsExporting(true);
-
+  const loadSavedAnalysis = async (): Promise<AnalysisResult> => {
+    let response: Response;
     try {
-      // Get the complete analysis from the backend.
-      const response = await fetch(
+      response = await fetch(
         `/api/analysis-history/${encodeURIComponent(record.id)}`,
         {
           method: 'GET',
           cache: 'no-store',
         }
       );
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => null);
-
-        throw new Error(
-          error?.detail ?? "We couldn't load this saved analysis."
-        );
-      }
-
-      // Convert the saved response into the same AnalysisResult
-      // shape expected by generateReportPDF().
-      const savedAnalysis = (await response.json()) as AnalysisResult;
-
-      // Generate the exact same PDF function used by DashboardHeader.
-      await generateReportPDF(savedAnalysis, getStoredUser());
-    } catch (error) {
-      console.error('Failed to generate report PDF:', error);
-
-      // Simple user-facing error.
-      alert(
-        error instanceof Error
-          ? error.message
-          : "We couldn't generate the PDF. Please try again."
-      );
-    } finally {
-      setIsExporting(false);
+    } catch {
+      // fetch only throws when the request never reached the server (offline).
+      throw new Error('Could not reach the server. Check your internet connection and try again.');
     }
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+
+      throw new Error(
+        error?.detail ?? "We couldn't load this saved analysis."
+      );
+    }
+
+    // Saved response -> AnalysisResult shape expected by generateReportPDF().
+    return (await response.json()) as AnalysisResult;
+  };
+
+  const handleExport = () => {
+    void exportPdf(loadSavedAnalysis, getStoredUser());
   };
 
   return (
@@ -241,7 +228,7 @@ export default function AnalysisRecordCard({
         <button
           type="button"
           onClick={handleExport}
-          disabled={isExporting}
+          disabled={isBusy}
           className={`flex size-9 shrink-0 items-center justify-center rounded-[10px] border-[1.5px] border-[#e5e7eb] bg-white/90 text-[#4b5563] ${BTN_MOTION} hover:border-[#8b5cf6]/40 hover:text-[#8b5cf6] disabled:cursor-not-allowed disabled:opacity-60`}
           title={isExporting ? 'Exporting PDF...' : 'Export PDF'}
           aria-label={`Export PDF for ${record.filename}`}

@@ -6,12 +6,9 @@ import { Download, Loader2 } from 'lucide-react';
 
 import type { AnalysisResult } from '@/types/analysis';
 import { getStoredUser } from '@/lib/auth';
-import { generateReportPDF } from '@/lib/exportReport';
+import { useExportPdf } from '@/lib/useExportPdf';
 
 // ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
-// Export stays disabled this long after a click, so it can't be spam-clicked.
-const EXPORT_COOLDOWN_MS = 3000;
-
 const BTN_MOTION =
   'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:hover:translate-y-0';
 
@@ -22,7 +19,8 @@ interface DashboardHeaderProps {
 
 // Welcome row for the dashboard page: greeting on the left, Export PDF on the right
 export default function DashboardHeader({ result }: DashboardHeaderProps) {
-  const [isExporting, setIsExporting] = useState(false);
+  // Shared by every Export PDF button: spinner -> download -> short cooldown.
+  const { isExporting, isBusy, exportPdf } = useExportPdf();
   const [firstName, setFirstName] = useState('');
 
   // Read the stored user on the client only (avoids a hydration mismatch)
@@ -33,16 +31,9 @@ export default function DashboardHeader({ result }: DashboardHeaderProps) {
     setFirstName(name.length > 20 ? `${name.slice(0, 20)}…` : name);
   }, []);
 
-  const handleExport = async () => {
-    if (!result || isExporting) return;
-    setIsExporting(true);
-    try {
-      await generateReportPDF(result, getStoredUser());
-    } catch (err) {
-      console.error('Failed to generate report PDF:', err);
-    } finally {
-      window.setTimeout(() => setIsExporting(false), EXPORT_COOLDOWN_MS);
-    }
+  const handleExport = () => {
+    if (!result) return;
+    void exportPdf(() => result, getStoredUser());
   };
 
   return (
@@ -67,7 +58,7 @@ export default function DashboardHeader({ result }: DashboardHeaderProps) {
       <button
         type="button"
         onClick={handleExport}
-        disabled={!result || isExporting}
+        disabled={!result || isBusy}
         className={`flex shrink-0 items-center gap-2 self-start whitespace-nowrap rounded-[12px] border-[1.5px] border-[#e3e5eb] bg-white/[0.72] px-5 py-3 text-sm font-medium text-[#454a54] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.05)] backdrop-blur-[12px] ${BTN_MOTION} hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-white/[0.72]`}
       >
         {isExporting ? (

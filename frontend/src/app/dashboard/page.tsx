@@ -98,7 +98,15 @@ async function analyzeResume({ file, jobTitle, companies }: UploadPayload): Prom
 
   // Use the same field names and Authorization header as the fetch in your current
   // loading page — this goes through the Next.js proxy at app/api/analyze/route.ts.
-  const res = await fetch('/api/analyze', { method: 'POST', body });
+  let res: Response;
+  try {
+    res = await fetch('/api/analyze', { method: 'POST', body });
+  } catch {
+    // fetch only throws when the request never reached the server (offline, server down).
+    throw new Error(
+      'Could not reach the server. Check your internet connection and try again.'
+    );
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => null);
