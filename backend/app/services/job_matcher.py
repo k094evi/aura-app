@@ -69,7 +69,7 @@ from app.services.jsearch_client import JSearchClient, JobListing
 from app.services.job_scorer import JobScorer, ScoredJob, CompanyMatch
 from app.data.it_domain import is_it_title, looks_like_it_job, IT_JOB_TITLES
 
-logger = logging.getLogger(__name__)
+from app.utils.logger import logger  # shared "aura" logger (the bare module logger dropped INFO lines)
 
 
 @dataclass
@@ -179,6 +179,20 @@ def build_search_terms(
     return terms
 
 
+# Extra company cards (beyond the normal top companies) reserved for freelance
+# postings so the dashboard's Freelance filter has something to show.
+_FREELANCE_EXTRA_COMPANIES = 3
+
+
+def _company_key(match) -> str:
+    """Lower-cased company name of a CompanyMatch (object or dict)."""
+    if isinstance(match, dict):
+        name = match.get("company") or match.get("company_name") or ""
+    else:
+        name = getattr(match, "company", None) or getattr(match, "company_name", None) or ""
+    return str(name).strip().lower()
+
+
 class JobMatcher:
 
     def __init__(
@@ -202,6 +216,44 @@ class JobMatcher:
         self.max_keywords_queried = max_keywords_queried
         self._top_jobs            = top_jobs
         self._top_companies       = top_companies
+
+
+    def _ensure_freelance_visible(self, scorer, scored_jobs, companies, top_jobs, target_companies):
+        """Make sure freelance postings can actually reach the dashboard.
+
+        Company cards are built from the top-ranked companies, and each card's
+        job type comes from that company's best-scoring job. With a handful of
+        freelance postings among dozens of regular ones, none of them would
+        normally make the cut, so the Freelance filter would always be empty.
+
+        This (1) adds every freelance posting that missed the top-jobs list to
+        the END of it (top_jobs[0] and the existing order are untouched), and
+        (2) adds up to _FREELANCE_EXTRA_COMPANIES freelance-only company cards
+        beyond the normal top companies.
+        """
+        freelance = [
+            s for s in scored_jobs
+            if getattr(getattr(s, "job", None), "job_type", None) == "Freelance"
+        ]
+        if not freelance:
+            return companies, top_jobs
+
+        in_top = {id(s) for s in top_jobs}
+        top_jobs = list(top_jobs) + [s for s in freelance if id(s) not in in_top]
+
+        present = {_company_key(c) for c in companies}
+        freelance_ranked = scorer.rank_companies(
+            freelance,
+            top_n=self._top_companies,
+            target_companies=target_companies,
+        )
+        added = [c for c in freelance_ranked if _company_key(c) not in present]
+        added = added[:_FREELANCE_EXTRA_COMPANIES]
+        logger.info(
+            "Freelance: %d posting(s) scored, %d added to top jobs, %d extra company card(s)",
+            len(freelance), len(top_jobs) - len(in_top), len(added),
+        )
+        return list(companies) + added, top_jobs
 
     def match(
         self,
@@ -316,6 +368,12 @@ class JobMatcher:
             results_per_keyword=self.results_per_keyword,
             max_keywords=len(search_terms),
             freelance_only=freelance_only,
+            # Normal mode also gets one freelance-biased query so the
+            # dashboard's Freelance filter has postings to show.
+            include_freelance=not freelance_only,
+            # Search freelance work for the target role (or best JD/resume
+            # term), not whichever resume skill happens to come first.
+            freelance_keyword=top_term,
         )
 
         # IT-only: drop every listing that is not an IT role before scoring.
@@ -344,10 +402,16 @@ class JobMatcher:
             target_companies=target_companies,
         )
 
+        top_jobs = scored_jobs[:self._top_jobs]
+        if not freelance_only:
+            companies, top_jobs = self._ensure_freelance_visible(
+                scorer, scored_jobs, companies, top_jobs, target_companies,
+            )
+
         return MatchResult(
             keywords      = keywords,
             total_jobs    = len(jobs),
-            top_jobs      = scored_jobs[:self._top_jobs],
+            top_jobs      = top_jobs,
             top_companies = companies,
             raw_jobs      = jobs,
             search_terms  = search_terms,

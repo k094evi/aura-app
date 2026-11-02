@@ -2,7 +2,7 @@
 
 import { Check, FileCheck } from 'lucide-react';
 import TableOfContents from '../../features/privacy-tos/TableOfContents';
-// ADDED: scroll-in animation wrapper (client component, safe to use in this server page).
+// Scroll-in animation wrapper (client component, safe to use in this server page).
 import Reveal from '@/components/reveal';
 
 export const metadata = {
@@ -152,7 +152,6 @@ export default function TermsOfServicePage() {
       {/* Top padding leaves room for the fixed site navbar (rendered by the layout) */}
       <div className="relative z-10 mx-auto flex w-full max-w-[1440px] flex-col pt-[120px]">
         {/* ───────────── Hero ───────────── */}
-        {/* CHANGED: hero wrapped in <Reveal> */}
         <Reveal>
           <header className="flex flex-col gap-3 px-6 py-10 sm:px-10 lg:px-20">
             <h1 className="text-[36px] font-extrabold leading-tight text-[#111827] sm:text-[48px]">
@@ -164,18 +163,19 @@ export default function TermsOfServicePage() {
 
         {/* ───────────── Sidebar + sections ───────────── */}
         <div className="flex flex-col gap-8 px-6 pb-20 sm:px-10 lg:flex-row lg:items-start lg:px-20">
-          {/* Table of contents (desktop only)
-              CHANGED: <Reveal> goes INSIDE the sticky <aside>, so the sticky positioning is not affected */}
-          <aside className="hidden w-[300px] shrink-0 lg:sticky lg:top-28 lg:block">
-            <Reveal direction="left" delay={0.1}>
-              <TableOfContents items={tocItems} />
-            </Reveal>
+          {/* Table of contents (desktop only).
+              Not wrapped in <Reveal>: it is always on screen, and the scroll-in
+              animation made it fade out during fast navigation.
+              max-h keeps it inside the viewport below the navbar; if it is ever
+              taller, it scrolls inside the menu. dvh avoids mobile browser-bar jumps. */}
+          <aside className="hidden w-[300px] shrink-0 lg:sticky lg:top-28 lg:block lg:max-h-[calc(100dvh-8rem)] lg:self-start lg:overflow-y-auto lg:overflow-x-hidden">
+            <TableOfContents items={tocItems} />
           </aside>
 
           {/* Section cards */}
           <div className="flex min-w-0 flex-1 flex-col gap-6">
             {SECTIONS.map((section, index) => (
-              // CHANGED: each section card wrapped in <Reveal> (no delay, so cards far down
+              // Each section card is wrapped in <Reveal> (no delay, so cards far down
               // the page animate as soon as they scroll into view).
               <Reveal key={section.title}>
                 <section
