@@ -10,6 +10,9 @@ top-level endpoints.
 Run with:
     python -m uvicorn app.main:app --reload --port 8000
 
+Production (Render):
+    uvicorn app.main:app --host 0.0.0.0 --port $PORT
+
 HOW IT FITS INTO THE PROGRAM
 -----------------------------
 This file is the hub that connects everything else together:
@@ -69,6 +72,9 @@ NOTES / THINGS WORTH DOUBLE-CHECKING
   format/level is controlled in one place for the whole app.
 """
 
+import os
+import threading
+
 from fastapi import FastAPI, UploadFile, File, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -102,12 +108,18 @@ app = FastAPI(title="Aura Resume Analyzer", version="1.0.0")
 
 
 
-import threading
 from app.services.embedding_service import is_available as _warm_embeddings
+
 
 @app.on_event("startup")
 def _warm_up_embedding_model():
-    threading.Thread(target=_warm_embeddings, daemon=True).start()
+    # On small hosts (e.g. Render free tier, 512 MB RAM) loading the
+    # embedding model at boot can run the service out of memory.
+    # Set WARM_EMBEDDINGS=false there to load it lazily instead.
+    if os.getenv("WARM_EMBEDDINGS", "true").lower() == "true":
+        threading.Thread(target=_warm_embeddings, daemon=True).start()
+
+
 # Reads from settings.ALLOWED_ORIGINS (app/config.py) instead of a
 # hardcoded list, so prod/dev can differ via .env without touching code.
 # Methods/headers are scoped to what this API actually uses — "*" here

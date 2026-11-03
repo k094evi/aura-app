@@ -28,9 +28,12 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     # ── CORS ──────────────────────────────────────────────────────────────
+    # In production set ALLOWED_ORIGINS as a JSON list in the host's env
+    # vars, e.g.  ["https://your-app.vercel.app"]  (no trailing slash).
+    # Origins must match exactly — "https://vercel.app" does NOT cover
+    # "https://your-app.vercel.app", so it was removed from the default.
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000",
-        "https://vercel.app",
     ]
 
     # ── Supabase (PostgreSQL) ─────────────────────────────────────────────
