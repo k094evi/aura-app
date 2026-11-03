@@ -14,7 +14,7 @@ import {
   Mail,
   type LucideIcon,
 } from 'lucide-react';
-import TableOfContents from '../../features/privacy-tos/TableOfContents';
+import TableOfContents, { MobileTableOfContents } from '../../features/privacy-tos/TableOfContents';
 // Scroll-in animation wrapper (client component, safe to use in this server page).
 import Reveal from '@/components/reveal';
 
@@ -260,6 +260,9 @@ export default function PrivacyPolicyPage() {
 
         {/* ───────────── Sidebar + sections ───────────── */}
         <div className="flex flex-col gap-8 px-6 pb-20 sm:px-10 lg:flex-row lg:items-start lg:px-20">
+          {/* Mobile / tablet table of contents: sticky "On this page" dropdown (hidden from lg up). */}
+          <MobileTableOfContents items={tocItems} />
+
           {/* Table of contents (desktop only).
               Not wrapped in <Reveal>: it is always on screen, and the scroll-in
               animation made it fade out during fast navigation.

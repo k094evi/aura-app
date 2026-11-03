@@ -1,6 +1,8 @@
+// src/features/privacy-tos/TableOfContents.tsx
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
+import { ChevronDown } from 'lucide-react';
 
 export type TocItem = { id: string; label: string };
 
@@ -10,12 +12,18 @@ type Props = {
 
 // Safety net only: the lock is released on 'scrollend' (or when this expires).
 const CLICK_LOCK_MS = 1200;
-// Sections get scroll-mt-32 (8rem) so they clear the fixed navbar.
+// Sections get scroll-mt-32 (8rem) so they clear the fixed navbar (desktop).
 const NAVBAR_OFFSET = 128;
+// On small screens the sticky "On this page" bar sits under the navbar too,
+// so sections that are scrolled to the top need extra room.
+const MOBILE_OFFSET = 184;
 
-export default function TableOfContents({ items }: Props) {
+// ─────────────────────────────────────────────────────────────────────────
+// Shared logic: which section is active + how to scroll to one.
+// Used by both the desktop sidebar and the mobile dropdown.
+// ─────────────────────────────────────────────────────────────────────────
+function useActiveSection(items: TocItem[]) {
   const [activeId, setActiveId] = useState<string>(items[0]?.id ?? '');
-  const navRef = useRef<HTMLElement>(null);
   const lockedRef = useRef(false);
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const frameRef = useRef<number | null>(null);
@@ -66,6 +74,51 @@ export default function TableOfContents({ items }: Props) {
     };
   }, [updateActive]);
 
+  const goTo = useCallback(
+    (id: string) => {
+      const target = document.getElementById(id);
+      if (!target) return;
+
+      // Highlight right away and hold it until the smooth scroll ends.
+      setActiveId(id);
+      lockedRef.current = true;
+      if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
+
+      const unlock = () => {
+        if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
+        lockedRef.current = false;
+        updateActive(); // re-sync with the middle-of-screen rule
+      };
+      lockTimerRef.current = setTimeout(unlock, CLICK_LOCK_MS);
+      window.addEventListener('scrollend', unlock, { once: true });
+
+      // Bring the section to the MIDDLE of the screen so the clicked item and
+      // the "middle of screen" rule agree. Sections taller than the visible
+      // area are aligned to the top (below the navbar) instead.
+      const isDesktop = window.matchMedia('(min-width: 1024px)').matches;
+      const offset = isDesktop ? NAVBAR_OFFSET : MOBILE_OFFSET;
+      const rect = target.getBoundingClientRect();
+      const visible = window.innerHeight - offset;
+      const top =
+        rect.height < visible
+          ? rect.top + window.scrollY - (window.innerHeight - rect.height) / 2
+          : rect.top + window.scrollY - offset;
+
+      window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    },
+    [updateActive]
+  );
+
+  return { activeId, goTo };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Desktop sidebar (rendered inside the sticky <aside>, visible from lg up).
+// ─────────────────────────────────────────────────────────────────────────
+export default function TableOfContents({ items }: Props) {
+  const navRef = useRef<HTMLElement>(null);
+  const { activeId, goTo } = useActiveSection(items);
+
   // The sidebar itself can scroll on short screens, so keep the highlighted
   // item visible inside it. Only the sidebar moves, never the page.
   useEffect(() => {
@@ -81,33 +134,7 @@ export default function TableOfContents({ items }: Props) {
 
   const handleClick = (e: MouseEvent<HTMLAnchorElement>, id: string) => {
     e.preventDefault();
-    const target = document.getElementById(id);
-    if (!target) return;
-
-    // Highlight right away and hold it until the smooth scroll ends.
-    setActiveId(id);
-    lockedRef.current = true;
-    if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
-
-    const unlock = () => {
-      if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
-      lockedRef.current = false;
-      updateActive(); // re-sync with the middle-of-screen rule
-    };
-    lockTimerRef.current = setTimeout(unlock, CLICK_LOCK_MS);
-    window.addEventListener('scrollend', unlock, { once: true });
-
-    // Bring the section to the MIDDLE of the screen so the clicked item and
-    // the "middle of screen" rule agree. Sections taller than the visible
-    // area are aligned to the top (below the navbar) instead.
-    const rect = target.getBoundingClientRect();
-    const visible = window.innerHeight - NAVBAR_OFFSET;
-    const top =
-      rect.height < visible
-        ? rect.top + window.scrollY - (window.innerHeight - rect.height) / 2
-        : rect.top + window.scrollY - NAVBAR_OFFSET;
-
-    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    goTo(id);
   };
 
   return (
@@ -142,5 +169,98 @@ export default function TableOfContents({ items }: Props) {
         })}
       </ul>
     </nav>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Mobile / tablet dropdown ("On this page"), hidden from lg up.
+// A sticky bar shows the current section; tapping it opens the full list.
+// ─────────────────────────────────────────────────────────────────────────
+export function MobileTableOfContents({ items }: Props) {
+  const { activeId, goTo } = useActiveSection(items);
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // Close on outside tap or Escape while the list is open.
+  useEffect(() => {
+    if (!open) return;
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  const current = items.find((item) => item.id === activeId) ?? items[0];
+
+  const handleClick = (e: MouseEvent<HTMLAnchorElement>, id: string) => {
+    e.preventDefault();
+    setOpen(false);
+    goTo(id);
+  };
+
+  return (
+    <div ref={rootRef} className="sticky top-28 z-20 lg:hidden">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls="toc-mobile-list"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-3 rounded-[16px] border-[1.5px] border-white bg-white/[0.88] px-4 py-3 text-left shadow-[0_10px_30px_rgba(17,24,39,0.06)] backdrop-blur-[12px]"
+      >
+        <span className="min-w-0">
+          <span className="block text-[11px] font-bold uppercase tracking-[0.04em] text-[#9ca3af]">
+            On this page
+          </span>
+          <span className="block truncate text-[14px] font-bold text-[#7c3aed]">
+            {current?.label}
+          </span>
+        </span>
+        <ChevronDown
+          className={`size-5 shrink-0 text-[#7c3aed] transition-transform ${
+            open ? 'rotate-180' : ''
+          }`}
+        />
+      </button>
+
+      {open && (
+        <nav
+          id="toc-mobile-list"
+          aria-label="Table of contents"
+          className="absolute inset-x-0 top-full mt-2 max-h-[60dvh] overflow-y-auto rounded-[16px] border-[1.5px] border-white bg-white/[0.96] p-2 shadow-[0_16px_40px_rgba(17,24,39,0.12)] backdrop-blur-[12px]"
+        >
+          <ul className="flex flex-col gap-0.5">
+            {items.map((item) => {
+              const active = item.id === activeId;
+              return (
+                <li key={item.id}>
+                  <a
+                    href={`#${item.id}`}
+                    aria-current={active ? 'location' : undefined}
+                    onClick={(e) => handleClick(e, item.id)}
+                    className={`block rounded-[10px] border px-3 py-2.5 text-[14px] transition-colors ${
+                      active
+                        ? 'border-[#7c3aed]/20 bg-[#7c3aed]/[0.08] font-bold text-[#7c3aed]'
+                        : 'border-transparent font-medium text-[#4b5563] active:bg-[#7c3aed]/[0.05]'
+                    }`}
+                  >
+                    {item.label}
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      )}
+    </div>
   );
 }
