@@ -11,7 +11,8 @@
 // CHANGED:
 //  - Name fields only accept Latin letters (+ spaces, hyphens, apostrophes).
 //  - Email/password show "Invalid email", "Invalid password", or both.
-//  - Google / GitHub buttons are on this page.
+//  - Google / GitHub buttons are on this page (below the Create Account button).
+//  - Middle name is optional; only validated when filled in.
 //  - Arriving from a Google/GitHub sign-in with no account
 //    (/signup?email=...&name=...&provider=...) prefills the form.
 
@@ -69,9 +70,9 @@ const inputWrapperClass = (hasError: boolean) =>
       : 'border-[#e5e7eb] focus-within:border-[#7c3aed] focus-within:ring-2 focus-within:ring-[#7c3aed]/15',
   ].join(' ');
 
-const validateName = (label: string, value: string): string | null => {
+const validateName = (label: string, value: string, optional = false): string | null => {
   const v = value.trim();
-  if (!v) return `${label} is required`;
+  if (!v) return optional ? null : `${label} is required`;
   if (v.length > NAME_MAX_LENGTH) return `${label} is too long`;
   if (!NAME_RE.test(v)) return NAME_FORMAT_MESSAGE;
   return null;
@@ -254,7 +255,7 @@ export default function SignUp() {
 
   const handleSubmit = async () => {
     const nextFirstNameError = validateName('First name', firstName);
-    const nextMiddleNameError = validateName('Middle name', middleName);
+    const nextMiddleNameError = validateName('Middle name', middleName, true);
     const nextLastNameError = validateName('Last name', lastName);
 
     const emailInvalid = !email.trim() || !isValidEmail(email.trim());
@@ -279,7 +280,7 @@ export default function SignUp() {
     // Top message: empty form -> ask to fill it in; both filled but both bad ->
     // "Invalid email and password". Otherwise the field messages are enough.
     const allEmpty =
-      !firstName.trim() && !middleName.trim() && !lastName.trim() && !email.trim() && !password && !confirm;
+      !firstName.trim() && !lastName.trim() && !email.trim() && !password && !confirm;
     setError(
       allEmpty
         ? 'Please fill in all required fields'
@@ -376,34 +377,6 @@ export default function SignUp() {
             </p>
           )}
 
-          {/* Google / GitHub sign-up */}
-          <div className="flex flex-col gap-3">
-            <button
-              type="button"
-              onClick={() => handleOAuth('google')}
-              disabled={!!oauthLoading || isSubmitting}
-              className={`flex w-full items-center justify-center gap-3 rounded-full border border-[#e5e7eb] bg-white px-6 py-[12px] text-[14px] font-semibold text-[#111827] ${BTN_MOTION} hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-60`}
-            >
-              {oauthLoading === 'google' ? <Loader2 className="size-[18px] animate-spin" /> : <GoogleIcon />}
-              Continue with Google
-            </button>
-            <button
-              type="button"
-              onClick={() => handleOAuth('github')}
-              disabled={!!oauthLoading || isSubmitting}
-              className={`flex w-full items-center justify-center gap-3 rounded-full border border-[#e5e7eb] bg-white px-6 py-[12px] text-[14px] font-semibold text-[#111827] ${BTN_MOTION} hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-60`}
-            >
-              {oauthLoading === 'github' ? <Loader2 className="size-[18px] animate-spin" /> : <GitHubIcon />}
-              Continue with GitHub
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3 text-[12px] font-medium text-[#9ca3af]">
-            <span className="h-px flex-1 bg-[#e5e7eb]" />
-            or sign up with email
-            <span className="h-px flex-1 bg-[#e5e7eb]" />
-          </div>
-
           <form
             noValidate
             className="flex flex-col gap-6"
@@ -437,14 +410,14 @@ export default function SignUp() {
               {/* Middle name */}
               <div className="flex flex-col gap-[6px]">
                 <label htmlFor="signup-middle-name" className="text-[13px] font-semibold text-[#4b5563]">
-                  Middle Name
+                  Middle Name <span className="font-normal text-[#9ca3af]">(optional)</span>
                 </label>
                 <div className={inputWrapperClass(!!middleNameError)}>
                   <input
                     id="signup-middle-name"
                     type="text"
                     autoComplete="additional-name"
-                    placeholder="Enter your middle name"
+                    placeholder="Enter your middle name (optional)"
                     maxLength={NAME_MAX_LENGTH}
                     value={middleName}
                     onChange={(e) => handleNameChange(e.target.value, setMiddleName, setMiddleNameError)}
@@ -620,6 +593,34 @@ export default function SignUp() {
               )}
             </button>
           </form>
+
+          <div className="flex items-center gap-3 text-[12px] font-medium text-[#9ca3af]">
+            <span className="h-px flex-1 bg-[#e5e7eb]" />
+            or continue with
+            <span className="h-px flex-1 bg-[#e5e7eb]" />
+          </div>
+
+          {/* Google / GitHub sign-up */}
+          <div className="flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => handleOAuth('google')}
+              disabled={!!oauthLoading || isSubmitting}
+              className={`flex w-full items-center justify-center gap-3 rounded-full border border-[#e5e7eb] bg-white px-6 py-[12px] text-[14px] font-semibold text-[#111827] ${BTN_MOTION} hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              {oauthLoading === 'google' ? <Loader2 className="size-[18px] animate-spin" /> : <GoogleIcon />}
+              Continue with Google
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOAuth('github')}
+              disabled={!!oauthLoading || isSubmitting}
+              className={`flex w-full items-center justify-center gap-3 rounded-full border border-[#e5e7eb] bg-white px-6 py-[12px] text-[14px] font-semibold text-[#111827] ${BTN_MOTION} hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              {oauthLoading === 'github' ? <Loader2 className="size-[18px] animate-spin" /> : <GitHubIcon />}
+              Continue with GitHub
+            </button>
+          </div>
 
           <p className="text-center text-[14px] text-[#4b5563]">
             Already have an account?{' '}
