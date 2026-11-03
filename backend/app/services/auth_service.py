@@ -104,6 +104,22 @@ def _store_display_name(user_id: str, full_name: str, parts: Optional[dict]) -> 
         logger.warning("Could not store display name for user %s: %s", user_id, exc)
 
 
+def _sync_public_user(user_id: str, parts: dict) -> None:
+    """
+    Mirrors the first/middle/last name into public.users so it can be queried.
+    Empty parts are stored as NULL, never as an empty string. Best effort, like
+    _store_display_name: a failure here must not break the profile update.
+    """
+    try:
+        supabase_admin.table("users").update({
+            "first_name": parts.get("first") or None,
+            "middle_name": parts.get("middle") or None,
+            "last_name": parts.get("last") or None,
+        }).eq("id", user_id).execute()
+    except Exception as exc:
+        logger.warning("Could not sync name parts to public.users for %s: %s", user_id, exc)
+
+
 def get_name_parts(user_id: str, full_name: Optional[str]) -> dict:
     """First/middle/last for the Settings form (stored parts, else a best-guess split)."""
     try:
@@ -167,11 +183,21 @@ def sign_up(
         )
         full_name = _full_name_from_parts(parts)
 
+    # handle_new_auth_user() (DB trigger) reads these keys when it creates the
+    # public.users row, so the separate name parts are stored from day one.
+    metadata = {}
+    if full_name:
+        metadata["full_name"] = full_name
+    if parts is not None:
+        metadata["first_name"] = parts["first"]
+        metadata["middle_name"] = parts["middle"]  # "" when none; the trigger stores NULL
+        metadata["last_name"] = parts["last"]
+
     try:
         result = _anon_client().auth.sign_up({
             "email": email,
             "password": password,
-            "options": {"data": {"full_name": full_name}} if full_name else {},
+            "options": {"data": metadata} if metadata else {},
         })
     except Exception as exc:
         logger.warning("Supabase sign_up failed for %s: %s", email, exc)
@@ -432,6 +458,9 @@ def update_profile(
     except Exception as exc:
         logger.warning("Profile update failed for user %s: %s", user_id, exc)
         raise ValueError("Could not save your profile. Please try again.") from exc
+
+    # Keep the queryable copy in public.users in step with app_metadata.
+    _sync_public_user(user_id, parts if parts is not None else _split_full_name(name))
 
     return _extract_user(result.user, name)
 
